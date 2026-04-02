@@ -18,7 +18,9 @@ Thanks for your interest in contributing! This project provides setup automation
 
 ## Guidelines
 
-- Keep patches minimal and focused — they should apply cleanly on top of upstream NemoClaw
+- Keep patches minimal and focused — they should apply cleanly on top of upstream NemoClaw with `git apply --3way`
+- **Always test the round-trip** before committing patch changes: reset target files, apply your patch, verify it works
+- If upstream NemoClaw broke existing patches, use `claude /refresh-patches` or see [BUILD.md § Refreshing Patches](BUILD.md#refreshing-patches-after-upstream-updates)
 - Test your changes on a clean Ubuntu 22.04 environment when possible
 - Use [Conventional Commits](https://www.conventionalcommits.org/) format (e.g., `feat:`, `fix:`, `docs:`)
 - Do not commit credentials, API keys, or tokens — use `.env.example` for templates

@@ -1,0 +1,31 @@
+# Coding Agent Instructions
+
+This is a thin patch overlay on upstream [NemoClaw](https://github.com/NVIDIA/NemoClaw) + [OpenShell](https://github.com/NVIDIA/OpenShell). It is NOT a fork.
+
+## Project structure
+
+```
+setup.sh              # Automated setup — clones upstream, applies patches, installs
+patches/
+  Dockerfile.patch    # Adds Claude Code, Codex CLI, git config to sandbox image
+  policy.patch        # Opens network endpoints for auth (Claude, OpenAI, GitHub)
+BUILD.md              # Step-by-step setup with explanations
+USE.md                # Day-to-day commands and features
+CONTRIBUTING.md       # Contribution guidelines
+.claude/skills/       # Claude Code skills (e.g. /refresh-patches)
+```
+
+## Key docs (read these, don't duplicate them)
+
+- **BUILD.md** — full setup walkthrough, what each patch does and why, environment variables, troubleshooting
+- **USE.md** — sandbox commands, authentication flow, Telegram bridge, rebuilding
+- **CONTRIBUTING.md** — contribution standards
+
+## Rules
+
+- **Keep patches minimal.** They should apply cleanly on upstream NemoClaw with `git apply --3way`. Fewer context lines = less breakage surface.
+- **Don't modify upstream repos directly.** All customizations go through `patches/` and `setup.sh`.
+- **Preserve patch intent, not exact lines.** If upstream restructures, adapt placement but keep the logical additions (see BUILD.md § Refreshing Patches).
+- **Don't add features beyond what's asked.** This is a cookbook — lean and opinionated.
+- **Secrets belong in `~/.env`, never committed.** `.gitignore` covers `.env`.
+- **Test patches round-trip:** reset target files, apply, verify — before committing.

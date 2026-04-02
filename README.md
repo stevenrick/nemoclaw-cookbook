@@ -11,8 +11,11 @@ Automated setup for [NemoClaw](https://github.com/NVIDIA/NemoClaw) + [OpenShell]
 cp .env.example ~/.env
 # Edit ~/.env with your NVIDIA API key (and optionally Telegram tokens)
 
-# 2. If using a remote proxy (e.g. Brev), set the URL
-export CHAT_UI_URL="https://your-proxy-url.example.com"
+# 2. If accessing remotely: forward port 18789 and set the URL
+#    Brev: use "Share a Service" on port 18789
+#    ngrok: ngrok http 18789
+#    See BUILD.md § Remote Access for details
+export CHAT_UI_URL="https://your-forwarded-url.example.com"
 
 # 3. Run setup
 ./setup.sh
@@ -46,6 +49,16 @@ Our patches on top of upstream NemoClaw:
 - OpenAI/Codex (`api.openai.com`, `auth.openai.com`, `chatgpt.com`, `ab.chatgpt.com`)
 - GitHub access for Claude/Codex/Node binaries (`codeload.github.com`)
 
+## When Upstream Changes
+
+Patches apply with `git apply --3way`, which handles minor upstream drift automatically. If patches break after an upstream NemoClaw update:
+
+```bash
+claude /refresh-patches    # Claude Code walks you through regenerating patches
+```
+
+Or see [BUILD.md § Refreshing Patches](BUILD.md#refreshing-patches-after-upstream-updates) for the manual process.
+
 ## Docs
 
 - [BUILD.md](BUILD.md) — step-by-step from-scratch setup with explanations
@@ -74,6 +87,8 @@ setup.sh              # Automated setup script
 patches/
   Dockerfile.patch    # Claude Code + Codex + git config
   policy.patch        # Network policy for auth endpoints
+scripts/
+  validate-patches.sh # Check patches still apply against upstream
 BUILD.md              # Detailed setup walkthrough
 USE.md                # Usage reference
 ```

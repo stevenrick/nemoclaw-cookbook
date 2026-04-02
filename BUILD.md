@@ -8,7 +8,7 @@ Reproducible steps to go from a clean Ubuntu machine to a fully operational Nemo
 - Docker installed and running
 - 8 GB RAM minimum (16 GB recommended), 20 GB free disk
 - An NVIDIA API key from https://integrate.api.nvidia.com
-- (Optional) Your external proxy URL if accessing remotely (e.g. Brev, ngrok)
+- (Optional) A remote proxy with port forwarding if accessing from another machine (see [Remote Access](#remote-access-brev-ngrok-etc))
 - (Optional) A Telegram bot token from @BotFather
 
 ## Step 1: Create .env
@@ -243,6 +243,38 @@ The installer prints tokenized URLs at the end. Save them:
 
 Treat these like passwords. They change on every sandbox rebuild.
 
+## Remote Access (Brev, ngrok, etc.)
+
+If your NemoClaw instance runs on a remote machine (cloud VM, Brev dev environment, etc.), you need **two things** to access the Web UI from your browser:
+
+### 1. Port forwarding for port 18789
+
+NemoClaw's Web UI listens on `127.0.0.1:18789` inside the remote machine. You must forward this port to make it reachable.
+
+**Brev:** Use "Share a Service" to expose port `18789`. This gives you a public URL like `https://your-instance-18789.brev.dev`. That URL is your `CHAT_UI_URL`.
+
+**ngrok:**
+```bash
+ngrok http 18789
+```
+Use the generated `https://xxxx.ngrok.io` URL as your `CHAT_UI_URL`.
+
+**SSH tunnel (any provider):**
+```bash
+ssh -L 18789:localhost:18789 your-remote-host
+```
+Then access `http://127.0.0.1:18789` locally. No `CHAT_UI_URL` needed with SSH tunnels since you're accessing via localhost.
+
+### 2. Set CHAT_UI_URL before install/rebuild
+
+NemoClaw bakes the allowed origin into the sandbox at build time. If you don't set `CHAT_UI_URL` before running `install.sh` or `nemoclaw onboard`, the Web UI will reject your proxy URL with an "origin not allowed" error.
+
+```bash
+export CHAT_UI_URL="https://your-instance-18789.brev.dev"  # your forwarded URL
+```
+
+Set this **before** running `setup.sh`, `install.sh`, or `nemoclaw onboard`. If you forgot, rebuild the sandbox with `CHAT_UI_URL` set (see Rebuilding below).
+
 ## Rebuilding the sandbox
 
 Any time you need to rebuild (update, config change, etc.):
@@ -268,6 +300,67 @@ After rebuild:
    claude /reload-plugins
    ```
 4. Restart Telegram: `source ~/.env && export NVIDIA_API_KEY TELEGRAM_BOT_TOKEN ALLOWED_CHAT_IDS && nemoclaw start`
+
+## Refreshing Patches After Upstream Updates
+
+The two patches in `patches/` are unified diffs generated against a specific version of NemoClaw. When NVIDIA updates the upstream `Dockerfile` or `openclaw-sandbox.yaml`, the patches may fail to apply.
+
+### Quick path (with Claude Code)
+
+```bash
+claude /refresh-patches
+```
+
+This skill walks Claude through diagnosing the conflict, understanding what changed upstream, and regenerating the patches while preserving their intent.
+
+### Manual path
+
+1. Reset and inspect:
+   ```bash
+   cd ~/NemoClaw
+   git pull origin main
+   git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml
+   ```
+
+2. Try applying with 3-way merge:
+   ```bash
+   git apply --3way /path/to/nemoclaw_cookbook/patches/Dockerfile.patch
+   git apply --3way /path/to/nemoclaw_cookbook/patches/policy.patch
+   ```
+
+3. If conflicts appear, resolve them in the affected files, then regenerate:
+   ```bash
+   git diff Dockerfile > /path/to/nemoclaw_cookbook/patches/Dockerfile.patch
+   git diff nemoclaw-blueprint/policies/openclaw-sandbox.yaml > /path/to/nemoclaw_cookbook/patches/policy.patch
+   ```
+
+4. Reset and verify the round-trip:
+   ```bash
+   git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml
+   git apply --3way /path/to/nemoclaw_cookbook/patches/Dockerfile.patch
+   git apply --3way /path/to/nemoclaw_cookbook/patches/policy.patch
+   ```
+
+5. Update the blob index comment in `setup.sh`.
+
+### What to preserve
+
+The patches add these logical pieces — if upstream restructures things, adapt the placement but keep the intent:
+
+- **Dockerfile**: git HTTPS config, Claude Code binary install, Codex CLI install, Codex plugin pre-clone
+- **Policy**: Claude auth endpoints, OpenAI policy block, GitHub policy extensions (codeload.github.com + binaries)
+
+See the `/refresh-patches` skill for the full breakdown.
+
+### Automated validation
+
+To check if patches still apply against the latest upstream (without modifying anything):
+
+```bash
+./scripts/validate-patches.sh
+```
+
+This clones upstream into a temp directory, tests each patch with `--check --3way`, and reports pass/fail. Safe to run in CI on a schedule to catch upstream drift early.
 
 ## Troubleshooting
 
