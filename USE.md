@@ -158,7 +158,7 @@ Default presets: `pypi`, `npm`, `telegram` (plus built-in policies for GitHub, D
 When the web UI shows "Update available":
 
 ```bash
-source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1
+source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 [ -n "${CHAT_UI_URL:-}" ] && export CHAT_UI_URL
 
 docker pull ghcr.io/nvidia/nemoclaw/sandbox-base:latest

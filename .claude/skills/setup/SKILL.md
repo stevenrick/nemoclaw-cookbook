@@ -52,10 +52,9 @@ Then tell the user:
 
 ```bash
 source ~/.env
-echo "NVIDIA_API_KEY: ${NVIDIA_API_KEY:+SET (${#NVIDIA_API_KEY} chars)}"
-echo "NVIDIA_API_KEY: ${NVIDIA_API_KEY:-NOT SET}"
-echo "TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-not set (optional)}"
-echo "ALLOWED_CHAT_IDS: ${ALLOWED_CHAT_IDS:-not set (optional)}"
+echo "NVIDIA_API_KEY: ${NVIDIA_API_KEY:+SET (${#NVIDIA_API_KEY} chars)}${NVIDIA_API_KEY:-NOT SET}"
+echo "TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:+configured}${TELEGRAM_BOT_TOKEN:-not set (optional)}"
+echo "ALLOWED_CHAT_IDS: ${ALLOWED_CHAT_IDS:+configured}${ALLOWED_CHAT_IDS:-not set (optional)}"
 echo "CHAT_UI_URL: ${CHAT_UI_URL:-not set (local access only)}"
 ```
 
@@ -111,7 +110,7 @@ nemoclaw list
 **If OpenShell shows the sandbox but NemoClaw doesn't:** NemoClaw's install partially completed — the sandbox was created via OpenShell but NemoClaw didn't register it. Fix by running:
 
 ```bash
-source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1
+source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 [ -n "${CHAT_UI_URL:-}" ] && export CHAT_UI_URL
 nemoclaw onboard
 ```
