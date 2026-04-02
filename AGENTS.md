@@ -15,6 +15,10 @@ CONTRIBUTING.md       # Contribution guidelines
 .claude/skills/       # Claude Code skills (e.g. /refresh-patches)
 ```
 
+## Getting started
+
+**If the user wants to deploy NemoClaw**, don't follow the README manually. Claude Code users should run `/setup` which handles everything interactively. Other agents: read BUILD.md and follow it step by step — the key is to create `~/.env` first, check what's configured, and only ask the user for credentials they need to provide.
+
 ## Key docs (read these, don't duplicate them)
 
 - **BUILD.md** — full setup walkthrough, what each patch does and why, environment variables, troubleshooting
