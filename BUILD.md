@@ -151,12 +151,9 @@ Both changes survive all future rebuilds.
 ```bash
 cd ~/NemoClaw
 source ~/.env
-export NVIDIA_API_KEY
-export NEMOCLAW_NON_INTERACTIVE=1
-
-# Set this if accessing via a remote proxy URL:
-export CHAT_UI_URL="https://your-proxy-url.example.com"
-# Omit CHAT_UI_URL for local-only access (defaults to http://127.0.0.1:18789)
+export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1
+# CHAT_UI_URL is read from ~/.env if set (see Remote Access section below)
+[ -n "${CHAT_UI_URL:-}" ] && export CHAT_UI_URL
 
 bash install.sh --non-interactive
 ```
@@ -269,20 +266,21 @@ Then access `http://127.0.0.1:18789` locally. No `CHAT_UI_URL` needed with SSH t
 
 NemoClaw bakes the allowed origin into the sandbox at build time. If you don't set `CHAT_UI_URL` before running `install.sh` or `nemoclaw onboard`, the Web UI will reject your proxy URL with an "origin not allowed" error.
 
-```bash
-export CHAT_UI_URL="https://your-instance-18789.brev.dev"  # your forwarded URL
+Uncomment and set `CHAT_UI_URL` in `~/.env`:
+
+```
+CHAT_UI_URL=https://your-instance-18789.brev.dev
 ```
 
-Set this **before** running `setup.sh`, `install.sh`, or `nemoclaw onboard`. If you forgot, rebuild the sandbox with `CHAT_UI_URL` set (see Rebuilding below).
+This must be set **before** running `setup.sh`, `install.sh`, or `nemoclaw onboard`. If you forgot, set it in `~/.env` and rebuild the sandbox (see Rebuilding below).
 
 ## Rebuilding the sandbox
 
 Any time you need to rebuild (update, config change, etc.):
 
 ```bash
-source ~/.env && export NVIDIA_API_KEY
-export NEMOCLAW_NON_INTERACTIVE=1
-export CHAT_UI_URL="https://your-proxy-url.example.com"  # if applicable
+source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1
+[ -n "${CHAT_UI_URL:-}" ] && export CHAT_UI_URL
 
 nemoclaw stop 2>/dev/null; kill $(pgrep -f telegram-bridge) $(pgrep -f cloudflared) 2>/dev/null
 docker pull ghcr.io/nvidia/nemoclaw/sandbox-base:latest
