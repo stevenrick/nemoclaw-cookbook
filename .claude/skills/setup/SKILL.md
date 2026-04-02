@@ -70,9 +70,9 @@ If the key looks real, confirm what's configured and what's optional:
 >
 > Want me to proceed?
 
-**Important:** If accessing remotely (Brev, ngrok, etc.), the user MUST set `CHAT_UI_URL` before install. Ask if they're running locally or remotely. If remote, they need to:
+**Important:** If accessing remotely (Brev, ngrok, etc.), the user MUST uncomment and set `CHAT_UI_URL` in `~/.env` before install. Ask if they're running locally or remotely. If remote, they need to:
 1. Set up port forwarding for port 18789 (Brev: "Share a Service", ngrok: `ngrok http 18789`)
-2. Set `CHAT_UI_URL` in `~/.env` to the forwarded URL
+2. Uncomment `CHAT_UI_URL` in `~/.env` and set it to the forwarded URL
 
 ## Phase 3 — Run setup
 
