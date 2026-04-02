@@ -1,0 +1,65 @@
+diff --git a/nemoclaw-blueprint/policies/openclaw-sandbox.yaml b/nemoclaw-blueprint/policies/openclaw-sandbox.yaml
+index 2f87617..ade7cb6 100644
+--- a/nemoclaw-blueprint/policies/openclaw-sandbox.yaml
++++ b/nemoclaw-blueprint/policies/openclaw-sandbox.yaml
+@@ -71,8 +71,44 @@ network_policies:
+         rules:
+           - allow: { method: GET, path: "/**" }
+           - allow: { method: POST, path: "/**" }
++      - host: platform.claude.com
++        port: 443
++        access: full
++      - host: downloads.claude.ai
++        port: 443
++        access: full
++      - host: raw.githubusercontent.com
++        port: 443
++        access: full
++      - host: storage.googleapis.com
++        port: 443
++        access: full
+     binaries:
+       - { path: /usr/local/bin/claude }
++      - { path: /usr/local/bin/codex }
++
++  openai:
++    name: openai
++    endpoints:
++      - host: api.openai.com
++        port: 443
++        protocol: rest
++        enforcement: enforce
++        tls: terminate
++        rules:
++          - allow: { method: GET, path: "/**" }
++          - allow: { method: POST, path: "/**" }
++      - host: auth.openai.com
++        port: 443
++        access: full
++      - host: chatgpt.com
++        port: 443
++        access: full
++      - host: ab.chatgpt.com
++        port: 443
++        access: full
++    binaries:
++      - { path: /usr/local/bin/codex }
+ 
+   nvidia:
+     name: nvidia
+@@ -106,9 +142,15 @@ network_policies:
+       - host: api.github.com
+         port: 443
+         access: full
++      - host: codeload.github.com
++        port: 443
++        access: full
+     binaries:
+       - { path: /usr/bin/gh }
+       - { path: /usr/bin/git }
++      - { path: /usr/local/bin/claude }
++      - { path: /usr/local/bin/codex }
++      - { path: /usr/local/bin/node }
+ 
+   # ── OpenClaw "phone home" ────────────────────────────────────────────
+   # Minimum viable set for OpenClaw to authenticate, discover plugins,

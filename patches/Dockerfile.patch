@@ -1,0 +1,28 @@
+diff --git a/Dockerfile b/Dockerfile
+index 2c8e594..884f6a6 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -37,6 +37,23 @@ COPY nemoclaw-blueprint/ /opt/nemoclaw-blueprint/
+ WORKDIR /opt/nemoclaw
+ RUN npm ci --omit=dev
+ 
++# Install Claude Code via native installer and Codex CLI via npm
++# Force git to use HTTPS instead of SSH (sandbox has no ssh)
++RUN git config --global url.'https://github.com/'.insteadOf 'git@github.com:' \
++    && git config --global --add url.'https://github.com/'.insteadOf 'ssh://git@github.com/' \
++    && git config --global http.sslCAInfo /etc/openshell-tls/ca-bundle.pem \
++    && cp /root/.gitconfig /sandbox/.gitconfig && chown 1000:1000 /sandbox/.gitconfig
++
++# Install Claude Code via native installer and Codex CLI via npm
++RUN curl -fsSL https://claude.ai/install.sh | bash \
++    && cp "$(readlink -f /root/.local/bin/claude)" /usr/local/bin/claude \
++    && chmod 755 /usr/local/bin/claude \
++    && npm install -g @openai/codex@latest
++
++# Pre-clone Codex plugin for Claude Code (plugin install hardcodes SSH which sandbox lacks)
++RUN mkdir -p /sandbox/.claude/plugins/marketplaces \
++    && git clone https://github.com/openai/codex-plugin-cc.git /sandbox/.claude/plugins/marketplaces/openai-codex-plugin-cc
++
+ # Set up blueprint for local resolution
+ RUN mkdir -p /sandbox/.nemoclaw/blueprints/0.1.0 \
+     && cp -r /opt/nemoclaw-blueprint/* /sandbox/.nemoclaw/blueprints/0.1.0/
