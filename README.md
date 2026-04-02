@@ -21,17 +21,11 @@ git clone https://github.com/stevenrick/nemoclaw_cookbook && cd nemoclaw_cookboo
 ### Manual
 
 ```bash
-# 1. Create your env file
+# 1. Create your env file and fill in your values
 cp .env.example ~/.env
-# Edit ~/.env with your NVIDIA API key (and optionally Telegram tokens)
+# Edit ~/.env — NVIDIA_API_KEY is required, everything else is optional
 
-# 2. If accessing remotely: forward port 18789 and set the URL
-#    Brev: use "Share a Service" on port 18789
-#    ngrok: ngrok http 18789
-#    See BUILD.md § Remote Access for details
-export CHAT_UI_URL="https://your-forwarded-url.example.com"
-
-# 3. Run setup
+# 2. Run setup
 ./setup.sh
 
 # 4. Connect and authenticate (inside the sandbox)
@@ -81,9 +75,8 @@ Or see [BUILD.md § Refreshing Patches](BUILD.md#refreshing-patches-after-upstre
 ## Rebuilding
 
 ```bash
-source ~/.env && export NVIDIA_API_KEY
-export NEMOCLAW_NON_INTERACTIVE=1
-export CHAT_UI_URL="https://your-proxy-url.example.com"  # if applicable
+source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1
+# Ensure CHAT_UI_URL is set in ~/.env if accessing remotely
 
 nemoclaw stop 2>/dev/null
 docker pull ghcr.io/nvidia/nemoclaw/sandbox-base:latest

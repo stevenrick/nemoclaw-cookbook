@@ -5,7 +5,6 @@
 # Prerequisites:
 #   - Docker installed and running
 #   - ~/.env populated (copy from .env.example)
-#   - CHAT_UI_URL env var set if using a remote proxy (e.g. Brev)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

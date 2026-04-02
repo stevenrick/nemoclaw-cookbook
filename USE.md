@@ -156,9 +156,8 @@ Default presets: `pypi`, `npm`, `telegram` (plus built-in policies for GitHub, D
 When the web UI shows "Update available":
 
 ```bash
-source ~/.env && export NVIDIA_API_KEY
-export NEMOCLAW_NON_INTERACTIVE=1
-export CHAT_UI_URL="https://your-proxy-url.example.com"
+source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1
+[ -n "${CHAT_UI_URL:-}" ] && export CHAT_UI_URL
 
 docker pull ghcr.io/nvidia/nemoclaw/sandbox-base:latest
 nemoclaw my-assistant destroy --yes
