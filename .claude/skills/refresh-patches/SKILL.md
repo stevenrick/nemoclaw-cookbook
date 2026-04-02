@@ -81,7 +81,7 @@ For each broken patch:
 **Dockerfile.patch** adds three `RUN` blocks after the `npm ci --omit=dev` line:
 1. Git config: force HTTPS for GitHub URLs, set SSL CA to OpenShell bundle, copy .gitconfig to sandbox user
 2. Install Claude Code native binary + Codex CLI via npm
-3. Pre-clone the Codex plugin for Claude Code (because plugin install hardcodes SSH)
+3. (Removed — plugin is now installed inside the sandbox at runtime, not pre-cloned during build)
 
 **policy.patch** adds:
 1. Claude auth endpoints (platform.claude.com, downloads.claude.ai, raw.githubusercontent.com, storage.googleapis.com) + codex binary to the `claude_code` network policy
