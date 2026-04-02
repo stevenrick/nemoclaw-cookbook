@@ -92,21 +92,46 @@ If setup fails, diagnose the error:
 
 ## Phase 4 — Post-install verification
 
-Run these checks:
+Run these checks and compare results:
 
 ```bash
 openshell --version
 openshell status
+openshell sandbox list
 nemoclaw --version
 nemoclaw list
 ```
 
-Report the results. If anything looks wrong, diagnose before proceeding.
+**Critical check:** Compare `openshell sandbox list` with `nemoclaw list`. Both should show the sandbox (typically `my-assistant`).
+
+**If OpenShell shows the sandbox but NemoClaw doesn't:** NemoClaw's install partially completed — the sandbox was created via OpenShell but NemoClaw didn't register it. Fix by running:
+
+```bash
+source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1
+[ -n "${CHAT_UI_URL:-}" ] && export CHAT_UI_URL
+nemoclaw onboard
+```
+
+This re-registers the existing sandbox without rebuilding it. After `nemoclaw onboard`, re-check `nemoclaw list` to confirm.
+
+**If neither shows a sandbox:** The install failed earlier. Check the setup.sh output for errors and re-run.
+
+**If both show the sandbox:** Proceed to Phase 5.
 
 ## Phase 5 — Save the UI URL
 
 ```bash
 cat ~/openclaw-ui-url.txt 2>/dev/null || echo "URL file not found"
+```
+
+**If the file doesn't exist:** This can happen when NemoClaw's registration step was incomplete. After fixing in Phase 4, check again. If still missing, the URL with token is also printed at the end of `nemoclaw onboard` output — capture it from there.
+
+As a fallback, you can find the base URL and token separately:
+
+```bash
+# The sandbox is accessible on port 18789
+# Check NemoClaw's config for the token
+cat ~/.nemoclaw/sandboxes.json 2>/dev/null
 ```
 
 Tell the user to save this URL — it's their access to the Web UI. Remind them it changes on every rebuild.
