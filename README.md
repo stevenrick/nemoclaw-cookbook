@@ -75,7 +75,7 @@ Or see [BUILD.md § Refreshing Patches](BUILD.md#refreshing-patches-after-upstre
 ## Rebuilding
 
 ```bash
-source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1
+source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 # Ensure CHAT_UI_URL is set in ~/.env if accessing remotely
 
 nemoclaw stop 2>/dev/null
