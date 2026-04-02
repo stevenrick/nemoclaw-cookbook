@@ -29,3 +29,4 @@ CONTRIBUTING.md       # Contribution guidelines
 - **Don't add features beyond what's asked.** This is a cookbook — lean and opinionated.
 - **Secrets belong in `~/.env`, never committed.** `.gitignore` covers `.env`.
 - **Test patches round-trip:** reset target files, apply, verify — before committing.
+- **Never guess external values.** Commit SHAs, version numbers, API signatures, URLs — if you're not certain, look it up (`git ls-remote`, docs, web search). Fabricated-but-plausible values waste more time than admitting you need to check.
