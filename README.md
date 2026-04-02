@@ -56,7 +56,7 @@ claude /reload-plugins
 
 Our patches on top of upstream NemoClaw:
 
-**Dockerfile** — adds Claude Code (native installer), Codex CLI, git HTTPS/SSL config, and pre-cloned Codex plugin
+**Dockerfile** — adds Claude Code (native installer), Codex CLI, and git HTTPS/SSL config
 
 **Sandbox policy** — adds network endpoints for:
 - Claude Code SSO (`platform.claude.com`, `downloads.claude.ai`, `storage.googleapis.com`)

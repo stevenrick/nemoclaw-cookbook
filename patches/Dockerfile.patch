@@ -2,7 +2,7 @@ diff --git a/Dockerfile b/Dockerfile
 index 2c8e594..884f6a6 100644
 --- a/Dockerfile
 +++ b/Dockerfile
-@@ -37,6 +37,23 @@ COPY nemoclaw-blueprint/ /opt/nemoclaw-blueprint/
+@@ -37,6 +37,19 @@ COPY nemoclaw-blueprint/ /opt/nemoclaw-blueprint/
  WORKDIR /opt/nemoclaw
  RUN npm ci --omit=dev
  
@@ -18,10 +18,6 @@ index 2c8e594..884f6a6 100644
 +    && cp "$(readlink -f /root/.local/bin/claude)" /usr/local/bin/claude \
 +    && chmod 755 /usr/local/bin/claude \
 +    && npm install -g @openai/codex@latest
-+
-+# Pre-clone Codex plugin for Claude Code (plugin install hardcodes SSH which sandbox lacks)
-+RUN mkdir -p /sandbox/.claude/plugins/marketplaces \
-+    && git clone https://github.com/openai/codex-plugin-cc.git /sandbox/.claude/plugins/marketplaces/openai-codex-plugin-cc
 +
  # Set up blueprint for local resolution
  RUN mkdir -p /sandbox/.nemoclaw/blueprints/0.1.0 \
