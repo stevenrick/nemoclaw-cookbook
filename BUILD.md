@@ -151,7 +151,7 @@ Both changes survive all future rebuilds.
 ```bash
 cd ~/NemoClaw
 source ~/.env
-export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1
+export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 # CHAT_UI_URL is read from ~/.env if set (see Remote Access section below)
 [ -n "${CHAT_UI_URL:-}" ] && export CHAT_UI_URL
 
@@ -270,7 +270,7 @@ If you forgot, set it in `~/.env` and rebuild the sandbox (see Rebuilding below)
 Any time you need to rebuild (update, config change, etc.):
 
 ```bash
-source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1
+source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 [ -n "${CHAT_UI_URL:-}" ] && export CHAT_UI_URL
 
 nemoclaw stop 2>/dev/null; kill $(pgrep -f telegram-bridge) $(pgrep -f cloudflared) 2>/dev/null
@@ -379,6 +379,7 @@ export PATH="$HOME/.local/bin:$PATH"
 | `NEMOCLAW_MODEL` | Override inference model | Install / onboard |
 | `NEMOCLAW_POLICY_MODE` | `suggested`, `custom`, or `skip` | Install / onboard |
 | `NEMOCLAW_POLICY_PRESETS` | Comma-separated presets (default: `pypi,npm`) | Install / onboard |
+| `NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1` | Accept third-party software notice | Install / onboard (non-interactive) |
 | `NEMOCLAW_EXPERIMENTAL=1` | Enable experimental providers (local NIM, vLLM) | Install / onboard |
 | `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather | `nemoclaw start` |
 | `ALLOWED_CHAT_IDS` | Comma-separated Telegram chat IDs | `nemoclaw start` |
