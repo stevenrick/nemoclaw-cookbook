@@ -70,9 +70,13 @@ If the key looks real, confirm what's configured and what's optional:
 >
 > Want me to proceed?
 
-**Important:** If accessing remotely (Brev, ngrok, etc.), the user MUST uncomment and set `CHAT_UI_URL` in `~/.env` before install. Ask if they're running locally or remotely. If remote, they need to:
-1. Set up port forwarding for port 18789 (Brev: "Share a Service", ngrok: `ngrok http 18789`)
-2. Uncomment `CHAT_UI_URL` in `~/.env` and set it to the forwarded URL
+**Important:** If accessing remotely (Brev, ngrok, etc.), the user MUST uncomment and set `CHAT_UI_URL` in `~/.env` before install. Ask if they're running locally or remotely. If remote:
+
+> Port 18789 needs to be exposed on your hosting platform before we proceed — this is something you set up yourself outside of NemoClaw (e.g. Brev "Share a Service", ngrok, SSH tunnel).
+>
+> Once you have the forwarded URL, uncomment `CHAT_UI_URL` in `~/.env` and set it to that URL. Let me know when that's done.
+
+**Do NOT attempt to run ngrok, configure port forwarding, or set up tunnels.** That is the user's responsibility on their infrastructure.
 
 ## Phase 3 — Run setup
 

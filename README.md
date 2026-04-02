@@ -28,7 +28,7 @@ cp .env.example ~/.env
 # 2. Run setup
 ./setup.sh
 
-# 4. Connect and authenticate (inside the sandbox)
+# 3. Connect and authenticate (inside the sandbox)
 nemoclaw my-assistant connect
 claude login
 codex login --device-auth

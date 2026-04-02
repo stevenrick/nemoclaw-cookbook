@@ -14,11 +14,13 @@ Drops you into a shell inside the sandbox. Everything runs as the `sandbox` user
 
 Tokenized URLs are saved in `~/openclaw-ui-url.txt`. Open the Brev URL for remote access or the localhost URL for local. Treat these like passwords.
 
-If port forwarding is down:
+If the internal OpenShell port forward stops (sandbox is running but Web UI is unreachable on localhost):
 
 ```bash
 openshell forward start 18789 my-assistant
 ```
+
+Note: This is OpenShell's internal forwarding from sandbox to host. External access (Brev, ngrok, etc.) is configured separately on your hosting platform — see BUILD.md § Remote Access.
 
 ## OpenClaw (inside the sandbox)
 
