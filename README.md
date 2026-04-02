@@ -6,6 +6,20 @@ Automated setup for [NemoClaw](https://github.com/NVIDIA/NemoClaw) + [OpenShell]
 
 ## Quick Start
 
+### With a coding agent (recommended)
+
+Clone the repo and tell your agent to set it up:
+
+```
+git clone https://github.com/stevenrick/nemoclaw_cookbook && cd nemoclaw_cookbook
+```
+
+**Claude Code:** run `/setup` — it handles env config, prerequisites, deployment, and walks you through post-install auth interactively.
+
+**Other agents:** point them at this repo and ask them to follow BUILD.md.
+
+### Manual
+
 ```bash
 # 1. Create your env file
 cp .env.example ~/.env
