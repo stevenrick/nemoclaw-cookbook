@@ -75,8 +75,8 @@ RUN curl -fsSL https://claude.ai/install.sh | bash \
 
 The native installer puts the binary in `/root/.local/` which the sandbox user can't access. The `cp` + `readlink -f` resolves the symlink chain and copies the actual binary to `/usr/local/bin/`.
 
-The Codex plugin is pre-cloned over HTTPS because Claude Code's `/plugin marketplace add` command
-hardcodes SSH for GitHub, which isn't available in the sandbox.
+The Codex plugin is installed inside the sandbox after build via `claude /plugin marketplace add`.
+The git HTTPS config above ensures this works (the plugin command uses git, which our config redirects from SSH to HTTPS).
 
 Also add Claude Code's SSO/auth endpoints to the network policy so `claude login` works
 without manual approval. In `~/NemoClaw/nemoclaw-blueprint/policies/openclaw-sandbox.yaml`,
@@ -347,7 +347,7 @@ This skill walks Claude through diagnosing the conflict, understanding what chan
 
 The patches add these logical pieces — if upstream restructures things, adapt the placement but keep the intent:
 
-- **Dockerfile**: git HTTPS config, Claude Code binary install, Codex CLI install, Codex plugin pre-clone
+- **Dockerfile**: git HTTPS config, Claude Code binary install, Codex CLI install
 - **Policy**: Claude auth endpoints, OpenAI policy block, GitHub policy extensions (codeload.github.com + binaries)
 
 See the `/refresh-patches` skill for the full breakdown.
