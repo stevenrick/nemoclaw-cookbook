@@ -8,7 +8,7 @@ Reproducible steps to go from a clean Ubuntu machine to a fully operational Nemo
 - Docker installed and running
 - 8 GB RAM minimum (16 GB recommended), 20 GB free disk
 - An NVIDIA API key from https://integrate.api.nvidia.com
-- (Optional) A remote proxy with port forwarding if accessing from another machine (see [Remote Access](#remote-access-brev-ngrok-etc))
+- (Optional) Port 18789 exposed on your hosting platform if accessing remotely — you set this up yourself before running setup (see [Remote Access](#remote-access-brev-ngrok-etc))
 - (Optional) A Telegram bot token from @BotFather
 
 ## Step 1: Create .env
@@ -242,37 +242,28 @@ Treat these like passwords. They change on every sandbox rebuild.
 
 ## Remote Access (Brev, ngrok, etc.)
 
-If your NemoClaw instance runs on a remote machine (cloud VM, Brev dev environment, etc.), you need **two things** to access the Web UI from your browser:
+If your NemoClaw instance runs on a remote machine (cloud VM, Brev dev environment, etc.), you need two things — **both done by you outside of NemoClaw**, before running setup.
 
-### 1. Port forwarding for port 18789
+### 1. Expose port 18789 (you do this, not setup.sh)
 
-NemoClaw's Web UI listens on `127.0.0.1:18789` inside the remote machine. You must forward this port to make it reachable.
+NemoClaw's Web UI listens on `127.0.0.1:18789` inside the remote machine. You must make this port reachable from your browser **before** running setup. This is infrastructure configuration on your hosting platform — NemoClaw and setup.sh do not handle it.
 
-**Brev:** Use "Share a Service" to expose port `18789`. This gives you a public URL like `https://your-instance-18789.brev.dev`. That URL is your `CHAT_UI_URL`.
+Examples:
+- **Brev:** "Share a Service" on port `18789` → gives you a URL like `https://your-instance-18789.brev.dev`
+- **ngrok:** run `ngrok http 18789` separately → gives you a URL like `https://xxxx.ngrok.io`
+- **SSH tunnel:** `ssh -L 18789:localhost:18789 your-remote-host` → access via `http://127.0.0.1:18789` (no `CHAT_UI_URL` needed)
 
-**ngrok:**
-```bash
-ngrok http 18789
-```
-Use the generated `https://xxxx.ngrok.io` URL as your `CHAT_UI_URL`.
+### 2. Set CHAT_UI_URL in ~/.env
 
-**SSH tunnel (any provider):**
-```bash
-ssh -L 18789:localhost:18789 your-remote-host
-```
-Then access `http://127.0.0.1:18789` locally. No `CHAT_UI_URL` needed with SSH tunnels since you're accessing via localhost.
-
-### 2. Set CHAT_UI_URL before install/rebuild
-
-NemoClaw bakes the allowed origin into the sandbox at build time. If you don't set `CHAT_UI_URL` before running `install.sh` or `nemoclaw onboard`, the Web UI will reject your proxy URL with an "origin not allowed" error.
-
-Uncomment and set `CHAT_UI_URL` in `~/.env`:
+Once you have your forwarded URL, uncomment and set `CHAT_UI_URL` in `~/.env`:
 
 ```
 CHAT_UI_URL=https://your-instance-18789.brev.dev
 ```
 
-This must be set **before** running `setup.sh`, `install.sh`, or `nemoclaw onboard`. If you forgot, set it in `~/.env` and rebuild the sandbox (see Rebuilding below).
+NemoClaw bakes the allowed origin into the sandbox at build time. If `CHAT_UI_URL` isn't set before running `setup.sh`, `install.sh`, or `nemoclaw onboard`, the Web UI will reject your proxy URL with an "origin not allowed" error.
+
+If you forgot, set it in `~/.env` and rebuild the sandbox (see Rebuilding below).
 
 ## Rebuilding the sandbox
 
