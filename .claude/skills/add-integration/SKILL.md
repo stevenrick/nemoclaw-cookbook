@@ -45,18 +45,21 @@ grep -q 'brave_search' ~/NemoClaw/nemoclaw-blueprint/policies/openclaw-sandbox.y
 
 If the policy is missing, the `policy.patch` needs to be regenerated first. Guide the user to update it or use `/refresh-patches`.
 
-## Phase 3 — Back up workspace
+## Phase 3 — Full backup (workspace + chat history)
 
-Always back up before destructive operations:
+Always back up before destructive operations. Use the cookbook's full backup script which includes chat session history:
 
 ```bash
+COOKBOOK_DIR="$(cd "$(dirname "$(readlink -f "$0")")/.." 2>/dev/null && pwd)" # or find it
 SANDBOX_NAME=$(nemoclaw list --json 2>/dev/null | grep -o '"name":"[^"]*"' | head -1 | cut -d'"' -f4)
 if [ -z "$SANDBOX_NAME" ]; then
   echo "No sandbox found — skipping backup"
 else
-  ~/NemoClaw/scripts/backup-workspace.sh backup "$SANDBOX_NAME"
+  ~/nemoclaw-cookbook/scripts/backup-full.sh backup "$SANDBOX_NAME"
 fi
 ```
+
+This backs up workspace files (SOUL.md, USER.md, etc.) AND chat session history (JSONL files from `/sandbox/.openclaw-data/agents/main/sessions/`).
 
 Report the backup location to the user.
 
@@ -97,12 +100,12 @@ cd ~/NemoClaw && nemoclaw onboard
 
 This takes a few minutes. Monitor the output for errors.
 
-## Phase 6 — Restore workspace
+## Phase 6 — Restore workspace + chat history
 
-Restore the backed-up workspace files:
+Restore the backed-up workspace files and chat sessions:
 
 ```bash
-~/NemoClaw/scripts/backup-workspace.sh restore "$SANDBOX_NAME"
+~/nemoclaw-cookbook/scripts/backup-full.sh restore "$SANDBOX_NAME"
 ```
 
 ## Phase 7 — Verify
