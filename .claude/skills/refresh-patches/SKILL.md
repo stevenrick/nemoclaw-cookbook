@@ -7,12 +7,13 @@ allowed-tools: Bash Read Write Edit Grep Glob
 
 # Refresh Patches
 
-The cookbook maintains two small unified-diff patches applied on top of upstream NemoClaw:
+The cookbook maintains three small unified-diff patches applied on top of upstream NemoClaw:
 
 | Patch | Target file | Purpose |
 |-------|------------|---------|
 | `patches/Dockerfile.patch` | `Dockerfile` | Adds Claude Code, Codex CLI, git HTTPS config |
-| `patches/policy.patch` | `nemoclaw-blueprint/policies/openclaw-sandbox.yaml` | Opens network endpoints for auth |
+| `patches/policy.patch` | `nemoclaw-blueprint/policies/openclaw-sandbox.yaml` | Opens network endpoints for auth + Brave Search |
+| `patches/onboard.patch` | `bin/lib/onboard.js` | Creates + attaches integration providers (Brave Search) at sandbox creation |
 
 When upstream NemoClaw changes these files, the patches may fail to apply. This skill walks through diagnosing and regenerating them.
 
@@ -23,7 +24,7 @@ Run these commands to understand the current state:
 ```bash
 cd ~/NemoClaw && git log --oneline -5
 cd ~/NemoClaw && git status
-cd ~/NemoClaw && git diff HEAD -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml
+cd ~/NemoClaw && git diff HEAD -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml bin/lib/onboard.js
 ```
 
 Check the blob index references in `setup.sh` (the "Patches last generated against" comment) and compare them to the current upstream file hashes:
@@ -31,6 +32,7 @@ Check the blob index references in `setup.sh` (the "Patches last generated again
 ```bash
 git hash-object ~/NemoClaw/Dockerfile
 git hash-object ~/NemoClaw/nemoclaw-blueprint/policies/openclaw-sandbox.yaml
+git hash-object ~/NemoClaw/bin/lib/onboard.js
 ```
 
 If the hashes differ from what's in `setup.sh`, upstream has changed these files.
@@ -41,9 +43,10 @@ Reset the target files and try applying with `--3way`:
 
 ```bash
 cd ~/NemoClaw
-git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml
+git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml bin/lib/onboard.js
 git apply --3way "${COOKBOOK_DIR}/patches/Dockerfile.patch" 2>&1 || true
 git apply --3way "${COOKBOOK_DIR}/patches/policy.patch" 2>&1 || true
+git apply --3way "${COOKBOOK_DIR}/patches/onboard.patch" 2>&1 || true
 ```
 
 Where `COOKBOOK_DIR` is the path to this cookbook repo (use `!`pwd`` from the project root or find it via the skill directory path).
@@ -86,7 +89,11 @@ For each broken patch:
 **policy.patch** adds:
 1. Claude auth endpoints (platform.claude.com, downloads.claude.ai, raw.githubusercontent.com, storage.googleapis.com) + codex binary to the `claude_code` network policy
 2. A new `openai` network policy block (api.openai.com, auth.openai.com, chatgpt.com, ab.chatgpt.com + codex binary)
-3. codeload.github.com endpoint + claude/codex/node binaries to the `github` network policy
+3. A new `brave_search` network policy block (api.search.brave.com, GET only)
+4. codeload.github.com endpoint + claude/codex/node binaries to the `github` network policy
+
+**onboard.patch** adds:
+1. Creates a `brave-search` generic provider via `upsertProvider` when `BRAVE_SEARCH_API_KEY` is detected, then attaches it to the sandbox via `--provider brave-search` on `openshell sandbox create`
 
 ## Step 5 — Update references
 
@@ -94,7 +101,7 @@ After regenerating patches:
 
 1. Update the blob index comment in `setup.sh`:
    ```bash
-   # Patches last generated against NemoClaw Dockerfile index <new-hash>, policy index <new-hash>
+   # Patches last generated against NemoClaw Dockerfile index <new-hash>, policy index <new-hash>, onboard index <new-hash>
    ```
 2. Run `setup.sh` from scratch (or at least the patch step) to verify end-to-end
 3. Check that the patched Dockerfile still builds: look for syntax errors, moved anchors, etc.

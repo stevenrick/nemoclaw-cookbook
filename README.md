@@ -59,6 +59,8 @@ Our patches on top of upstream NemoClaw:
 - Brave Search (`api.search.brave.com`)
 - GitHub access for Claude/Codex/Node binaries (`codeload.github.com`)
 
+**Onboard** — creates and attaches integration providers (`brave-search`) at sandbox creation when API keys are detected
+
 ## When Upstream Changes
 
 Patches apply with `git apply --3way`, which handles minor upstream drift automatically. If patches break after an upstream NemoClaw update:
@@ -95,7 +97,8 @@ After rebuild: re-run `claude login`, `codex login --device-auth`, and plugin in
 setup.sh              # Automated setup script
 patches/
   Dockerfile.patch    # Claude Code + Codex + git config
-  policy.patch        # Network policy for auth endpoints
+  policy.patch        # Network policy for auth + search endpoints
+  onboard.patch       # Integration API key injection
 scripts/
   validate-patches.sh # Check patches still apply against upstream
 BUILD.md              # Detailed setup walkthrough

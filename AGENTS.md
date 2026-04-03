@@ -8,11 +8,12 @@ This is a thin patch overlay on upstream [NemoClaw](https://github.com/NVIDIA/Ne
 setup.sh              # Automated setup — clones upstream, applies patches, installs
 patches/
   Dockerfile.patch    # Adds Claude Code, Codex CLI, git HTTPS/SSL config to sandbox image
-  policy.patch        # Opens network endpoints for auth (Claude, OpenAI, GitHub)
+  policy.patch        # Opens network endpoints for auth (Claude, OpenAI, GitHub, Brave Search)
+  onboard.patch       # Creates + attaches integration providers (Brave Search) at sandbox creation
 BUILD.md              # Step-by-step setup with explanations
 USE.md                # Day-to-day commands and features
 CONTRIBUTING.md       # Contribution guidelines
-.claude/skills/       # Claude Code skills (e.g. /refresh-patches)
+.claude/skills/       # Claude Code skills (e.g. /refresh-patches, /add-integration)
 ```
 
 ## Getting started
