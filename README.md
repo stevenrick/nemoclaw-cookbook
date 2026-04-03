@@ -11,7 +11,7 @@ Automated setup for [NemoClaw](https://github.com/NVIDIA/NemoClaw) + [OpenShell]
 Clone the repo and tell your agent to set it up:
 
 ```
-git clone https://github.com/stevenrick/nemoclaw_cookbook && cd nemoclaw_cookbook
+git clone https://github.com/stevenrick/nemoclaw-cookbook && cd nemoclaw-cookbook
 ```
 
 **Claude Code:** run `/setup` — it handles env config, prerequisites, deployment, and walks you through post-install auth interactively.
@@ -32,10 +32,9 @@ cp .env.example ~/.env
 nemoclaw my-assistant connect
 claude login
 codex login --device-auth
-claude /plugin marketplace add openai/codex-plugin-cc
-claude /plugin install codex@openai-codex
-claude /reload-plugins
 ```
+
+See [BUILD.md](BUILD.md) for the full step-by-step walkthrough with explanations.
 
 ## What This Sets Up
 
@@ -44,8 +43,8 @@ claude /reload-plugins
 - **Claude Code** — installed via native installer, with Codex plugin
 - **Codex CLI** — OpenAI's coding agent
 - **Telegram bridge** — chat with your agent from your phone
-- **Brave Search** — optional web search integration (add `BRAVE_SEARCH_API_KEY` to `~/.env`)
-- **NVIDIA Nemotron** inference via `nvidia/nemotron-3-super-120b-a12b`
+- **Brave Search** — optional web search integration (add `BRAVE_API_KEY` to `~/.env`)
+- **Inference** — NVIDIA Nemotron by default, configurable via `NEMOCLAW_MODEL` in `~/.env`
 
 ## What the Patches Do
 
@@ -79,7 +78,7 @@ Or see [BUILD.md § Refreshing Patches](BUILD.md#refreshing-patches-after-upstre
 ## Rebuilding
 
 ```bash
-source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1
+source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 # Ensure CHAT_UI_URL is set in ~/.env if accessing remotely
 
 nemoclaw stop 2>/dev/null
@@ -88,7 +87,7 @@ nemoclaw my-assistant destroy --yes
 nemoclaw onboard
 ```
 
-After rebuild: re-run `claude login`, `codex login --device-auth`, and plugin install.
+After rebuild: save the new tokenized URL, re-run `claude login` and `codex login --device-auth` inside the sandbox.
 
 ## File Structure
 
@@ -101,6 +100,7 @@ patches/
   onboard.patch       # Integration API key injection
 scripts/
   validate-patches.sh # Check patches still apply against upstream
+  backup-full.sh      # Workspace + chat history backup/restore
 BUILD.md              # Detailed setup walkthrough
 USE.md                # Usage reference
 ```

@@ -51,7 +51,7 @@ git apply --3way "${COOKBOOK_DIR}/patches/onboard.patch" 2>&1 || true
 
 Where `COOKBOOK_DIR` is the path to this cookbook repo (use `!`pwd`` from the project root or find it via the skill directory path).
 
-**If both apply cleanly** — the patches are still compatible. Update the blob index comment in `setup.sh` and you're done.
+**If all three apply cleanly** — the patches are still compatible. Update the blob index comment in `setup.sh` and you're done.
 
 **If conflicts appear** — proceed to Step 3.
 
@@ -83,17 +83,17 @@ For each broken patch:
 
 **Dockerfile.patch** adds three `RUN` blocks after the `npm ci --omit=dev` line:
 1. Git config: force HTTPS for GitHub URLs, set SSL CA to OpenShell bundle, copy .gitconfig to sandbox user
-2. Install Claude Code native binary + Codex CLI via npm
-3. (Removed — plugin is now installed inside the sandbox at runtime, not pre-cloned during build)
+2. Install Claude Code native binary (with symlink at /sandbox/.local/bin/claude) + Codex CLI via npm
+3. Pre-install Codex plugin for Claude Code (clones openai/codex-plugin-cc, places in plugin cache, writes manifest — avoids EXDEV rename failure in sandbox overlay)
 
 **policy.patch** adds:
 1. Claude auth endpoints (platform.claude.com, downloads.claude.ai, raw.githubusercontent.com, storage.googleapis.com) + codex binary to the `claude_code` network policy
-2. A new `openai` network policy block (api.openai.com, auth.openai.com, chatgpt.com, ab.chatgpt.com + codex binary)
+2. A new `openai` network policy block (api.openai.com, auth.openai.com, chatgpt.com, ab.chatgpt.com + codex and node binaries)
 3. A new `brave_search` network policy block (api.search.brave.com, GET only)
 4. codeload.github.com endpoint + claude/codex/node binaries to the `github` network policy
 
 **onboard.patch** adds:
-1. Creates a `brave-search` generic provider via `upsertProvider` when `BRAVE_SEARCH_API_KEY` is detected, then attaches it to the sandbox via `--provider brave-search` on `openshell sandbox create`
+1. Creates a `brave-search` generic provider via `upsertProvider` when `BRAVE_API_KEY` is detected, then attaches it to the sandbox via `--provider brave-search` on `openshell sandbox create`
 
 ## Step 5 — Update references
 

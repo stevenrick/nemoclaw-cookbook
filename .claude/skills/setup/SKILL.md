@@ -30,7 +30,7 @@ If Docker isn't running, stop and tell the user. Don't proceed without it.
 Check if `~/.env` exists and what's configured:
 
 ```bash
-[ -f ~/.env ] && cat ~/.env || echo "NOT FOUND"
+[ -f ~/.env ] && grep -E '^\s*[A-Z_]+=' ~/.env | sed 's/=.*/=***/' || echo "NOT FOUND"
 ```
 
 **If `~/.env` doesn't exist:** Create it from the template with placeholder values:
@@ -52,11 +52,12 @@ Then tell the user:
 
 ```bash
 source ~/.env
-echo "NVIDIA_API_KEY: ${NVIDIA_API_KEY:+SET (${#NVIDIA_API_KEY} chars)}"
-echo "NVIDIA_API_KEY: ${NVIDIA_API_KEY:-NOT SET}"
-echo "TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-not set (optional)}"
-echo "ALLOWED_CHAT_IDS: ${ALLOWED_CHAT_IDS:-not set (optional)}"
+echo "NVIDIA_API_KEY: ${NVIDIA_API_KEY:+SET}${NVIDIA_API_KEY:-NOT SET}"
+echo "NEMOCLAW_MODEL: ${NEMOCLAW_MODEL:-not set (will use default)}"
+echo "TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:+SET}${TELEGRAM_BOT_TOKEN:-not set (optional)}"
+echo "ALLOWED_CHAT_IDS: ${ALLOWED_CHAT_IDS:+SET}${ALLOWED_CHAT_IDS:-not set (optional)}"
 echo "CHAT_UI_URL: ${CHAT_UI_URL:-not set (local access only)}"
+echo "BRAVE_API_KEY: ${BRAVE_API_KEY:+SET}${BRAVE_API_KEY:-not set (optional)}"
 ```
 
 If `NVIDIA_API_KEY` is still the placeholder or missing, ask the user to set it and wait.
@@ -111,7 +112,7 @@ nemoclaw list
 **If OpenShell shows the sandbox but NemoClaw doesn't:** NemoClaw's install partially completed — the sandbox was created via OpenShell but NemoClaw didn't register it. Fix by running:
 
 ```bash
-source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1
+source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 [ -n "${CHAT_UI_URL:-}" ] && export CHAT_UI_URL
 nemoclaw onboard
 ```
@@ -155,12 +156,11 @@ Tell the user they need to connect to the sandbox and authenticate:
 > ```
 > claude login
 > codex login --device-auth
-> claude /plugin marketplace add openai/codex-plugin-cc
-> claude /plugin install codex@openai-codex
-> claude /reload-plugins
+> claude /codex:setup
 > ```
 >
 > Each login will print a URL — open it in your browser and authenticate.
+> The Codex plugin is pre-installed in the image — `/codex:setup` just verifies it.
 > Let me know when you're done and I'll verify everything is working.
 
 ## Principles
