@@ -31,6 +31,8 @@ export NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && export TELEGRAM_BOT_TOKEN
 [ -n "${ALLOWED_CHAT_IDS:-}" ] && export ALLOWED_CHAT_IDS
 [ -n "${CHAT_UI_URL:-}" ] && export CHAT_UI_URL
+[ -n "${BRAVE_API_KEY:-}" ] && export BRAVE_API_KEY
+[ -n "${NEMOCLAW_MODEL:-}" ] && export NEMOCLAW_MODEL
 
 echo "=== Step 1: Clone / update repositories ==="
 cd "$HOME"
@@ -61,10 +63,10 @@ echo "=== Step 3: Pull latest sandbox base image ==="
 docker pull ghcr.io/nvidia/nemoclaw/sandbox-base:latest
 
 echo "=== Step 4: Apply patches ==="
-# Patches last generated against NemoClaw Dockerfile index 2c8e594, policy index 2f87617
+# Patches last generated against NemoClaw Dockerfile index 2c8e594, policy index 39e93f5, onboard index 7a74b3d
 # If patches fail, see BUILD.md "Refreshing Patches" or run: claude /refresh-patches
 cd "$HOME/NemoClaw"
-git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null || true
+git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml bin/lib/onboard.js 2>/dev/null || true
 
 apply_patch() {
   local patch="$1"
@@ -96,6 +98,7 @@ apply_patch() {
 
 apply_patch "${SCRIPT_DIR}/patches/Dockerfile.patch"
 apply_patch "${SCRIPT_DIR}/patches/policy.patch"
+apply_patch "${SCRIPT_DIR}/patches/onboard.patch"
 echo "Patches applied."
 
 echo "=== Step 5: Install NemoClaw ==="
@@ -124,8 +127,6 @@ echo "Next steps (inside the sandbox):"
 echo "  nemoclaw my-assistant connect"
 echo "  claude login"
 echo "  codex login --device-auth"
-echo "  claude /plugin marketplace add openai/codex-plugin-cc"
-echo "  claude /plugin install codex@openai-codex"
-echo "  claude /reload-plugins"
+echo "  claude /codex:setup          # verify plugin (pre-installed in image)"
 echo ""
 echo "See USE.md for day-to-day commands."

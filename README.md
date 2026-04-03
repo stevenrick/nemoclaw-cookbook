@@ -11,7 +11,7 @@ Automated setup for [NemoClaw](https://github.com/NVIDIA/NemoClaw) + [OpenShell]
 Clone the repo and tell your agent to set it up:
 
 ```
-git clone https://github.com/stevenrick/nemoclaw_cookbook && cd nemoclaw_cookbook
+git clone https://github.com/stevenrick/nemoclaw-cookbook && cd nemoclaw-cookbook
 ```
 
 **Claude Code:** run `/setup` — it handles env config, prerequisites, deployment, and walks you through post-install auth interactively.
@@ -32,10 +32,9 @@ cp .env.example ~/.env
 nemoclaw my-assistant connect
 claude login
 codex login --device-auth
-claude /plugin marketplace add openai/codex-plugin-cc
-claude /plugin install codex@openai-codex
-claude /reload-plugins
 ```
+
+See [BUILD.md](BUILD.md) for the full step-by-step walkthrough with explanations.
 
 ## What This Sets Up
 
@@ -44,7 +43,8 @@ claude /reload-plugins
 - **Claude Code** — installed via native installer, with Codex plugin
 - **Codex CLI** — OpenAI's coding agent
 - **Telegram bridge** — chat with your agent from your phone
-- **NVIDIA Nemotron** inference via `nvidia/nemotron-3-super-120b-a12b`
+- **Brave Search** — optional web search integration (add `BRAVE_API_KEY` to `~/.env`)
+- **Inference** — NVIDIA Nemotron by default, configurable via `NEMOCLAW_MODEL` in `~/.env`
 
 ## What the Patches Do
 
@@ -55,7 +55,10 @@ Our patches on top of upstream NemoClaw:
 **Sandbox policy** — adds network endpoints for:
 - Claude Code SSO (`platform.claude.com`, `downloads.claude.ai`, `storage.googleapis.com`)
 - OpenAI/Codex (`api.openai.com`, `auth.openai.com`, `chatgpt.com`, `ab.chatgpt.com`)
+- Brave Search (`api.search.brave.com`)
 - GitHub access for Claude/Codex/Node binaries (`codeload.github.com`)
+
+**Onboard** — creates and attaches integration providers (`brave-search`) at sandbox creation when API keys are detected
 
 ## When Upstream Changes
 
@@ -84,7 +87,7 @@ nemoclaw my-assistant destroy --yes
 nemoclaw onboard
 ```
 
-After rebuild: re-run `claude login`, `codex login --device-auth`, and plugin install.
+After rebuild: save the new tokenized URL, re-run `claude login` and `codex login --device-auth` inside the sandbox.
 
 ## File Structure
 
@@ -93,9 +96,11 @@ After rebuild: re-run `claude login`, `codex login --device-auth`, and plugin in
 setup.sh              # Automated setup script
 patches/
   Dockerfile.patch    # Claude Code + Codex + git config
-  policy.patch        # Network policy for auth endpoints
+  policy.patch        # Network policy for auth + search endpoints
+  onboard.patch       # Integration API key injection
 scripts/
   validate-patches.sh # Check patches still apply against upstream
+  backup-full.sh      # Workspace + chat history backup/restore
 BUILD.md              # Detailed setup walkthrough
 USE.md                # Usage reference
 ```

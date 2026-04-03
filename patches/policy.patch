@@ -1,8 +1,8 @@
 diff --git a/nemoclaw-blueprint/policies/openclaw-sandbox.yaml b/nemoclaw-blueprint/policies/openclaw-sandbox.yaml
-index 2f87617..ade7cb6 100644
+index 2f87617..39e93f5 100644
 --- a/nemoclaw-blueprint/policies/openclaw-sandbox.yaml
 +++ b/nemoclaw-blueprint/policies/openclaw-sandbox.yaml
-@@ -71,8 +71,44 @@ network_policies:
+@@ -71,8 +71,59 @@ network_policies:
          rules:
            - allow: { method: GET, path: "/**" }
            - allow: { method: POST, path: "/**" }
@@ -44,10 +44,25 @@ index 2f87617..ade7cb6 100644
 +        access: full
 +    binaries:
 +      - { path: /usr/local/bin/codex }
++      - { path: /usr/local/bin/node }
++
++  brave_search:
++    name: brave_search
++    endpoints:
++      - host: api.search.brave.com
++        port: 443
++        protocol: rest
++        enforcement: enforce
++        tls: terminate
++        rules:
++          - allow: { method: GET, path: "/**" }
++    binaries:
++      - { path: /usr/local/bin/node }
++      - { path: /usr/local/bin/openclaw }
  
    nvidia:
      name: nvidia
-@@ -106,9 +142,15 @@ network_policies:
+@@ -106,9 +157,15 @@ network_policies:
        - host: api.github.com
          port: 443
          access: full
