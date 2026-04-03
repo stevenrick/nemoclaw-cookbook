@@ -16,7 +16,7 @@ Check what's in `~/.env` versus what's already configured:
 
 ```bash
 # What keys are available?
-grep -E '^\s*[A-Z_]+=' ~/.env | grep -v '^#'
+grep -E '^\s*[A-Z_]+=' ~/.env | grep -v '^#' | sed 's/=.*/=***/'
 
 # What providers exist?
 openshell provider list 2>/dev/null
@@ -29,7 +29,7 @@ nemoclaw list 2>/dev/null
 
 | Env var | Provider name | Provider type | Policy block |
 |---------|--------------|---------------|-------------|
-| `BRAVE_SEARCH_API_KEY` | `brave-search` | `generic` | `brave_search` in policy.patch (injected as `BRAVE_API_KEY` — the name OpenClaw expects) |
+| `BRAVE_API_KEY` | `brave-search` | `generic` | `brave_search` in policy.patch |
 
 Report what's new and confirm with the user before proceeding.
 
@@ -55,7 +55,7 @@ SANDBOX_NAME=$(nemoclaw list --json 2>/dev/null | grep -o '"name":"[^"]*"' | hea
 if [ -z "$SANDBOX_NAME" ]; then
   echo "No sandbox found — skipping backup"
 else
-  ~/nemoclaw-cookbook/scripts/backup-full.sh backup "$SANDBOX_NAME"
+  "${COOKBOOK_DIR}/scripts/backup-full.sh" backup "$SANDBOX_NAME"
 fi
 ```
 
@@ -69,7 +69,7 @@ Source credentials and create the OpenShell provider:
 
 ```bash
 source ~/.env
-export BRAVE_SEARCH_API_KEY  # or whichever key
+export BRAVE_API_KEY  # or whichever key
 
 openshell provider create --name brave-search --type generic \
   --credential BRAVE_API_KEY 2>/dev/null \
@@ -89,11 +89,12 @@ The sandbox must be recreated to attach the new provider:
 
 ```bash
 source ~/.env
-export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_RECREATE_SANDBOX=1
+export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 NEMOCLAW_RECREATE_SANDBOX=1
 [ -n "${CHAT_UI_URL:-}" ] && export CHAT_UI_URL
 [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && export TELEGRAM_BOT_TOKEN
 [ -n "${ALLOWED_CHAT_IDS:-}" ] && export ALLOWED_CHAT_IDS
-[ -n "${BRAVE_SEARCH_API_KEY:-}" ] && export BRAVE_SEARCH_API_KEY
+[ -n "${BRAVE_API_KEY:-}" ] && export BRAVE_API_KEY
+[ -n "${NEMOCLAW_MODEL:-}" ] && export NEMOCLAW_MODEL
 
 cd ~/NemoClaw && nemoclaw onboard
 ```
@@ -105,7 +106,7 @@ This takes a few minutes. Monitor the output for errors.
 Restore the backed-up workspace files and chat sessions:
 
 ```bash
-~/nemoclaw-cookbook/scripts/backup-full.sh restore "$SANDBOX_NAME"
+"${COOKBOOK_DIR}/scripts/backup-full.sh" restore "$SANDBOX_NAME"
 ```
 
 ## Phase 7 — Verify
@@ -133,6 +134,6 @@ To add a new integration beyond Brave Search:
 1. Add the API key to `~/.env`
 2. Add the env var to `.env.example` in the cookbook
 3. Add network policy entries to `patches/policy.patch` (regenerate via `/refresh-patches`)
-4. Add the provider creation to `setup.sh` following the Brave Search pattern
+4. Add provider creation logic to `patches/onboard.patch` following the Brave Search pattern
 5. Add the mapping to the table in Phase 1 of this skill
 6. Run this skill to apply the changes to the running sandbox

@@ -27,10 +27,12 @@ fi
 
 export NVIDIA_API_KEY
 export NEMOCLAW_NON_INTERACTIVE=1
+export NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && export TELEGRAM_BOT_TOKEN
 [ -n "${ALLOWED_CHAT_IDS:-}" ] && export ALLOWED_CHAT_IDS
 [ -n "${CHAT_UI_URL:-}" ] && export CHAT_UI_URL
-[ -n "${BRAVE_SEARCH_API_KEY:-}" ] && export BRAVE_SEARCH_API_KEY
+[ -n "${BRAVE_API_KEY:-}" ] && export BRAVE_API_KEY
+[ -n "${NEMOCLAW_MODEL:-}" ] && export NEMOCLAW_MODEL
 
 echo "=== Step 1: Clone / update repositories ==="
 cd "$HOME"
@@ -125,8 +127,6 @@ echo "Next steps (inside the sandbox):"
 echo "  nemoclaw my-assistant connect"
 echo "  claude login"
 echo "  codex login --device-auth"
-echo "  claude /plugin marketplace add openai/codex-plugin-cc"
-echo "  claude /plugin install codex@openai-codex"
-echo "  claude /reload-plugins"
+echo "  claude /codex:setup          # verify plugin (pre-installed in image)"
 echo ""
 echo "See USE.md for day-to-day commands."

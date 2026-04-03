@@ -58,7 +58,7 @@ codex login --device-auth
 
 The login flow reaches `platform.claude.com`, `downloads.claude.ai`, and `raw.githubusercontent.com`.
 These are pre-approved in the sandbox network policy. If you see blocked requests in `openshell term`,
-the policy may need updating (see BUILD_NEMOCLAW_README.md Step 5).
+the policy may need updating (see BUILD.md Step 5).
 
 SSO tokens persist across restarts but not sandbox rebuilds. Re-run both logins after any rebuild.
 
@@ -113,7 +113,7 @@ openshell term
 
 ## Brave Search
 
-If `BRAVE_SEARCH_API_KEY` is set in `~/.env`, the sandbox can reach `api.search.brave.com` for web search. The API key is injected via OpenShell's provider system — the sandbox never sees the real key.
+If `BRAVE_API_KEY` is set in `~/.env`, the sandbox can reach `api.search.brave.com` for web search. The API key is injected via OpenShell's provider system — the sandbox never sees the real key.
 
 ### Adding Brave Search to an existing sandbox
 
@@ -138,12 +138,17 @@ openshell inference get
 
 ### Switch models
 
+Set `NEMOCLAW_MODEL` in `~/.env` before setup/rebuild, or switch at runtime:
+
 ```bash
 # Lightweight model
 openshell inference set --provider nvidia-prod --model nvidia/nemotron-3-nano-30b-a3b
 
 # Default large model
 openshell inference set --provider nvidia-prod --model nvidia/nemotron-3-super-120b-a12b
+
+# Non-NVIDIA model (if configured)
+openshell inference set --provider nvidia-prod --model openai/gpt-oss-120b
 
 # Increase timeout (seconds)
 openshell inference update --timeout 300
@@ -175,7 +180,7 @@ Default presets: `pypi`, `npm`, `telegram` (plus built-in policies for GitHub, D
 When the web UI shows "Update available":
 
 ```bash
-source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1
+source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 [ -n "${CHAT_UI_URL:-}" ] && export CHAT_UI_URL
 
 docker pull ghcr.io/nvidia/nemoclaw/sandbox-base:latest
@@ -183,7 +188,7 @@ nemoclaw my-assistant destroy --yes
 nemoclaw onboard
 ```
 
-After rebuild: save new tokenized URL, re-run `claude login`, restart Telegram bridge.
+After rebuild: save the new tokenized URL, re-run `claude login` and `codex login --device-auth` inside the sandbox, and restart the Telegram bridge if used.
 
 ## Diagnostics
 
@@ -212,7 +217,7 @@ openshell status                      # Gateway connection status
 | `~/.nemoclaw/credentials.json` | Inference provider credentials (host-side) |
 | `~/.nemoclaw/sandboxes.json` | Sandbox registry |
 | `~/NemoClaw/Dockerfile` | Customized sandbox image (includes Claude Code) |
-| `~/BUILD_NEMOCLAW_README.md` | How to rebuild from scratch |
+| `~/nemoclaw-cookbook/BUILD.md` | How to rebuild from scratch |
 
 ## Shell Environment
 

@@ -75,8 +75,8 @@ RUN curl -fsSL https://claude.ai/install.sh | bash \
 
 The native installer puts the binary in `/root/.local/` which the sandbox user can't access. The `cp` + `readlink -f` resolves the symlink chain and copies the actual binary to `/usr/local/bin/`.
 
-The Codex plugin is installed inside the sandbox after build via `claude /plugin marketplace add`.
-The git HTTPS config above ensures this works (the plugin command uses git, which our config redirects from SSH to HTTPS).
+The Codex plugin is pre-installed in the Docker image (see Dockerfile patch).
+The git HTTPS config above ensures plugin cloning works (git is redirected from SSH to HTTPS).
 
 Also add Claude Code's SSO/auth endpoints to the network policy so `claude login` works
 without manual approval. In `~/NemoClaw/nemoclaw-blueprint/policies/openclaw-sandbox.yaml`,
@@ -151,7 +151,7 @@ Both changes survive all future rebuilds.
 ```bash
 cd ~/NemoClaw
 source ~/.env
-export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1
+export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 # CHAT_UI_URL is read from ~/.env if set (see Remote Access section below)
 [ -n "${CHAT_UI_URL:-}" ] && export CHAT_UI_URL
 
@@ -192,16 +192,13 @@ claude login
 # Authenticate Codex via browser SSO
 codex login --device-auth
 
-# Install the Codex plugin for Claude Code
-claude /plugin marketplace add openai/codex-plugin-cc
-claude /plugin install codex@openai-codex
-claude /reload-plugins
-claude /codex:setup    # verify installation
+# Verify the Codex plugin (pre-installed in the image)
+claude /codex:setup
 ```
 
 Both logins print a URL — open it in your browser and authenticate. Re-run both after any sandbox rebuild. SSO tokens persist across restarts but not rebuilds.
 
-Once installed, Claude Code gains these Codex slash commands:
+The Codex plugin is baked into the Docker image, so no manual install is needed. Claude Code gains these Codex slash commands:
 - `/codex:review` — code review
 - `/codex:adversarial-review` — adversarial code review
 - `/codex:rescue` — rescue stuck tasks
@@ -267,7 +264,7 @@ If you forgot, set it in `~/.env` and rebuild the sandbox (see Rebuilding below)
 
 ## Adding Integrations
 
-The cookbook supports optional integrations driven by API keys in `~/.env`. When a key is present, `setup.sh` creates an OpenShell provider and the policy patch opens the necessary network endpoints.
+The cookbook supports optional integrations driven by API keys in `~/.env`. When a key is present, the onboard patch creates and attaches an OpenShell provider during sandbox creation, and the policy patch opens the necessary network endpoints.
 
 ### Brave Search
 
@@ -276,7 +273,7 @@ Enables web search capabilities via the Brave Search API.
 1. Get a Brave Search API key from https://brave.com/search/api/
 2. Add it to `~/.env`:
    ```bash
-   echo 'BRAVE_SEARCH_API_KEY=BSA-your-key-here' >> ~/.env
+   echo 'BRAVE_API_KEY=BSA-your-key-here' >> ~/.env
    ```
 3. If this is a fresh install, run `./setup.sh` — it handles everything.
 4. If you already have a running sandbox, use Claude Code: `claude /add-integration`
@@ -288,7 +285,7 @@ To add a new API integration:
 
 1. Add the API key to `~/.env`
 2. Add a network policy block to `patches/policy.patch` for the service's endpoints
-3. Add provider creation logic to `setup.sh` (follow the Brave Search pattern)
+3. Add provider creation logic to `patches/onboard.patch` (follow the Brave Search pattern)
 4. Update `.env.example` with the new key
 5. Run `/add-integration` to apply to a running sandbox
 
@@ -301,7 +298,7 @@ OpenShell providers (credential bundles injected into the sandbox) can only be a
 Any time you need to rebuild (update, config change, etc.):
 
 ```bash
-source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1
+source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 [ -n "${CHAT_UI_URL:-}" ] && export CHAT_UI_URL
 
 nemoclaw stop 2>/dev/null; kill $(pgrep -f telegram-bridge) $(pgrep -f cloudflared) 2>/dev/null
@@ -313,17 +310,11 @@ nemoclaw onboard
 After rebuild:
 1. Save the new tokenized URL
 2. Re-run `claude login` and `codex login --device-auth` inside the sandbox (SSO tokens don't survive rebuilds)
-3. Re-install the Codex plugin:
-   ```
-   claude /plugin marketplace add openai/codex-plugin-cc
-   claude /plugin install codex@openai-codex
-   claude /reload-plugins
-   ```
-4. Restart Telegram: `source ~/.env && export NVIDIA_API_KEY TELEGRAM_BOT_TOKEN ALLOWED_CHAT_IDS && nemoclaw start`
+3. Restart Telegram: `source ~/.env && export NVIDIA_API_KEY TELEGRAM_BOT_TOKEN ALLOWED_CHAT_IDS && nemoclaw start`
 
 ## Refreshing Patches After Upstream Updates
 
-The two patches in `patches/` are unified diffs generated against a specific version of NemoClaw. When NVIDIA updates the upstream `Dockerfile` or `openclaw-sandbox.yaml`, the patches may fail to apply.
+The three patches in `patches/` are unified diffs generated against a specific version of NemoClaw. When NVIDIA updates the upstream files, the patches may fail to apply.
 
 ### Quick path (with Claude Code)
 
@@ -339,26 +330,29 @@ This skill walks Claude through diagnosing the conflict, understanding what chan
    ```bash
    cd ~/NemoClaw
    git pull origin main
-   git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml
+   git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml bin/lib/onboard.js
    ```
 
 2. Try applying with 3-way merge:
    ```bash
-   git apply --3way /path/to/nemoclaw_cookbook/patches/Dockerfile.patch
-   git apply --3way /path/to/nemoclaw_cookbook/patches/policy.patch
+   git apply --3way /path/to/nemoclaw-cookbook/patches/Dockerfile.patch
+   git apply --3way /path/to/nemoclaw-cookbook/patches/policy.patch
+   git apply --3way /path/to/nemoclaw-cookbook/patches/onboard.patch
    ```
 
 3. If conflicts appear, resolve them in the affected files, then regenerate:
    ```bash
-   git diff Dockerfile > /path/to/nemoclaw_cookbook/patches/Dockerfile.patch
-   git diff nemoclaw-blueprint/policies/openclaw-sandbox.yaml > /path/to/nemoclaw_cookbook/patches/policy.patch
+   git diff Dockerfile > /path/to/nemoclaw-cookbook/patches/Dockerfile.patch
+   git diff nemoclaw-blueprint/policies/openclaw-sandbox.yaml > /path/to/nemoclaw-cookbook/patches/policy.patch
+   git diff bin/lib/onboard.js > /path/to/nemoclaw-cookbook/patches/onboard.patch
    ```
 
 4. Reset and verify the round-trip:
    ```bash
-   git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml
-   git apply --3way /path/to/nemoclaw_cookbook/patches/Dockerfile.patch
-   git apply --3way /path/to/nemoclaw_cookbook/patches/policy.patch
+   git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml bin/lib/onboard.js
+   git apply --3way /path/to/nemoclaw-cookbook/patches/Dockerfile.patch
+   git apply --3way /path/to/nemoclaw-cookbook/patches/policy.patch
+   git apply --3way /path/to/nemoclaw-cookbook/patches/onboard.patch
    ```
 
 5. Update the blob index comment in `setup.sh`.
@@ -367,8 +361,9 @@ This skill walks Claude through diagnosing the conflict, understanding what chan
 
 The patches add these logical pieces — if upstream restructures things, adapt the placement but keep the intent:
 
-- **Dockerfile**: git HTTPS config, Claude Code binary install, Codex CLI install
-- **Policy**: Claude auth endpoints, OpenAI policy block, GitHub policy extensions (codeload.github.com + binaries)
+- **Dockerfile**: git HTTPS config, Claude Code binary install (with sandbox user symlink), Codex CLI install, Codex plugin pre-install
+- **Policy**: Claude auth endpoints, OpenAI policy block (with node binary), Brave Search policy block, GitHub policy extensions (codeload.github.com + binaries)
+- **Onboard**: Brave Search provider creation and attachment when `BRAVE_API_KEY` is detected
 
 See the `/refresh-patches` skill for the full breakdown.
 
@@ -403,17 +398,18 @@ export PATH="$HOME/.local/bin:$PATH"
 |----------|---------|------|
 | `NVIDIA_API_KEY` | NVIDIA inference key | Install / onboard |
 | `NEMOCLAW_NON_INTERACTIVE=1` | Skip all prompts | Install / onboard |
+| `NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1` | Accept third-party software notice | Install / onboard |
 | `CHAT_UI_URL` | External URL for web UI (sets allowedOrigins) | Install / onboard |
 | `NEMOCLAW_SANDBOX_NAME` | Custom sandbox name (default: `my-assistant`) | Install / onboard |
 | `NEMOCLAW_RECREATE_SANDBOX=1` | Force-recreate existing sandbox | Onboard |
 | `NEMOCLAW_PROVIDER` | Provider type: `cloud`, `ollama`, `nim`, `vllm` | Install / onboard |
-| `NEMOCLAW_MODEL` | Override inference model | Install / onboard |
+| `NEMOCLAW_MODEL` | Override inference model (e.g. `openai/gpt-oss-120b`) | Install / onboard |
 | `NEMOCLAW_POLICY_MODE` | `suggested`, `custom`, or `skip` | Install / onboard |
 | `NEMOCLAW_POLICY_PRESETS` | Comma-separated presets (default: `pypi,npm`) | Install / onboard |
 | `NEMOCLAW_EXPERIMENTAL=1` | Enable experimental providers (local NIM, vLLM) | Install / onboard |
 | `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather | `nemoclaw start` |
 | `ALLOWED_CHAT_IDS` | Comma-separated Telegram chat IDs | `nemoclaw start` |
-| `BRAVE_SEARCH_API_KEY` | Brave Search API key | Install / onboard |
+| `BRAVE_API_KEY` | Brave Search API key | Install / onboard |
 
 ## What Gets Installed Where
 
