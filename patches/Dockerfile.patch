@@ -2,10 +2,13 @@ diff --git a/Dockerfile b/Dockerfile
 index 2c8e594..884f6a6 100644
 --- a/Dockerfile
 +++ b/Dockerfile
-@@ -37,6 +37,34 @@ COPY nemoclaw-blueprint/ /opt/nemoclaw-blueprint/
+@@ -37,6 +37,37 @@ COPY nemoclaw-blueprint/ /opt/nemoclaw-blueprint/
  WORKDIR /opt/nemoclaw
  RUN npm ci --omit=dev
  
++# Suppress Node.js deprecation warnings (noisy in sandbox terminal)
++ENV NODE_NO_WARNINGS=1
++
 +# Force git to use HTTPS instead of SSH (sandbox has no ssh)
 +RUN git config --global url.'https://github.com/'.insteadOf 'git@github.com:' \
 +    && git config --global --add url.'https://github.com/'.insteadOf 'ssh://git@github.com/' \
