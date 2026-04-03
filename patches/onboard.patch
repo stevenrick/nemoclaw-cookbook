@@ -1,0 +1,22 @@
+diff --git a/bin/lib/onboard.js b/bin/lib/onboard.js
+index 7a74b3d..6189184 100644
+--- a/bin/lib/onboard.js
++++ b/bin/lib/onboard.js
+@@ -2145,6 +2145,17 @@ async function createSandbox(
+     basePolicyPath,
+   ];
+   // --gpu is intentionally omitted. See comment in startGateway().
++  // Attach integration providers detected from environment credentials.
++  const braveKey = getCredential("BRAVE_API_KEY") || process.env.BRAVE_API_KEY;
++  if (braveKey) {
++    const providerEnv = { BRAVE_API_KEY: braveKey };
++    const result = upsertProvider("brave-search", "generic", "BRAVE_API_KEY", null, providerEnv);
++    if (result.ok) {
++      createArgs.push("--provider", "brave-search");
++    } else {
++      console.warn("  Warning: could not create brave-search provider — skipping attachment");
++    }
++  }
+ 
+   console.log(`  Creating sandbox '${sandboxName}' (this takes a few minutes on first run)...`);
+   patchStagedDockerfile(
