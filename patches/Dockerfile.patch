@@ -1,8 +1,8 @@
 diff --git a/Dockerfile b/Dockerfile
-index 2c8e594..884f6a6 100644
+index 2c8e594..943bfb5 100644
 --- a/Dockerfile
 +++ b/Dockerfile
-@@ -37,6 +37,37 @@ COPY nemoclaw-blueprint/ /opt/nemoclaw-blueprint/
+@@ -37,6 +37,24 @@ COPY nemoclaw-blueprint/ /opt/nemoclaw-blueprint/
  WORKDIR /opt/nemoclaw
  RUN npm ci --omit=dev
  
@@ -13,7 +13,7 @@ index 2c8e594..884f6a6 100644
 +RUN git config --global url.'https://github.com/'.insteadOf 'git@github.com:' \
 +    && git config --global --add url.'https://github.com/'.insteadOf 'ssh://git@github.com/' \
 +    && git config --global http.sslCAInfo /etc/openshell-tls/ca-bundle.pem \
-+    && cp /root/.gitconfig /sandbox/.gitconfig && chown 1000:1000 /sandbox/.gitconfig
++    && cp /root/.gitconfig /sandbox/.gitconfig && chown sandbox:sandbox /sandbox/.gitconfig
 +
 +# Install Claude Code via native installer and Codex CLI via npm
 +RUN curl -fsSL https://claude.ai/install.sh | bash \
@@ -21,21 +21,8 @@ index 2c8e594..884f6a6 100644
 +    && chmod 755 /usr/local/bin/claude \
 +    && mkdir -p /sandbox/.local/bin \
 +    && ln -s /usr/local/bin/claude /sandbox/.local/bin/claude \
-+    && chown -h 1000:1000 /sandbox/.local/bin/claude /sandbox/.local/bin /sandbox/.local \
++    && chown -h sandbox:sandbox /sandbox/.local/bin/claude /sandbox/.local/bin /sandbox/.local \
 +    && npm install -g @openai/codex@latest
-+
-+# Pre-install Codex plugin for Claude Code (avoids EXDEV rename in sandbox overlay)
-+RUN PLUGIN_BASE="/sandbox/.claude/plugins" \
-+    && git clone --depth 1 https://github.com/openai/codex-plugin-cc /tmp/codex-plugin \
-+    && COMMIT=$(git -C /tmp/codex-plugin rev-parse HEAD) \
-+    && VER=$(grep -o '"version": *"[^"]*"' /tmp/codex-plugin/.claude-plugin/marketplace.json | head -1 | cut -d'"' -f4) \
-+    && mkdir -p "${PLUGIN_BASE}/cache/openai-codex/codex/${VER}" \
-+    && cp -r /tmp/codex-plugin/plugins/codex/. "${PLUGIN_BASE}/cache/openai-codex/codex/${VER}/" \
-+    && printf '{"version":2,"plugins":{"codex@openai-codex":[{"scope":"project","installPath":"%s/cache/openai-codex/codex/%s","version":"%s","gitCommitSha":"%s","projectPath":"/sandbox"}]}}\n' \
-+       "$PLUGIN_BASE" "$VER" "$VER" "$COMMIT" \
-+       > "${PLUGIN_BASE}/installed_plugins.json" \
-+    && rm -rf /tmp/codex-plugin \
-+    && chown -R 1000:1000 "$PLUGIN_BASE"
 +
  # Set up blueprint for local resolution
  RUN mkdir -p /sandbox/.nemoclaw/blueprints/0.1.0 \

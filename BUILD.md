@@ -75,8 +75,7 @@ RUN curl -fsSL https://claude.ai/install.sh | bash \
 
 The native installer puts the binary in `/root/.local/` which the sandbox user can't access. The `cp` + `readlink -f` resolves the symlink chain and copies the actual binary to `/usr/local/bin/`.
 
-The Codex plugin is pre-installed in the Docker image (see Dockerfile patch).
-The git HTTPS config above ensures plugin cloning works (git is redirected from SSH to HTTPS).
+The git HTTPS config ensures plugin and marketplace cloning works inside the sandbox (git is redirected from SSH to HTTPS). The Codex plugin is installed manually after first connect (see Step 8).
 
 Also add Claude Code's SSO/auth endpoints to the network policy so `claude login` works
 without manual approval. In `~/NemoClaw/nemoclaw-blueprint/policies/openclaw-sandbox.yaml`,
@@ -192,13 +191,18 @@ claude login
 # Authenticate Codex via browser SSO
 codex login --device-auth
 
-# Verify the Codex plugin (pre-installed in the image)
-claude /codex:setup
+# Install the Codex plugin for Claude Code
+/plugin marketplace add openai/codex-plugin-cc
+/plugin install codex@openai-codex
+/reload-plugins
+
+# Verify
+/codex:setup
 ```
 
 Both logins print a URL — open it in your browser and authenticate. Re-run both after any sandbox rebuild. SSO tokens persist across restarts but not rebuilds.
 
-The Codex plugin is baked into the Docker image, so no manual install is needed. Claude Code gains these Codex slash commands:
+The Codex plugin must be installed manually after each sandbox rebuild (the three `/plugin` commands above). Once installed, Claude Code gains these Codex slash commands:
 - `/codex:review` — code review
 - `/codex:adversarial-review` — adversarial code review
 - `/codex:rescue` — rescue stuck tasks
@@ -361,7 +365,7 @@ This skill walks Claude through diagnosing the conflict, understanding what chan
 
 The patches add these logical pieces — if upstream restructures things, adapt the placement but keep the intent:
 
-- **Dockerfile**: git HTTPS config, Claude Code binary install (with sandbox user symlink), Codex CLI install, Codex plugin pre-install
+- **Dockerfile**: git HTTPS config, Claude Code binary install (with sandbox user symlink), Codex CLI install, sandbox user ownership fixes
 - **Policy**: Claude auth endpoints, OpenAI policy block (with node binary), Brave Search policy block, GitHub policy extensions (codeload.github.com + binaries)
 - **Onboard**: Brave Search provider creation and attachment when `BRAVE_API_KEY` is detected
 
