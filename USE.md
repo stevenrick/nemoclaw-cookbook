@@ -111,6 +111,23 @@ When the agent wants to make external requests, you approve them via:
 openshell term
 ```
 
+## Brave Search
+
+If `BRAVE_SEARCH_API_KEY` is set in `~/.env`, the sandbox can reach `api.search.brave.com` for web search. The API key is injected via OpenShell's provider system — the sandbox never sees the real key.
+
+### Adding Brave Search to an existing sandbox
+
+```bash
+# If you added the key after initial setup, use:
+claude /add-integration
+```
+
+This backs up your workspace, creates the provider, recreates the sandbox, and restores your agent's memory and personality.
+
+### Adding Brave Search during fresh setup
+
+Add the key to `~/.env` before running `./setup.sh` — it's picked up automatically.
+
 ## Inference
 
 ### Check current config

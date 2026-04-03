@@ -44,6 +44,7 @@ claude /reload-plugins
 - **Claude Code** — installed via native installer, with Codex plugin
 - **Codex CLI** — OpenAI's coding agent
 - **Telegram bridge** — chat with your agent from your phone
+- **Brave Search** — optional web search integration (add `BRAVE_SEARCH_API_KEY` to `~/.env`)
 - **NVIDIA Nemotron** inference via `nvidia/nemotron-3-super-120b-a12b`
 
 ## What the Patches Do
@@ -55,6 +56,7 @@ Our patches on top of upstream NemoClaw:
 **Sandbox policy** — adds network endpoints for:
 - Claude Code SSO (`platform.claude.com`, `downloads.claude.ai`, `storage.googleapis.com`)
 - OpenAI/Codex (`api.openai.com`, `auth.openai.com`, `chatgpt.com`, `ab.chatgpt.com`)
+- Brave Search (`api.search.brave.com`)
 - GitHub access for Claude/Codex/Node binaries (`codeload.github.com`)
 
 ## When Upstream Changes

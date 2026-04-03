@@ -265,6 +265,37 @@ NemoClaw bakes the allowed origin into the sandbox at build time. If `CHAT_UI_UR
 
 If you forgot, set it in `~/.env` and rebuild the sandbox (see Rebuilding below).
 
+## Adding Integrations
+
+The cookbook supports optional integrations driven by API keys in `~/.env`. When a key is present, `setup.sh` creates an OpenShell provider and the policy patch opens the necessary network endpoints.
+
+### Brave Search
+
+Enables web search capabilities via the Brave Search API.
+
+1. Get a Brave Search API key from https://brave.com/search/api/
+2. Add it to `~/.env`:
+   ```bash
+   echo 'BRAVE_SEARCH_API_KEY=BSA-your-key-here' >> ~/.env
+   ```
+3. If this is a fresh install, run `./setup.sh` — it handles everything.
+4. If you already have a running sandbox, use Claude Code: `claude /add-integration`
+   This backs up your workspace, creates the provider, recreates the sandbox, and restores.
+
+### Adding other services
+
+To add a new API integration:
+
+1. Add the API key to `~/.env`
+2. Add a network policy block to `patches/policy.patch` for the service's endpoints
+3. Add provider creation logic to `setup.sh` (follow the Brave Search pattern)
+4. Update `.env.example` with the new key
+5. Run `/add-integration` to apply to a running sandbox
+
+### Why recreation is needed
+
+OpenShell providers (credential bundles injected into the sandbox) can only be attached at sandbox creation time. Adding a new provider to an existing sandbox requires destroying and recreating it. The `/add-integration` skill automates the backup/restore around this constraint.
+
 ## Rebuilding the sandbox
 
 Any time you need to rebuild (update, config change, etc.):
@@ -382,6 +413,7 @@ export PATH="$HOME/.local/bin:$PATH"
 | `NEMOCLAW_EXPERIMENTAL=1` | Enable experimental providers (local NIM, vLLM) | Install / onboard |
 | `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather | `nemoclaw start` |
 | `ALLOWED_CHAT_IDS` | Comma-separated Telegram chat IDs | `nemoclaw start` |
+| `BRAVE_SEARCH_API_KEY` | Brave Search API key | Install / onboard |
 
 ## What Gets Installed Where
 
