@@ -50,7 +50,7 @@ See [BUILD.md](BUILD.md) for the full step-by-step walkthrough with explanations
 
 Our patches on top of upstream NemoClaw:
 
-**Dockerfile** — adds Claude Code (native installer), Codex CLI, and git HTTPS/SSL config
+**Dockerfile** — adds Claude Code (native installer), Codex CLI, git HTTPS/SSL config, and correct sandbox user ownership
 
 **Sandbox policy** — adds network endpoints for:
 - Claude Code SSO (`platform.claude.com`, `downloads.claude.ai`, `storage.googleapis.com`)
