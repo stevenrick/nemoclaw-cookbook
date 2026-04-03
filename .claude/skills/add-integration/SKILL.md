@@ -29,7 +29,7 @@ nemoclaw list 2>/dev/null
 
 | Env var | Provider name | Provider type | Policy block |
 |---------|--------------|---------------|-------------|
-| `BRAVE_SEARCH_API_KEY` | `brave-search` | `generic` | `brave_search` in policy.patch |
+| `BRAVE_SEARCH_API_KEY` | `brave-search` | `generic` | `brave_search` in policy.patch (injected as `BRAVE_API_KEY` — the name OpenClaw expects) |
 
 Report what's new and confirm with the user before proceeding.
 
@@ -72,9 +72,9 @@ source ~/.env
 export BRAVE_SEARCH_API_KEY  # or whichever key
 
 openshell provider create --name brave-search --type generic \
-  --credential BRAVE_SEARCH_API_KEY 2>/dev/null \
+  --credential BRAVE_API_KEY 2>/dev/null \
   || openshell provider update brave-search \
-    --credential BRAVE_SEARCH_API_KEY
+    --credential BRAVE_API_KEY
 ```
 
 Verify:
