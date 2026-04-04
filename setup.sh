@@ -28,11 +28,30 @@ fi
 export NVIDIA_API_KEY
 export NEMOCLAW_NON_INTERACTIVE=1
 export NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
+
+# Inference configuration
+[ -n "${NEMOCLAW_MODEL:-}" ] && export NEMOCLAW_MODEL
+[ -n "${NEMOCLAW_PROVIDER:-}" ] && export NEMOCLAW_PROVIDER
+[ -n "${NEMOCLAW_ENDPOINT_URL:-}" ] && export NEMOCLAW_ENDPOINT_URL
+[ -n "${NEMOCLAW_GPU:-}" ] && export NEMOCLAW_GPU
+[ -n "${NEMOCLAW_EXPERIMENTAL:-}" ] && export NEMOCLAW_EXPERIMENTAL
+
+# Alternative inference provider keys
+[ -n "${OPENAI_API_KEY:-}" ] && export OPENAI_API_KEY
+[ -n "${ANTHROPIC_API_KEY:-}" ] && export ANTHROPIC_API_KEY
+
+# Messaging integrations
 [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && export TELEGRAM_BOT_TOKEN
 [ -n "${ALLOWED_CHAT_IDS:-}" ] && export ALLOWED_CHAT_IDS
-[ -n "${CHAT_UI_URL:-}" ] && export CHAT_UI_URL
+[ -n "${DISCORD_BOT_TOKEN:-}" ] && export DISCORD_BOT_TOKEN
+[ -n "${SLACK_BOT_TOKEN:-}" ] && export SLACK_BOT_TOKEN
+
+# Tool integrations
 [ -n "${BRAVE_API_KEY:-}" ] && export BRAVE_API_KEY
-[ -n "${NEMOCLAW_MODEL:-}" ] && export NEMOCLAW_MODEL
+
+# Policy configuration
+[ -n "${NEMOCLAW_POLICY_MODE:-}" ] && export NEMOCLAW_POLICY_MODE
+[ -n "${NEMOCLAW_POLICY_PRESETS:-}" ] && export NEMOCLAW_POLICY_PRESETS
 
 echo "=== Step 1: Clone / update repositories ==="
 cd "$HOME"
@@ -63,10 +82,10 @@ echo "=== Step 3: Pull latest sandbox base image ==="
 docker pull ghcr.io/nvidia/nemoclaw/sandbox-base:latest
 
 echo "=== Step 4: Apply patches ==="
-# Patches last generated against NemoClaw Dockerfile index 2c8e594, policy index 39e93f5, onboard index 7a74b3d
+# Patches last generated against NemoClaw Dockerfile index 2c8e594, policy index 39e93f5
 # If patches fail, see BUILD.md "Refreshing Patches" or run: claude /refresh-patches
 cd "$HOME/NemoClaw"
-git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml bin/lib/onboard.js 2>/dev/null || true
+git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null || true
 
 apply_patch() {
   local patch="$1"
@@ -98,7 +117,6 @@ apply_patch() {
 
 apply_patch "${SCRIPT_DIR}/patches/Dockerfile.patch"
 apply_patch "${SCRIPT_DIR}/patches/policy.patch"
-apply_patch "${SCRIPT_DIR}/patches/onboard.patch"
 echo "Patches applied."
 
 echo "=== Step 5: Install NemoClaw ==="
@@ -107,15 +125,24 @@ bash install.sh --non-interactive
 # shellcheck source=/dev/null
 source "$HOME/.bashrc" 2>/dev/null || true
 
-echo "=== Step 6: Start Telegram bridge ==="
-if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
+echo "=== Step 6: Add optional integrations ==="
+if [ -n "${BRAVE_API_KEY:-}" ]; then
+  echo "  Adding Brave Search provider..."
+  openshell provider create --name brave-search --type generic --credential BRAVE_API_KEY 2>/dev/null \
+    || openshell provider update brave-search --credential BRAVE_API_KEY 2>/dev/null \
+    || echo "  Warning: could not configure brave-search provider"
+  echo "  ✓ Brave Search provider configured"
+fi
+
+echo "=== Step 7: Start services ==="
+if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] || [ -n "${DISCORD_BOT_TOKEN:-}" ] || [ -n "${SLACK_BOT_TOKEN:-}" ]; then
   # Reload env to pick up nvm
   export NVM_DIR="$HOME/.nvm"
   # shellcheck source=/dev/null
   [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
   nemoclaw start
 else
-  echo "TELEGRAM_BOT_TOKEN not set — skipping Telegram bridge."
+  echo "No messaging tokens set — skipping services. Set TELEGRAM_BOT_TOKEN, DISCORD_BOT_TOKEN, or SLACK_BOT_TOKEN in ~/.env to enable."
 fi
 
 echo ""
@@ -123,15 +150,11 @@ echo "=========================================="
 echo "  NemoClaw is ready!"
 echo "=========================================="
 echo ""
-echo "Next steps (inside the sandbox):"
-echo "  nemoclaw my-assistant connect"
-echo "  claude login"
-echo "  codex login --device-auth"
-echo ""
-echo "Then install the Codex plugin inside Claude Code:"
-echo "  /plugin marketplace add openai/codex-plugin-cc"
-echo "  /plugin install codex@openai-codex"
-echo "  /reload-plugins"
-echo "  /codex:setup                 # verify plugin loaded"
+echo "Next steps:"
+echo "  1. Port-forward the Web UI:  brev port-forward <instance> -p 18789:18789"
+echo "  2. Get the tokenized URL:    cat ~/openclaw-ui-url.txt"
+echo "  3. Authenticate coding agents (run via brev exec or brev shell):"
+echo "     claude login"
+echo "     codex login --device-auth"
 echo ""
 echo "See USE.md for day-to-day commands."
