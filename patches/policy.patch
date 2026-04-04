@@ -1,8 +1,8 @@
 diff --git a/nemoclaw-blueprint/policies/openclaw-sandbox.yaml b/nemoclaw-blueprint/policies/openclaw-sandbox.yaml
-index 2f87617..b5c3e01 100644
+index b29eaa2..ba5c484 100644
 --- a/nemoclaw-blueprint/policies/openclaw-sandbox.yaml
 +++ b/nemoclaw-blueprint/policies/openclaw-sandbox.yaml
-@@ -71,8 +71,48 @@ network_policies:
+@@ -71,8 +71,45 @@ network_policies:
          rules:
            - allow: { method: GET, path: "/**" }
            - allow: { method: POST, path: "/**" }
@@ -45,10 +45,10 @@ index 2f87617..b5c3e01 100644
 +    binaries:
 +      - { path: /usr/local/bin/codex }
 +      - { path: /usr/local/bin/node }
-
+ 
    nvidia:
      name: nvidia
-@@ -106,9 +146,15 @@ network_policies:
+@@ -106,9 +143,15 @@ network_policies:
        - host: api.github.com
          port: 443
          access: full
@@ -61,6 +61,6 @@ index 2f87617..b5c3e01 100644
 +      - { path: /usr/local/bin/claude }
 +      - { path: /usr/local/bin/codex }
 +      - { path: /usr/local/bin/node }
-
+ 
    # ── OpenClaw "phone home" ────────────────────────────────────────────
    # Minimum viable set for OpenClaw to authenticate, discover plugins,
