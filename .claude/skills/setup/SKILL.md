@@ -22,7 +22,25 @@ command -v brev > /dev/null 2>&1 && echo "Brev CLI: OK" || echo "Brev CLI: NOT F
 brev ls 2>&1
 ```
 
-If Brev CLI is missing, stop. If no instance is running, ask the user to create one or start it.
+If Brev CLI is missing, stop.
+
+If multiple instances are listed, ask the user which one to use. If no instances are listed, ask the user to create one:
+
+> No Brev instances found. Create one at https://brev.nvidia.com or run:
+> ```
+> brev create <instance-name>
+> ```
+> Let me know when it's ready.
+
+If exactly one instance is listed, confirm with the user before proceeding:
+
+> Found Brev instance `<name>` (STATUS). Deploy NemoClaw here?
+
+Establish the port forward early — this warms up the SSH connection and all subsequent `brev exec` calls multiplex over it:
+
+```bash
+lsof -i :18789 2>/dev/null && echo "Port 18789 already in use" || brev port-forward <instance> -p 18789:18789
+```
 
 Then verify the remote instance has Docker:
 
@@ -55,10 +73,18 @@ Then tell the user:
 
 **If `.env` exists:** Parse it and report what's configured:
 
+**Important: never print, log, or display the actual values of any keys or tokens. Only report whether they are SET or NOT SET.**
+
 ```bash
 source <cookbook-dir>/.env
 echo "=== Required ==="
-echo "NVIDIA_API_KEY: ${NVIDIA_API_KEY:+SET}${NVIDIA_API_KEY:-NOT SET}"
+if [ -z "${NVIDIA_API_KEY:-}" ]; then
+  echo "NVIDIA_API_KEY: NOT SET"
+elif [ "$NVIDIA_API_KEY" = "nvapi-your-key-here" ]; then
+  echo "NVIDIA_API_KEY: STILL PLACEHOLDER — replace with your real key"
+else
+  echo "NVIDIA_API_KEY: SET"
+fi
 echo "=== Inference ==="
 echo "NEMOCLAW_PROVIDER: ${NEMOCLAW_PROVIDER:-not set (default: NVIDIA cloud)}"
 echo "NEMOCLAW_MODEL: ${NEMOCLAW_MODEL:-not set (default: nemotron-3-super-120b)}"
@@ -72,7 +98,7 @@ echo "=== Integrations ==="
 echo "BRAVE_API_KEY: ${BRAVE_API_KEY:+SET}${BRAVE_API_KEY:-not set}"
 ```
 
-If `NVIDIA_API_KEY` is still the placeholder or missing, ask the user to set it and wait.
+If `NVIDIA_API_KEY` is missing, the placeholder, or not set, ask the user to set it and wait. **Never display the actual key value.**
 
 Confirm what's configured:
 
@@ -127,58 +153,75 @@ brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/
 
 ## Phase 5 — Connect
 
-Forward the Web UI port to the user's local machine:
-
-```bash
-lsof -i :18789 2>/dev/null && echo "Port 18789 already in use" || brev port-forward <instance> -p 18789:18789
-```
-
-Get the tokenized URL and rewrite it for localhost:
+The port forward was established in Phase 1. Get the tokenized URL:
 
 ```bash
 brev exec <instance> "cat ~/openclaw-ui-url.txt 2>/dev/null"
 ```
 
-Replace the hostname with `localhost:18789` and give it to the user:
+The URL from `openclaw-ui-url.txt` will have a hostname like `127.0.0.1:18789` and a `/#token=<hex>` fragment. If the hostname differs, replace only the hostname with `127.0.0.1:18789` — preserve the exact path and `/#token=` fragment. **Always use `127.0.0.1`, not `localhost`** — the sandbox only allows `127.0.0.1` as an origin.
 
-> Web UI is live at: `http://localhost:18789?token=<token>`
+> Web UI is live at: `http://127.0.0.1:18789/#token=<hex>`
 
 ## Phase 6 — Authenticate
 
-Run the auth commands remotely and relay the URLs to the user:
+Do everything the agent can automate first, then hand off to the human for interactive steps.
 
-```bash
-# Claude Code login — will print a URL
-brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name my-assistant' sandbox@openshell-my-assistant 'claude login 2>&1'"
-```
+### Step 1: Codex (agent can relay)
 
-This prints a URL — tell the user to open it in their browser. Same pattern for Codex:
+Codex uses device-code auth that works non-interactively:
 
 ```bash
 brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name my-assistant' sandbox@openshell-my-assistant 'codex login --device-auth 2>&1'"
 ```
 
-Then install the Codex plugin:
+This prints a URL and a one-time code. Relay both to the user:
 
-```bash
-brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name my-assistant' sandbox@openshell-my-assistant 'claude /plugin marketplace add openai/codex-plugin-cc && claude /plugin install codex@openai-codex && claude /reload-plugins'"
-```
+> To authenticate Codex:
+> 1. Open [URL from output] in your browser
+> 2. Enter code: [code from output]
 
-> Open these URLs in your browser to authenticate:
-> - Claude: [URL from output]
-> - Codex: [URL from output]
+The command will print "login successful" once the user completes auth — no need to ask for confirmation.
+
+### Step 2: Claude Code + Codex plugin for Claude Code (interactive — requires human)
+
+Claude Code uses a full TUI for auth, and the Codex plugin is installed inside Claude Code's TUI. Combine these into one interactive session. Tell the user:
+
+> Last step — authenticate Claude Code and install the Codex plugin (inside Claude Code).
+> Run these commands:
 >
-> Let me know when you've authenticated both and I'll verify.
+> ```
+> brev shell <instance>
+> nemoclaw my-assistant connect
+> claude
+> ```
+>
+> Inside Claude Code's TUI:
+> 1. Follow the login prompts (it will give you a URL to open in your browser)
+> 2. Once logged in, install the Codex plugin for Claude Code:
+>    ```
+>    /plugin marketplace add openai/codex-plugin-cc
+>    /plugin install codex@openai-codex
+>    /reload-plugins
+>    /codex:setup
+>    ```
+> Let me know when you're done.
 
-After user confirms, verify:
+### Verify
+
+After the user confirms, verify binaries and plugin state:
 
 ```bash
-brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name my-assistant' sandbox@openshell-my-assistant 'claude --version && codex --version 2>/dev/null'"
+brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name my-assistant' sandbox@openshell-my-assistant 'claude --version && codex --version 2>/dev/null && ls /sandbox/.openclaw-data/plugins/*/codex* 2>/dev/null && echo PLUGIN_OK || echo PLUGIN_MISSING'"
 ```
+
+If `PLUGIN_MISSING`, tell the user the Codex plugin install didn't complete and ask them to re-run the `/plugin` commands inside Claude Code's TUI.
 
 ## Principles
 
+- **Never leak secrets.** Never print, log, display, or include in output the actual values of API keys, tokens, or credentials. Only report SET / NOT SET / PLACEHOLDER. Use `sed 's/=.*/=***/'` when listing env vars. Never `cat .env` or `echo $API_KEY`.
 - **Brev is the only deployment path.** No local installs, no SSH tunnels, no ngrok.
+- **Confirm the instance.** Always show the user which Brev instance will be used and get confirmation before deploying.
 - **Don't ask for what you can check.** If a file exists, read it. If a tool is installed, version-check it.
 - **Minimize human involvement.** The only things requiring a human are: providing API keys and clicking auth URLs.
 - **Report state, not instructions.** Say "NVIDIA key is configured, Telegram is not" rather than "please check if your NVIDIA key is configured."

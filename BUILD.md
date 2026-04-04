@@ -80,9 +80,9 @@ RUN curl -fsSL https://claude.ai/install.sh | bash \
 
 The native installer puts the binary in `/root/.local/` which the sandbox user can't access. The `cp` + `readlink -f` resolves the symlink chain and copies the actual binary to `/usr/local/bin/`.
 
-The git HTTPS config ensures plugin and marketplace cloning works inside the sandbox (git is redirected from SSH to HTTPS). The Codex plugin is installed manually after first connect (see Step 8).
+The git HTTPS config ensures plugin and marketplace cloning works inside the sandbox (git is redirected from SSH to HTTPS). The Codex plugin for Claude Code is installed manually after first connect (see Step 8).
 
-Also add Claude Code's SSO/auth endpoints to the network policy so `claude login` works
+Also add Claude Code's SSO/auth endpoints to the network policy so Claude Code's login flow works
 without manual approval. In `~/NemoClaw/nemoclaw-blueprint/policies/openclaw-sandbox.yaml`,
 find the `claude_code` policy's `sentry.io` entry and add these three endpoints after it
 (before the `binaries:` line):
@@ -179,39 +179,50 @@ nemoclaw my-assistant status
 openshell inference get
 ```
 
-## Step 8: Authenticate Claude Code and set up Codex (if installed in Step 5)
+## Step 8: Authenticate Codex and Claude Code (if installed in Step 5)
 
-Run the auth commands via Brev — each prints a URL you open in your browser:
+### Codex (can be scripted)
+
+Codex uses device-code auth that works non-interactively:
 
 ```bash
-# Helper alias for running commands inside the sandbox
 SANDBOX_SSH="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
   -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name my-assistant' \
   sandbox@openshell-my-assistant"
 
-# Authenticate Claude Code — prints a URL, open it in your browser
-brev exec <instance> "$SANDBOX_SSH 'claude login 2>&1'"
-
-# Authenticate Codex — prints a URL, open it in your browser
 brev exec <instance> "$SANDBOX_SSH 'codex login --device-auth 2>&1'"
 ```
 
-Re-run both after any sandbox rebuild. SSO tokens persist across restarts but not rebuilds.
+This prints a URL and a one-time code — open the URL in your browser and enter the code. The command prints "login successful" when done.
 
-Then install the Codex plugin for Claude Code:
+### Claude Code + Codex plugin for Claude Code (interactive)
+
+Claude Code uses a full TUI for auth, and the Codex plugin is installed inside Claude Code's TUI. Do both in one interactive session:
 
 ```bash
-brev exec <instance> "$SANDBOX_SSH 'claude /plugin marketplace add openai/codex-plugin-cc && claude /plugin install codex@openai-codex && claude /reload-plugins'"
+brev shell <instance>
+nemoclaw my-assistant connect
+claude
 ```
 
-The plugin must be reinstalled after each sandbox rebuild. Once installed, Claude Code gains these Codex slash commands:
+Inside Claude Code's TUI:
+1. Follow the login prompts (it gives you a URL to open in your browser)
+2. Once logged in, install the Codex plugin for Claude Code:
+   ```
+   /plugin marketplace add openai/codex-plugin-cc
+   /plugin install codex@openai-codex
+   /reload-plugins
+   /codex:setup
+   ```
+
+SSO tokens persist across restarts but not sandbox rebuilds. The plugin must also be reinstalled after each rebuild.
+
+Once installed, Claude Code gains these Codex slash commands:
 - `/codex:review` — code review
 - `/codex:adversarial-review` — adversarial code review
 - `/codex:rescue` — rescue stuck tasks
 
 See https://github.com/openai/codex-plugin-cc for the full command list.
-
-You can also use `brev shell <instance>` followed by `nemoclaw my-assistant connect` if you prefer an interactive terminal session.
 
 ## Step 9: Set up Telegram (optional)
 
@@ -258,7 +269,7 @@ Port-forward the Web UI to your local machine:
 brev port-forward <instance-name> -p 18789:18789
 ```
 
-Then open `http://localhost:18789/#token=<hex>` in your browser (get the token from `~/openclaw-ui-url.txt` on the instance). This returns immediately — Brev backgrounds the SSH tunnel.
+Then open `http://127.0.0.1:18789/#token=<hex>` in your browser (get the token from `~/openclaw-ui-url.txt` on the instance). **Use `127.0.0.1`, not `localhost`** — the sandbox only allows `127.0.0.1` as an origin. This returns immediately — Brev backgrounds the SSH tunnel.
 
 ## Adding Integrations
 
@@ -313,8 +324,8 @@ nemoclaw onboard
 ```
 
 After rebuild:
-1. Re-run `claude login` and `codex login --device-auth` inside the sandbox (SSO tokens don't survive rebuilds)
-2. Reinstall the Codex plugin (`/plugin marketplace add openai/codex-plugin-cc`, etc.)
+1. Re-authenticate: run `codex login --device-auth` then launch `claude` (login is forced on first launch) inside the sandbox (SSO tokens don't survive rebuilds)
+2. Reinstall the Codex plugin for Claude Code (`/plugin marketplace add openai/codex-plugin-cc`, etc.)
 3. Restart messaging: `nemoclaw start` (with tokens exported)
 
 ## Refreshing Patches After Upstream Updates

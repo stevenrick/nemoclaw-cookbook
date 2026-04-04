@@ -37,7 +37,7 @@ Get the tokenized URL (treat it like a password — changes on every rebuild):
 brev exec <instance> "cat ~/openclaw-ui-url.txt"
 ```
 
-Replace the hostname with `localhost:18789` and open in your browser.
+Replace the hostname with `127.0.0.1:18789` and open in your browser. **Use `127.0.0.1`, not `localhost`** — the sandbox only allows `127.0.0.1` as an origin.
 
 If the internal OpenShell port forward stops (sandbox is running but Web UI is unreachable):
 
@@ -66,7 +66,7 @@ nemoclaw my-assistant connect
 claude --dangerously-skip-permissions   # Full autonomy mode (safe inside OpenShell sandbox)
 ```
 
-Claude Code has the Codex plugin installed, adding these slash commands:
+Claude Code has the Codex plugin installed (a plugin that runs inside Claude Code), adding these slash commands:
 - `/codex:review` — code review
 - `/codex:adversarial-review` — adversarial code review
 - `/codex:rescue` — rescue stuck tasks
@@ -76,8 +76,8 @@ See https://github.com/openai/codex-plugin-cc for the full list.
 If you get an auth error, re-authenticate:
 
 ```bash
-claude login
-codex login --device-auth
+codex login --device-auth   # Can be run non-interactively via brev exec
+claude                       # Interactive TUI — follow login prompts
 ```
 
 The login flow reaches `platform.claude.com`, `downloads.claude.ai`, and `raw.githubusercontent.com`.
@@ -226,8 +226,8 @@ nemoclaw onboard
 ```
 
 After rebuild:
-- Re-run `claude login` and `codex login --device-auth` (SSO tokens don't survive rebuilds)
-- Reinstall the Codex plugin
+- Re-authenticate: `codex login --device-auth` then launch `claude` (login is forced on first launch)
+- Reinstall the Codex plugin inside Claude Code
 - Restart messaging: `nemoclaw start`
 
 ## Diagnostics
