@@ -39,7 +39,7 @@ The Web UI runs on port 18789 inside the instance. Forward it to localhost:
 lsof -i :18789 2>/dev/null && echo "already forwarded" || brev port-forward <instance> -p 18789:18789
 ```
 
-`brev port-forward` returns immediately — it backgrounds the SSH tunnel automatically and reuses existing connections via multiplexing. Once running, the Web UI is at `http://localhost:18789`.
+`brev port-forward` returns immediately — it backgrounds the SSH tunnel automatically and reuses existing connections via multiplexing. Once running, the Web UI is at `http://127.0.0.1:18789`. **Always use `127.0.0.1`, not `localhost`** — the sandbox only allows `127.0.0.1` as an origin.
 
 To get the tokenized URL (includes auth token):
 
@@ -47,7 +47,7 @@ To get the tokenized URL (includes auth token):
 brev exec <instance> "cat ~/openclaw-ui-url.txt 2>/dev/null"
 ```
 
-Then replace the hostname in that URL with `localhost:18789` and give it to the user.
+Then replace the hostname in that URL with `127.0.0.1:18789` and give it to the user.
 
 ## Phase 3 — Execute the requested work
 
@@ -174,7 +174,7 @@ brev exec <instance> "cd ~/nemoclaw-cookbook && ./setup.sh"
 ## Limitations
 
 - **No interactive sessions.** `brev shell` requires a terminal — use `brev exec` for everything.
-- **No browser auth.** Commands like `claude login` or `codex login --device-auth` print URLs that the user must open manually. Run the command via exec and relay the URL.
+- **No browser auth for Claude.** Claude Code uses a full TUI — auth requires `brev shell` (interactive). Codex auth (`codex login --device-auth`) works via `brev exec` — it prints a URL + code that can be relayed to the user.
 - **Timeouts.** Long-running commands may exceed the 2-minute default Bash timeout. Use `timeout` parameter up to 600000ms (10 min), or run in background and poll.
 - **No stdin.** Commands that prompt for input will hang. Always use non-interactive flags (e.g., `NEMOCLAW_NON_INTERACTIVE=1`).
 - **PATH not set.** Non-interactive SSH doesn't source `.bashrc`. Always export PATH explicitly for `nemoclaw`/`openshell` commands.

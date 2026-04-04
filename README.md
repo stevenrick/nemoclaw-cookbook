@@ -23,12 +23,13 @@ git clone https://github.com/stevenrick/nemoclaw-cookbook && cd nemoclaw-cookboo
 ```
 
 **Claude Code:** run `/setup`. The agent will:
-1. Check prerequisites and your `~/.env`
-2. Clone the cookbook on your Brev instance, copy `.env`, and run `setup.sh`
-3. Port-forward the Web UI to your localhost
-4. Run auth commands inside the sandbox and give you URLs to click
+1. Check prerequisites, port-forward, and verify Docker
+2. Check your `.env` in the cookbook repo (create from template if needed)
+3. Clone the cookbook on your Brev instance, copy `.env`, and run `setup.sh`
+4. Relay the Codex auth URL + code for you to enter in your browser
+5. Tell you to open `brev shell` for Claude Code TUI login + Codex plugin install (inside Claude Code)
 
-Your only involvement: provide API keys when asked, and click auth URLs in your browser.
+Your only involvement: provide API keys in `.env`, click auth URLs, and do one interactive Claude session.
 
 **Other agents:** point them at this repo and tell them to follow BUILD.md.
 
@@ -49,13 +50,19 @@ brev exec <instance> "cd ~/nemoclaw-cookbook && ./setup.sh"
 # 3. Connect — port-forward the Web UI
 brev port-forward <instance> -p 18789:18789
 brev exec <instance> "cat ~/openclaw-ui-url.txt"
-# Open the URL in your browser (replace hostname with localhost:18789)
+# Open the URL in your browser (use 127.0.0.1, not localhost)
 
-# 4. Authenticate — inside the sandbox
+# 4. Authenticate Codex (works non-interactively)
+brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+  -o LogLevel=ERROR -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy \
+  --gateway-name nemoclaw --name my-assistant' sandbox@openshell-my-assistant \
+  'codex login --device-auth 2>&1'"
+# Opens a URL + code — enter in your browser
+
+# 5. Authenticate Claude Code + install Codex plugin inside Claude Code (interactive)
 brev shell <instance>
 nemoclaw my-assistant connect
-claude login          # prints a URL — open in browser
-codex login --device-auth   # prints a URL — open in browser
+claude                # TUI — follow login prompts, then install Codex plugin inside Claude Code
 ```
 
 See [BUILD.md](BUILD.md) for the full step-by-step walkthrough with explanations.
@@ -64,7 +71,7 @@ See [BUILD.md](BUILD.md) for the full step-by-step walkthrough with explanations
 
 - **OpenShell** — sandboxed runtime with Landlock, seccomp, and network policy enforcement
 - **NemoClaw** — CLI stack running an OpenClaw AI assistant inside an OpenShell sandbox
-- **Claude Code** — installed via native installer (Codex plugin installed post-deploy)
+- **Claude Code** — installed via native installer (Codex plugin for Claude Code installed post-deploy)
 - **Codex CLI** — OpenAI's coding agent
 - **Messaging bridges** — Telegram, Discord, and Slack (set tokens in `~/.env`)
 - **Brave Search** — optional web search integration (add `BRAVE_API_KEY` to `~/.env`)
@@ -111,7 +118,7 @@ nemoclaw onboard
 ~/nemoclaw-cookbook/scripts/backup-full.sh restore my-assistant
 ```
 
-After rebuild: re-run `claude login`, `codex login --device-auth`, and reinstall the Codex plugin inside the sandbox.
+After rebuild: re-authenticate by running `codex login --device-auth` then launching `claude` (login is forced on first launch), and reinstall the Codex plugin inside Claude Code.
 
 ## File Structure
 
