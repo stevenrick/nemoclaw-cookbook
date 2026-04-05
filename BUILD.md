@@ -303,12 +303,12 @@ OpenShell providers (credential bundles injected into the sandbox) can only be a
 
 ## Rebuilding the sandbox
 
-Any time you need to rebuild (update, config change, etc.). Run these via `brev exec` or inside `brev shell`:
+Any time you need to rebuild (update, config change, etc.). **Back up first** — Claude Code users can run `/backup` to snapshot to their local machine. Then run via `brev exec` or inside `brev shell`:
 
 ```bash
 source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 
-# 1. Back up workspace + chat history
+# 1. Back up workspace, chat history, and skills (or use /backup from Claude Code)
 ~/nemoclaw-cookbook/scripts/backup-full.sh backup my-assistant
 
 # 2. Stop services and destroy
@@ -319,7 +319,7 @@ nemoclaw my-assistant destroy --yes
 # 3. Rebuild
 nemoclaw onboard
 
-# 4. Restore workspace + chat history
+# 4. Restore workspace, chat history, and skills (or use /restore from Claude Code)
 ~/nemoclaw-cookbook/scripts/backup-full.sh restore my-assistant
 ```
 

@@ -1,2 +1,4 @@
 .env
+.DS_Store
 openclaw-ui-url.txt
+backups/

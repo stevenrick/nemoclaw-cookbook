@@ -67,6 +67,8 @@ claude                # TUI — follow login prompts, then install Codex plugin 
 
 See [BUILD.md](BUILD.md) for the full step-by-step walkthrough with explanations.
 
+> **Sandbox name:** Examples below use `my-assistant`, the default. If you set `NEMOCLAW_SANDBOX_NAME` during setup, substitute your name everywhere. Run `nemoclaw list` to check.
+
 ## What This Sets Up
 
 - **OpenShell** — sandboxed runtime with Landlock, seccomp, and network policy enforcement
@@ -103,6 +105,22 @@ Or see [BUILD.md § Refreshing Patches](BUILD.md#refreshing-patches-after-upstre
 - [BUILD.md](BUILD.md) — step-by-step from-scratch setup with explanations
 - [USE.md](USE.md) — day-to-day reference for all commands and features
 
+## Backup & Restore
+
+**Claude Code users:** run `/backup` to snapshot workspace, chat history, and skills to your local machine. Run `/restore` to push a backup to any NemoClaw instance.
+
+**Manual (on the host):**
+
+```bash
+~/nemoclaw-cookbook/scripts/backup-full.sh backup <sandbox>    # back up
+~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox>   # restore latest
+~/nemoclaw-cookbook/scripts/backup-full.sh list                # list backups
+```
+
+Replace `<sandbox>` with your sandbox name (default: `my-assistant`).
+
+Local backups are stored in `backups/` (gitignored). See [USE.md § Backup & Restore](USE.md#backup--restore) for details.
+
 ## Rebuilding
 
 Via `brev exec` or inside `brev shell`. Always back up first — destroy wipes the workspace:
@@ -130,9 +148,10 @@ patches/
   policy.patch        # Network policy for auth endpoints
 scripts/
   validate-patches.sh # Check patches still apply against upstream
-  backup-full.sh      # Workspace + chat history backup/restore
+  backup-full.sh      # Workspace, chat history, and skills backup/restore
 BUILD.md              # Detailed setup walkthrough
 USE.md                # Usage reference
+backups/              # Local backups (gitignored)
 ```
 
 ## Contributing

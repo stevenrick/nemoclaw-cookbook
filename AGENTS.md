@@ -11,11 +11,11 @@ patches/
   policy.patch        # Opens network endpoints for auth (Claude, OpenAI, GitHub)
 scripts/
   validate-patches.sh # Check patches still apply against upstream
-  backup-full.sh      # Workspace + chat history backup/restore
+  backup-full.sh      # Workspace, chat history, and skills backup/restore
 BUILD.md              # Step-by-step setup with explanations
 USE.md                # Day-to-day commands and features
 CONTRIBUTING.md       # Contribution guidelines
-.claude/skills/       # Claude Code skills (e.g. /setup, /brev, /add-integration)
+.claude/skills/       # Claude Code skills (e.g. /setup, /backup, /restore, /brev, /add-integration)
 ```
 
 ## Getting started
