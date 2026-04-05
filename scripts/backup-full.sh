@@ -31,8 +31,15 @@ EOF
 }
 
 find_upstream_script() {
-  local script="${HOME}/NemoClaw/scripts/backup-workspace.sh"
-  [ -x "$script" ] || fail "Upstream backup script not found: ${script}"
+  # Check both locations: cloned repo (setup.sh) and installed source (curl installer)
+  local script
+  for candidate in "${HOME}/NemoClaw/scripts/backup-workspace.sh" "${HOME}/.nemoclaw/source/scripts/backup-workspace.sh"; do
+    if [ -x "$candidate" ]; then
+      script="$candidate"
+      break
+    fi
+  done
+  [ -n "${script:-}" ] || fail "Upstream backup script not found at ~/NemoClaw or ~/.nemoclaw/source"
   echo "$script"
 }
 

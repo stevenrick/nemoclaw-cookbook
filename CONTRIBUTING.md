@@ -1,6 +1,6 @@
 # Contributing to NemoClaw Cookbook
 
-Thanks for your interest in contributing! This project provides setup automation and patches for running NemoClaw with Claude Code, Codex, and Telegram integration.
+Thanks for your interest in contributing! This project provides setup automation and patches for running NemoClaw with Claude Code, Codex, and messaging integrations.
 
 ## How to Contribute
 
