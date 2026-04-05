@@ -6,3 +6,4 @@
 - Use `/refresh-patches` when patches fail against upstream NemoClaw.
 - Prefer `Edit` over `Write` for patch files — small targeted changes.
 - When modifying patches, always verify the round-trip: reset, apply, check.
+- Use `/backup` before destructive operations (destroy, rebuild). Use `/restore` after deploying a new instance.
