@@ -2,6 +2,8 @@
 
 Quick reference for everything you can do with your running NemoClaw setup.
 
+> **Sandbox name:** Examples below use `my-assistant`, which is the default. If you set `NEMOCLAW_SANDBOX_NAME` during setup, substitute your name. Run `nemoclaw list` to check.
+
 ## Connecting to the Sandbox
 
 The sandbox is not a regular Docker container — it runs inside OpenShell's K3s cluster. Don't use `docker exec`.
@@ -206,14 +208,42 @@ nemoclaw my-assistant policy-add      # Add a preset
 
 Default presets: `pypi`, `npm`, `telegram` (plus built-in policies for GitHub, Discord, NVIDIA, Anthropic, etc.)
 
+## Backup & Restore
+
+Snapshot your entire sandbox state to your local machine, and restore it later to any NemoClaw instance. Backups include workspace files, chat session history, and installed skills.
+
+**Claude Code users:** use `/backup` and `/restore` — they handle the full workflow interactively.
+
+Backups are stored locally in `backups/<timestamp>/` (gitignored). Each backup includes a `backup-meta.json` with the timestamp, source instance, sandbox name, and what's included.
+
+### Manual backup/restore (on the host)
+
+```bash
+# Backup workspace + sessions + skills
+~/nemoclaw-cookbook/scripts/backup-full.sh backup <sandbox>
+
+# List available backups
+~/nemoclaw-cookbook/scripts/backup-full.sh list
+
+# Restore latest backup
+~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox>
+
+# Restore a specific backup
+~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> 2026-04-05_143022
+```
+
+Replace `<sandbox>` with your sandbox name (default: `my-assistant` — run `nemoclaw list` to check).
+
+Backups on the host are stored at `~/.nemoclaw/backups/<timestamp>/`.
+
 ## Updating OpenClaw
 
-When the web UI shows "Update available". Run via `brev exec` or inside `brev shell`:
+When the web UI shows "Update available". **Back up first** (see [Backup & Restore](#backup--restore) above), then run via `brev exec` or inside `brev shell`:
 
 ```bash
 source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 
-# Back up workspace + chat history first
+# Back up first (or use /backup from Claude Code)
 ~/nemoclaw-cookbook/scripts/backup-full.sh backup my-assistant
 
 # Rebuild
@@ -221,7 +251,7 @@ docker pull ghcr.io/nvidia/nemoclaw/sandbox-base:latest
 nemoclaw my-assistant destroy --yes
 nemoclaw onboard
 
-# Restore workspace + chat history
+# Restore (or use /restore from Claude Code)
 ~/nemoclaw-cookbook/scripts/backup-full.sh restore my-assistant
 ```
 
@@ -264,7 +294,7 @@ The OpenClaw agent's workspace lives at `/sandbox/.openclaw-data/workspace/`:
 
 Chat session history lives at `/sandbox/.openclaw-data/agents/main/sessions/` (JSONL files).
 
-The backup script (`scripts/backup-full.sh`) backs up both workspace and session files.
+The backup script (`scripts/backup-full.sh`) backs up workspace files, session history, and installed skills.
 
 ### Copying files to/from the sandbox
 
