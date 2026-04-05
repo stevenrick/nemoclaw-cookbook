@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# Full backup/restore for NemoClaw sandbox — workspace + chat history.
-# Wraps upstream backup-workspace.sh and adds session data.
+# Full backup/restore for NemoClaw sandbox — workspace, chat history, and skills.
+# Wraps upstream backup-workspace.sh and adds session data + installed skills.
 #
 # Usage:
 #   ./scripts/backup-full.sh backup  <sandbox-name>
 #   ./scripts/backup-full.sh restore <sandbox-name> [timestamp]
+#   ./scripts/backup-full.sh list
 set -euo pipefail
 
 BACKUP_BASE="${HOME}/.nemoclaw/backups"
 SESSIONS_PATH="/sandbox/.openclaw-data/agents/main/sessions"
+SKILLS_PATH="/sandbox/.openclaw-data/skills"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -24,8 +26,9 @@ usage() {
 Usage:
   $(basename "$0") backup  <sandbox-name>
   $(basename "$0") restore <sandbox-name> [timestamp]
+  $(basename "$0") list
 
-Backs up workspace files (via upstream script) AND chat session history.
+Backs up workspace files (via upstream script), chat session history, and skills.
 EOF
   exit 1
 }
@@ -76,6 +79,20 @@ do_backup() {
     rmdir "$sessions_dir" 2>/dev/null || true
   fi
 
+  # Back up installed skills
+  info "Backing up skills..."
+  local skills_dir="${dest}/skills"
+  mkdir -p "$skills_dir"
+
+  if openshell sandbox download "$sandbox" "${SKILLS_PATH}/" "${skills_dir}/" 2>/dev/null; then
+    local skill_count
+    skill_count=$(find "$skills_dir" -type f 2>/dev/null | wc -l)
+    info "Backed up ${skill_count} skill file(s) to ${skills_dir}/"
+  else
+    warn "No skills found (sandbox may not have any installed)"
+    rmdir "$skills_dir" 2>/dev/null || true
+  fi
+
   info "Full backup saved to ${dest}/"
 }
 
@@ -107,16 +124,38 @@ do_restore() {
     info "No chat sessions in backup — skipping."
   fi
 
+  # Restore skills if they exist in the backup
+  if [ -d "${src}/skills" ]; then
+    info "Restoring skills..."
+    if openshell sandbox upload "$sandbox" "${src}/skills/" "${SKILLS_PATH}/" 2>/dev/null; then
+      info "Skills restored."
+    else
+      warn "Failed to restore skills (sandbox may still be starting)"
+    fi
+  else
+    info "No skills in backup — skipping."
+  fi
+
   info "Full restore complete."
 }
 
 # --- Main ---
-[ $# -ge 2 ] || usage
-command -v openshell >/dev/null 2>&1 || fail "'openshell' is required but not found in PATH."
+[ $# -ge 1 ] || usage
 
 action="$1"
-sandbox="$2"
-shift 2
+shift
+
+# list doesn't require a sandbox name or openshell
+if [ "$action" = "list" ]; then
+  ls -1t "$BACKUP_BASE" 2>/dev/null || echo "No backups found."
+  exit 0
+fi
+
+[ $# -ge 1 ] || usage
+command -v openshell >/dev/null 2>&1 || fail "'openshell' is required but not found in PATH."
+
+sandbox="$1"
+shift
 
 case "$action" in
   backup)  do_backup "$sandbox" ;;
