@@ -188,6 +188,30 @@ git push -u origin fix/<descriptive-name>
 
 PR template requires: Summary, Related Issue, Changes, Type of Change, Testing, Checklist. See CONTRIBUTING.md in NemoClaw repo.
 
+## Known issues
+
+### Telegram bridge timeout with long-running tasks
+
+The host-side Telegram bridge (`scripts/telegram-bridge.js`) is a synchronous shim: it SSHes into the sandbox, runs `openclaw agent --local -m <message>`, captures stdout, and sends it to Telegram. The SSH process has a 120-second timeout.
+
+Coding agent tasks (Claude Code, Codex) routinely take 5-10+ minutes, causing:
+1. Bridge SSH process times out → response never sent to Telegram
+2. Agent continues running inside sandbox (visible in Web UI)
+3. Follow-up messages create new SSH invocations with same session ID
+4. Agent reads prior session history but doesn't know it's on Telegram
+
+The proper fix is the native channel path: `openclaw agent --deliver --channel telegram` through the gateway delivery queue. This is async with no timeout. But it requires the gateway pairing fix + runtime config overrides (PRs #928 + #1081) to land first. The bridge is an interim workaround that will be removed when native channels work.
+
+### `brev copy` unreliable for directories
+
+`brev copy` for directory transfers frequently times out or fails with SCP errors. Use `git clone` on the remote instance instead:
+
+```bash
+brev exec <instance> "git clone <repo-url> ~/target-dir"
+```
+
+`brev copy` works reliably for single small files (like `.env`).
+
 ## Known architecture constraints
 
 These are fundamental to the NemoClaw design and cannot be patched around:
@@ -212,5 +236,6 @@ Key open PRs and issues as of 2026-04-05:
 | #690 | PR | Limit auto-pair to one-shot with 180s timeout | Security tightening of auto-pair |
 | #928 | PR | Runtime config overrides via writable overlay | Enables channel config at runtime without modifying frozen config |
 | #1081 | PR | Use providers for messaging credential injection | Native Telegram/Discord/Slack channels via OpenShell providers |
+| #1496 | PR | Allow CLI clients in auto-pair watcher | Our fix — adds `'cli'` to `ALLOWED_MODES` |
 
-Dependency chain: auto-pair fix → #928 (writable overlay) → #1081 (native channels). All three are needed for native messaging channel support inside the sandbox.
+Dependency chain: #1496 (auto-pair fix) → #928 (writable overlay) → #1081 (native channels). All three are needed for native messaging channel support inside the sandbox.
