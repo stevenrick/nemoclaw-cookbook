@@ -8,7 +8,7 @@ Automated setup for [NemoClaw](https://github.com/NVIDIA/NemoClaw) + [OpenShell]
 
 - A [Brev](https://brev.nvidia.com) instance with Docker
 - [Brev CLI](https://github.com/brevdev/brev-cli) installed and authenticated on your local machine
-- An NVIDIA API key from https://integrate.api.nvidia.com
+- An NVIDIA API key from [https://build.nvidia.com/](https://build.nvidia.com/)
 
 ## Setup
 
