@@ -7,16 +7,15 @@ This is a thin patch overlay on upstream [NemoClaw](https://github.com/NVIDIA/Ne
 ```
 setup.sh              # Automated setup — clones upstream, applies patches, installs
 patches/
-  Dockerfile.patch    # Adds Claude Code, Codex CLI, Codex plugin, git HTTPS/SSL config
-  policy.patch        # Opens network endpoints for auth (Claude, OpenAI, GitHub, Brave Search)
-  onboard.patch       # Creates + attaches integration providers (Brave Search) at sandbox creation
+  Dockerfile.patch    # Adds Claude Code, Codex CLI, git HTTPS/SSL config
+  policy.patch        # Opens network endpoints for auth (Claude, OpenAI, GitHub)
 scripts/
   validate-patches.sh # Check patches still apply against upstream
   backup-full.sh      # Workspace + chat history backup/restore
 BUILD.md              # Step-by-step setup with explanations
 USE.md                # Day-to-day commands and features
 CONTRIBUTING.md       # Contribution guidelines
-.claude/skills/       # Claude Code skills (e.g. /refresh-patches, /add-integration)
+.claude/skills/       # Claude Code skills (e.g. /setup, /brev, /add-integration)
 ```
 
 ## Getting started
@@ -26,7 +25,7 @@ CONTRIBUTING.md       # Contribution guidelines
 ## Key docs (read these, don't duplicate them)
 
 - **BUILD.md** — full setup walkthrough, what each patch does and why, environment variables, troubleshooting
-- **USE.md** — sandbox commands, authentication flow, Telegram bridge, rebuilding
+- **USE.md** — sandbox commands, authentication flow, messaging bridges, rebuilding
 - **CONTRIBUTING.md** — contribution standards
 
 ## Rules
@@ -35,6 +34,6 @@ CONTRIBUTING.md       # Contribution guidelines
 - **Don't modify upstream repos directly.** All customizations go through `patches/` and `setup.sh`.
 - **Preserve patch intent, not exact lines.** If upstream restructures, adapt placement but keep the logical additions (see BUILD.md § Refreshing Patches).
 - **Don't add features beyond what's asked.** This is a cookbook — lean and opinionated.
-- **Secrets belong in `~/.env`, never committed.** `.gitignore` covers `.env`.
+- **Secrets belong in `.env`, never committed.** `.gitignore` covers `.env`. **Never print, log, or display actual key/token values.** Only confirm SET / NOT SET. Use `sed 's/=.*/=***/'` when listing env vars.
 - **Test patches round-trip:** reset target files, apply, verify — before committing.
 - **Never guess external values.** Commit SHAs, version numbers, API signatures, URLs — if you're not certain, look it up (`git ls-remote`, docs, web search). Fabricated-but-plausible values waste more time than admitting you need to check.

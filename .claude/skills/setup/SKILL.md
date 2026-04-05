@@ -6,88 +6,128 @@ allowed-tools: Bash Read Write Edit Grep Glob AskUserQuestion
 
 # NemoClaw Setup
 
-Walk the user through a complete NemoClaw deployment. Be conversational — check each phase, report what you find, and only ask the user to act when their input is needed (API keys, browser auth).
+Walk the user through a complete NemoClaw deployment on Brev. Be conversational — check each phase, report what you find, and only ask the user to act when their input is needed (API keys, browser auth URLs).
+
+This is the same flow for humans and agents. The only steps requiring human involvement are providing API keys and clicking auth URLs in a browser.
 
 ## Phase 1 — Prerequisites
 
 Check these in parallel and report a summary:
 
 ```bash
-# Docker running?
-docker info > /dev/null 2>&1 && echo "Docker: OK" || echo "Docker: NOT RUNNING"
+# Brev CLI installed and authenticated?
+command -v brev > /dev/null 2>&1 && echo "Brev CLI: OK" || echo "Brev CLI: NOT FOUND — install from https://github.com/brevdev/brev-cli"
 
-# Disk space
-df -h ~ | tail -1
-
-# RAM
-free -h 2>/dev/null || sysctl -n hw.memsize 2>/dev/null | awk '{printf "%.0f GB\n", $1/1073741824}'
+# Instance running?
+brev ls 2>&1
 ```
 
-If Docker isn't running, stop and tell the user. Don't proceed without it.
+If Brev CLI is missing, stop.
+
+If multiple instances are listed, ask the user which one to use. If no instances are listed, ask the user to create one:
+
+> No Brev instances found. Create one at https://brev.nvidia.com or run:
+> ```
+> brev create <instance-name>
+> ```
+> Let me know when it's ready.
+
+If exactly one instance is listed, confirm with the user before proceeding:
+
+> Found Brev instance `<name>` (STATUS). Deploy NemoClaw here?
+
+Establish the port forward early — this warms up the SSH connection and all subsequent `brev exec` calls multiplex over it:
+
+```bash
+lsof -i :18789 2>/dev/null && echo "Port 18789 already in use" || brev port-forward <instance> -p 18789:18789
+```
+
+Then verify the remote instance has Docker:
+
+```bash
+brev exec <instance> "docker info > /dev/null 2>&1 && echo 'Docker: OK' || echo 'Docker: NOT RUNNING'"
+```
 
 ## Phase 2 — Environment file
 
-Check if `~/.env` exists and what's configured:
+Check if `.env` exists in the cookbook repo and what's configured:
 
 ```bash
-[ -f ~/.env ] && grep -E '^\s*[A-Z_]+=' ~/.env | sed 's/=.*/=***/' || echo "NOT FOUND"
+[ -f <cookbook-dir>/.env ] && grep -E '^\s*[A-Z_]+=' <cookbook-dir>/.env | grep -v '^#' | sed 's/=.*/=***/' || echo "NOT FOUND"
 ```
 
-**If `~/.env` doesn't exist:** Create it from the template with placeholder values:
+**If `.env` doesn't exist:** Create it from the template:
 
 ```bash
-cp <cookbook-dir>/.env.example ~/.env
-chmod 600 ~/.env
+cp <cookbook-dir>/.env.example <cookbook-dir>/.env
+chmod 600 <cookbook-dir>/.env
 ```
 
 Then tell the user:
 
-> I've created `~/.env` from the template. You need to add your NVIDIA API key.
+> I've created `.env` from the template in the cookbook directory. You need to add your NVIDIA API key.
 > Get one at https://integrate.api.nvidia.com if you don't have one.
 >
-> Open `~/.env` and replace `nvapi-your-key-here` with your actual key.
+> Open `.env` and replace `nvapi-your-key-here` with your actual key.
 > Let me know when you're done and I'll continue.
 
-**If `~/.env` exists:** Parse it and report what's configured vs what's missing:
+**If `.env` exists:** Parse it and report what's configured:
+
+**Important: never print, log, or display the actual values of any keys or tokens. Only report whether they are SET or NOT SET.**
 
 ```bash
-source ~/.env
-echo "NVIDIA_API_KEY: ${NVIDIA_API_KEY:+SET}${NVIDIA_API_KEY:-NOT SET}"
-echo "NEMOCLAW_MODEL: ${NEMOCLAW_MODEL:-not set (will use default)}"
-echo "TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:+SET}${TELEGRAM_BOT_TOKEN:-not set (optional)}"
-echo "ALLOWED_CHAT_IDS: ${ALLOWED_CHAT_IDS:+SET}${ALLOWED_CHAT_IDS:-not set (optional)}"
-echo "CHAT_UI_URL: ${CHAT_UI_URL:-not set (local access only)}"
-echo "BRAVE_API_KEY: ${BRAVE_API_KEY:+SET}${BRAVE_API_KEY:-not set (optional)}"
+source <cookbook-dir>/.env
+echo "=== Required ==="
+if [ -z "${NVIDIA_API_KEY:-}" ]; then
+  echo "NVIDIA_API_KEY: NOT SET"
+elif [ "$NVIDIA_API_KEY" = "nvapi-your-key-here" ]; then
+  echo "NVIDIA_API_KEY: STILL PLACEHOLDER — replace with your real key"
+else
+  echo "NVIDIA_API_KEY: SET"
+fi
+echo "=== Inference ==="
+echo "NEMOCLAW_PROVIDER: ${NEMOCLAW_PROVIDER:-not set (default: NVIDIA cloud)}"
+echo "NEMOCLAW_MODEL: ${NEMOCLAW_MODEL:-not set (default: nemotron-3-super-120b)}"
+echo "OPENAI_API_KEY: ${OPENAI_API_KEY:+SET}${OPENAI_API_KEY:-not set}"
+echo "ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:+SET}${ANTHROPIC_API_KEY:-not set}"
+echo "=== Messaging ==="
+echo "TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:+SET}${TELEGRAM_BOT_TOKEN:-not set}"
+echo "DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:+SET}${DISCORD_BOT_TOKEN:-not set}"
+echo "SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:+SET}${SLACK_BOT_TOKEN:-not set}"
+echo "=== Integrations ==="
+echo "BRAVE_API_KEY: ${BRAVE_API_KEY:+SET}${BRAVE_API_KEY:-not set}"
 ```
 
-If `NVIDIA_API_KEY` is still the placeholder or missing, ask the user to set it and wait.
+If `NVIDIA_API_KEY` is missing, the placeholder, or not set, ask the user to set it and wait. **Never display the actual key value.**
 
-If the key looks real, confirm what's configured and what's optional:
+Confirm what's configured:
 
 > **Ready to deploy with:**
 > - NVIDIA API key: configured
-> - Telegram: [configured / not configured — add later with `nemoclaw start`]
-> - Remote access: [CHAT_UI_URL set to X / local only — see BUILD.md § Remote Access if you need remote]
+> - Inference: [provider/model or defaults]
+> - Messaging: [which are configured / none — add later]
+> - Search: [Brave configured / not configured]
 >
 > Want me to proceed?
 
-**Important:** If accessing remotely (Brev, ngrok, etc.), the user MUST uncomment and set `CHAT_UI_URL` in `~/.env` before install. Ask if they're running locally or remotely. If remote:
+## Phase 3 — Deploy
 
-> Port 18789 needs to be exposed on your hosting platform before we proceed — this is something you set up yourself outside of NemoClaw (e.g. Brev "Share a Service", ngrok, SSH tunnel).
->
-> Once you have the forwarded URL, uncomment `CHAT_UI_URL` in `~/.env` and set it to that URL. Let me know when that's done.
-
-**Do NOT attempt to run ngrok, configure port forwarding, or set up tunnels.** That is the user's responsibility on their infrastructure.
-
-## Phase 3 — Run setup
-
-Once the user confirms, run setup.sh and monitor output:
+Clone the cookbook on the remote instance and copy `.env`:
 
 ```bash
-cd <cookbook-dir> && ./setup.sh 2>&1
+brev exec <instance> "git clone https://github.com/stevenrick/nemoclaw-cookbook.git ~/nemoclaw-cookbook"
+brev copy <cookbook-dir>/.env <instance>:~/.env
 ```
 
-This takes ~5-10 minutes. The script handles: cloning repos, installing OpenShell, pulling the Docker image, applying patches, and installing NemoClaw.
+The `.env` lives in the repo locally (gitignored) but gets copied to `~/.env` on the remote where `setup.sh` and `nemoclaw` expect it. The cookbook itself is cloned from GitHub — more reliable than `brev copy` for directories.
+
+Then run setup:
+
+```bash
+brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && cd ~/nemoclaw-cookbook && ./setup.sh"
+```
+
+This takes ~5-10 minutes. The script handles: cloning repos, installing OpenShell, pulling the Docker image, applying patches, installing NemoClaw, configuring integrations, and starting services.
 
 If setup fails, diagnose the error:
 - Patch failure → suggest `claude /refresh-patches`
@@ -95,77 +135,94 @@ If setup fails, diagnose the error:
 - Network error → check connectivity
 - NemoClaw install error → check the install.sh output for specifics
 
+Use `timeout: 600000` for the brev exec call (10 min max).
+
 ## Phase 4 — Post-install verification
 
-Run these checks and compare results:
-
 ```bash
-openshell --version
-openshell status
-openshell sandbox list
-nemoclaw --version
-nemoclaw list
+brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && nemoclaw list && openshell sandbox list && openshell status"
 ```
 
-**Critical check:** Compare `openshell sandbox list` with `nemoclaw list`. Both should show the sandbox (typically `my-assistant`).
+Both should show the sandbox (typically `my-assistant`) in Ready state.
 
-**If OpenShell shows the sandbox but NemoClaw doesn't:** NemoClaw's install partially completed — the sandbox was created via OpenShell but NemoClaw didn't register it. Fix by running:
-
-```bash
-source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
-[ -n "${CHAT_UI_URL:-}" ] && export CHAT_UI_URL
-nemoclaw onboard
-```
-
-This re-registers the existing sandbox without rebuilding it. After `nemoclaw onboard`, re-check `nemoclaw list` to confirm.
-
-**If neither shows a sandbox:** The install failed earlier. Check the setup.sh output for errors and re-run.
-
-**If both show the sandbox:** Proceed to Phase 5.
-
-## Phase 5 — Save the UI URL
+**If OpenShell shows the sandbox but NemoClaw doesn't:**
 
 ```bash
-cat ~/openclaw-ui-url.txt 2>/dev/null || echo "URL file not found"
+brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 && nemoclaw onboard"
 ```
 
-**If the file doesn't exist:** This can happen when NemoClaw's registration step was incomplete. After fixing in Phase 4, check again. If still missing, the URL with token is also printed at the end of `nemoclaw onboard` output — capture it from there.
+## Phase 5 — Connect
 
-As a fallback, you can find the base URL and token separately:
+The port forward was established in Phase 1. Get the tokenized URL:
 
 ```bash
-# The sandbox is accessible on port 18789
-# Check NemoClaw's config for the token
-cat ~/.nemoclaw/sandboxes.json 2>/dev/null
+brev exec <instance> "cat ~/openclaw-ui-url.txt 2>/dev/null"
 ```
 
-Tell the user to save this URL — it's their access to the Web UI. Remind them it changes on every rebuild.
+The URL from `openclaw-ui-url.txt` will have a hostname like `127.0.0.1:18789` and a `/#token=<hex>` fragment. If the hostname differs, replace only the hostname with `127.0.0.1:18789` — preserve the exact path and `/#token=` fragment. **Always use `127.0.0.1`, not `localhost`** — the sandbox only allows `127.0.0.1` as an origin.
 
-## Phase 6 — Authentication guidance
+> Web UI is live at: `http://127.0.0.1:18789/#token=<hex>`
 
-Tell the user they need to connect to the sandbox and authenticate:
+## Phase 6 — Authenticate
 
-> Now connect to the sandbox and authenticate your tools:
+Do everything the agent can automate first, then hand off to the human for interactive steps.
+
+### Step 1: Codex (agent can relay)
+
+Codex uses device-code auth that works non-interactively:
+
+```bash
+brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name my-assistant' sandbox@openshell-my-assistant 'codex login --device-auth 2>&1'"
+```
+
+This prints a URL and a one-time code. Relay both to the user:
+
+> To authenticate Codex:
+> 1. Open [URL from output] in your browser
+> 2. Enter code: [code from output]
+
+The command will print "login successful" once the user completes auth — no need to ask for confirmation.
+
+### Step 2: Claude Code + Codex plugin for Claude Code (interactive — requires human)
+
+Claude Code uses a full TUI for auth, and the Codex plugin is installed inside Claude Code's TUI. Combine these into one interactive session. Tell the user:
+
+> Last step — authenticate Claude Code and install the Codex plugin (inside Claude Code).
+> Run these commands:
 >
 > ```
+> brev shell <instance>
 > nemoclaw my-assistant connect
+> claude
 > ```
 >
-> Then inside the sandbox, run these one at a time:
->
-> ```
-> claude login
-> codex login --device-auth
-> claude /codex:setup
-> ```
->
-> Each login will print a URL — open it in your browser and authenticate.
-> The Codex plugin is pre-installed in the image — `/codex:setup` just verifies it.
-> Let me know when you're done and I'll verify everything is working.
+> Inside Claude Code's TUI:
+> 1. Follow the login prompts (it will give you a URL to open in your browser)
+> 2. Once logged in, install the Codex plugin for Claude Code:
+>    ```
+>    /plugin marketplace add openai/codex-plugin-cc
+>    /plugin install codex@openai-codex
+>    /reload-plugins
+>    /codex:setup
+>    ```
+> Let me know when you're done.
+
+### Verify
+
+After the user confirms, verify binaries and plugin state:
+
+```bash
+brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name my-assistant' sandbox@openshell-my-assistant 'claude --version && codex --version 2>/dev/null && ls /sandbox/.openclaw-data/plugins/*/codex* 2>/dev/null && echo PLUGIN_OK || echo PLUGIN_MISSING'"
+```
+
+If `PLUGIN_MISSING`, tell the user the Codex plugin install didn't complete and ask them to re-run the `/plugin` commands inside Claude Code's TUI.
 
 ## Principles
 
+- **Never leak secrets.** Never print, log, display, or include in output the actual values of API keys, tokens, or credentials. Only report SET / NOT SET / PLACEHOLDER. Use `sed 's/=.*/=***/'` when listing env vars. Never `cat .env` or `echo $API_KEY`.
+- **Brev is the only deployment path.** No local installs, no SSH tunnels, no ngrok.
+- **Confirm the instance.** Always show the user which Brev instance will be used and get confirmation before deploying.
 - **Don't ask for what you can check.** If a file exists, read it. If a tool is installed, version-check it.
-- **Minimize user burden.** Create files, set permissions, run commands. Only stop for things that require the user's credentials or browser.
+- **Minimize human involvement.** The only things requiring a human are: providing API keys and clicking auth URLs.
 - **Report state, not instructions.** Say "NVIDIA key is configured, Telegram is not" rather than "please check if your NVIDIA key is configured."
 - **Be honest about timing.** The Docker pull and NemoClaw install take minutes. Set expectations.
