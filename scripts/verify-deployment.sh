@@ -10,7 +10,6 @@
 # Exit code 0 = all checks passed, 1 = failures found.
 set -uo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export PATH="$HOME/.local/bin:$HOME/.nvm/versions/node/v22.22.2/bin:$PATH"
 
 # Discover sandbox name
@@ -84,6 +83,7 @@ else
 fi
 
 # ── 5. Installed tools ───────────────────────────────────────────────
+# shellcheck source=/dev/null
 [ -f "$HOME/.env" ] && source "$HOME/.env"
 INSTALL_CLAUDE_CODE="${INSTALL_CLAUDE_CODE:-true}"
 INSTALL_CODEX="${INSTALL_CODEX:-true}"
