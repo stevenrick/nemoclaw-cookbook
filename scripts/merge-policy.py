@@ -14,7 +14,6 @@ Modifies <policy-file> in place.
 """
 import re
 import sys
-import textwrap
 
 
 def parse_fragment(path):
@@ -125,7 +124,6 @@ def format_binary_yaml(binary, indent=6):
 
 def format_new_section(key, section, indent=2):
     """Format a complete new policy section as YAML text lines."""
-    import yaml
     prefix = " " * indent
     lines = []
     lines.append("")
