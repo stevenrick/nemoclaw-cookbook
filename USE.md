@@ -112,9 +112,11 @@ Examples you can send via Telegram:
 
 ## Telegram
 
-### Start the bridge
+### How it works
 
-`nemoclaw start` reads env vars directly from the process environment (no dotenv/file loading). If you've exported them in your shell, just run `nemoclaw start`. Otherwise, pass them explicitly:
+Telegram messaging runs natively inside OpenClaw via the gateway delivery queue — no host-side bridge. Messages are async with no timeout, so long-running coding agent tasks work reliably. The Telegram token is injected at sandbox build time and the bot connects automatically.
+
+`nemoclaw start` starts the Cloudflare quick tunnel needed for the Telegram webhook callback URL:
 
 ```bash
 # If vars are already exported in your shell:
@@ -124,14 +126,18 @@ nemoclaw start
 NVIDIA_API_KEY=<key> TELEGRAM_BOT_TOKEN=<token> ALLOWED_CHAT_IDS=<id> nemoclaw start
 ```
 
-This starts both the Telegram bridge and a Cloudflare quick tunnel (needed for the Telegram webhook callback URL). The output shows the tunnel URL and bridge status.
-
 ### Manage
 
 ```bash
-nemoclaw status    # Bridge and tunnel health
-nemoclaw stop      # Stop everything
-nemoclaw start     # Restart
+nemoclaw status    # Tunnel health
+nemoclaw stop      # Stop tunnel
+nemoclaw start     # Restart tunnel
+```
+
+To check channel status inside the sandbox:
+```bash
+# Via brev exec + SSH proxy:
+openclaw channels list        # Shows: Telegram main: configured, token=config, enabled
 ```
 
 ### Security
@@ -235,6 +241,8 @@ Backups are stored locally in `backups/<timestamp>/` (gitignored). Each backup i
 Replace `<sandbox>` with your sandbox name (default: `my-assistant` — run `nemoclaw list` to check).
 
 Backups on the host are stored at `~/.nemoclaw/backups/<timestamp>/`.
+
+**Session restore note:** OpenClaw's gateway renames session transcript files that aren't in its registry (`.reset.` suffix). The restore script automatically recovers these files after upload. If old sessions don't appear in the web UI after restore, try refreshing the page.
 
 ## Updating OpenClaw
 
