@@ -52,22 +52,26 @@ brev port-forward <instance> -p 18789:18789
 brev exec <instance> "cat ~/openclaw-ui-url.txt"
 # Open the URL in your browser (use 127.0.0.1, not localhost)
 
-# 4. Authenticate Codex (works non-interactively)
+# 4–5. Authenticate coding agents (if installed — see INSTALL_CLAUDE_CODE / INSTALL_CODEX in .env)
+#
+# Examples use "my-assistant" — this is the default sandbox name.
+# If you chose a different name during setup, substitute it everywhere.
+# Run `nemoclaw list` to check.
+
+# Codex (works non-interactively)
 brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
   -o LogLevel=ERROR -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy \
   --gateway-name nemoclaw --name my-assistant' sandbox@openshell-my-assistant \
   'codex login --device-auth 2>&1'"
 # Opens a URL + code — enter in your browser
 
-# 5. Authenticate Claude Code + install Codex plugin inside Claude Code (interactive)
+# Claude Code + Codex plugin (interactive)
 brev shell <instance>
 nemoclaw my-assistant connect
 claude                # TUI — follow login prompts, then install Codex plugin inside Claude Code
 ```
 
 See [BUILD.md](BUILD.md) for the full step-by-step walkthrough with explanations.
-
-> **Sandbox name:** Examples below use `my-assistant`, the default. If you set `NEMOCLAW_SANDBOX_NAME` during setup, substitute your name everywhere. Run `nemoclaw list` to check.
 
 ## What This Sets Up
 
@@ -81,7 +85,7 @@ See [BUILD.md](BUILD.md) for the full step-by-step walkthrough with explanations
 
 ## What the Patches Do
 
-Our patches on top of upstream NemoClaw:
+Modular patch fragments in `patches/fragments/` customize upstream NemoClaw. Core fragments (git config) always apply. Claude Code and Codex are optional — set `INSTALL_CLAUDE_CODE=false` or `INSTALL_CODEX=false` in `.env` to exclude them.
 
 **Dockerfile** — adds Claude Code (native installer), Codex CLI, git HTTPS/SSL config, and correct sandbox user ownership
 
@@ -94,7 +98,7 @@ Our patches on top of upstream NemoClaw:
 
 See [UPSTREAM.md](UPSTREAM.md) for the upstream versions this cookbook was last validated against.
 
-Patches apply with `git apply --3way`, which handles minor upstream drift automatically. If patches break after an upstream NemoClaw update:
+Patch fragments in `patches/fragments/` are assembled and applied by `scripts/apply-patches.sh`, which handles minor upstream drift automatically. If patches break after an upstream NemoClaw update:
 
 ```bash
 claude /refresh-patches    # Claude Code walks you through regenerating patches
@@ -123,22 +127,11 @@ Replace `<sandbox>` with your sandbox name (default: `my-assistant`).
 
 Local backups are stored in `backups/` (gitignored). See [USE.md § Backup & Restore](USE.md#backup--restore) for details.
 
-## Rebuilding
+## Upgrading & Rebuilding
 
-Via `brev exec` or inside `brev shell`. Always back up first — destroy wipes the workspace:
+**Claude Code users:** run `/upgrade` — it checks what's changed, backs up, applies patches safely, rebuilds only if needed, and restores. Host-only updates (CLI tools) don't require a rebuild.
 
-```bash
-source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
-
-~/nemoclaw-cookbook/scripts/backup-full.sh backup my-assistant
-nemoclaw stop 2>/dev/null
-docker pull ghcr.io/nvidia/nemoclaw/sandbox-base:latest
-nemoclaw my-assistant destroy --yes
-nemoclaw onboard
-~/nemoclaw-cookbook/scripts/backup-full.sh restore my-assistant
-```
-
-After rebuild: re-authenticate by running `codex login --device-auth` then launching `claude` (login is forced on first launch), and reinstall the Codex plugin inside Claude Code.
+**Manual rebuild** — see [USE.md § Updating OpenClaw](USE.md#updating-openclaw) for the full steps. The key safety rule: always validate patches apply *before* destroying the sandbox.
 
 ## File Structure
 
@@ -146,8 +139,7 @@ After rebuild: re-authenticate by running `codex login --device-auth` then launc
 .env.example          # Template for API keys and tokens
 setup.sh              # Automated setup script
 patches/
-  Dockerfile.patch    # Claude Code + Codex + git config
-  policy.patch        # Network policy for auth endpoints
+  fragments/          # Modular patch fragments (Dockerfile, policy, etc.)
 scripts/
   validate-patches.sh # Check patches still apply against upstream
   backup-full.sh      # Workspace, chat history, and skills backup/restore
