@@ -4,13 +4,13 @@ Last validated end-to-end deployment: **2026-04-06**
 
 | Component | Commit / Tag | Description | Link |
 |-----------|-------------|-------------|------|
-| NemoClaw | `364969d` | `fix: clear stale SSH host keys after gateway restart (#1087)` | [commit](https://github.com/NVIDIA/NemoClaw/commit/364969d) |
+| NemoClaw | `4135413` | `fix(security): log egress endpoints before applying policy presets (#867)` | [commit](https://github.com/NVIDIA/NemoClaw/commit/4135413) |
 | OpenShell | `13262e1c` | `feat(cli): add sandbox exec subcommand with TTY support (#752)` | [commit](https://github.com/NVIDIA/OpenShell/commit/13262e1c) |
 | sandbox-base | `f7d4121` | Image tag (NemoClaw commit SHA) pulled at deploy time | [package](https://github.com/NVIDIA/NemoClaw/pkgs/container/nemoclaw%2Fsandbox-base) |
 
 ## What this means
 
-- **Patches in `patches/` were generated and tested against these versions.** They may apply cleanly to newer upstream commits, or they may need refreshing.
+- **Patch fragments in `patches/fragments/` were tested against these versions.** They may apply cleanly to newer upstream commits, or they may need refreshing.
 - **This is not a pin.** `setup.sh` always clones latest upstream and pulls `sandbox-base:latest`. These versions record what was running when the cookbook last had a successful end-to-end deployment.
 - **sandbox-base tags are NemoClaw commit SHAs.** The image isn't rebuilt on every NemoClaw commit, so the image tag and the NemoClaw repo HEAD can differ.
 

@@ -273,6 +273,7 @@ nemoclaw start
 Replace `<sandbox>` with your sandbox name (run `nemoclaw list` to check).
 
 After rebuild:
+- Update the deployment manifest: `~/nemoclaw-cookbook/scripts/write-manifest.sh`
 - Re-authenticate: `codex login --device-auth` then launch `claude` (login forced on first launch)
 - Reinstall the Codex plugin inside Claude Code
 - Restart messaging: `nemoclaw start` (with tokens exported)
