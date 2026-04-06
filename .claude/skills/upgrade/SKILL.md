@@ -214,9 +214,13 @@ brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/
 
 ## Phase 11 — Verify and report
 
+Run the comprehensive health check:
+
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && nemoclaw list && openshell status"
+brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/verify-deployment.sh"
 ```
+
+This checks: gateway health, sandbox status, dashboard reachability (auto-restarts the internal forward if dead), OpenClaw running, tools installed, workspace files, services, and manifest accuracy. If any check fails, diagnose before reporting success.
 
 Get the new tokenized URL (changes on rebuild):
 

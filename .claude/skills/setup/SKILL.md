@@ -143,13 +143,15 @@ Use `timeout: 600000` for the brev exec call (10 min max).
 
 ## Phase 4 — Post-install verification
 
+Run the comprehensive health check (setup.sh runs this automatically as Step 8):
+
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && nemoclaw list && openshell sandbox list && openshell status"
+brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/verify-deployment.sh"
 ```
 
-Both should show the sandbox (typically `my-assistant`) in Ready state.
+This checks gateway, sandbox, dashboard, OpenClaw, tools, workspace, services, and manifest. If the dashboard port forward is dead, it auto-restarts it.
 
-**If OpenShell shows the sandbox but NemoClaw doesn't:**
+**If sandbox shows but NemoClaw doesn't recognize it:**
 
 ```bash
 brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 && nemoclaw onboard"

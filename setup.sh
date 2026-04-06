@@ -133,7 +133,10 @@ else
   echo "No messaging tokens set — skipping services. Set TELEGRAM_BOT_TOKEN, DISCORD_BOT_TOKEN, or SLACK_BOT_TOKEN in ~/.env to enable."
 fi
 
-echo "=== Step 8: Write deployment manifest ==="
+echo "=== Step 8: Verify deployment ==="
+"${SCRIPT_DIR}/scripts/verify-deployment.sh" || echo "  Some checks failed — review above and fix before proceeding."
+
+echo "=== Step 9: Write deployment manifest ==="
 "${SCRIPT_DIR}/scripts/write-manifest.sh"
 
 echo ""

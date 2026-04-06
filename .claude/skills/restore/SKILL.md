@@ -98,17 +98,13 @@ This restores workspace files, chat sessions, and skills via the upstream backup
 
 ## Phase 5 — Verify
 
-Check sandbox status:
+Run the comprehensive health check:
 
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && nemoclaw <sandbox> status 2>/dev/null || nemoclaw list"
+brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/verify-deployment.sh"
 ```
 
-Optionally read a workspace file to confirm content was restored (e.g., check SOUL.md exists):
-
-```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$PATH\" && openshell sandbox download <sandbox> /sandbox/.openclaw-data/workspace/SOUL.md /tmp/verify-restore/ 2>/dev/null && cat /tmp/verify-restore/SOUL.md | head -5 && rm -rf /tmp/verify-restore"
-```
+This checks gateway, sandbox, dashboard reachability, OpenClaw, tools, workspace files (confirms SOUL.md exists after restore), services, and manifest accuracy. If the dashboard port forward died, it auto-restarts it.
 
 ## Phase 6 — Report
 
