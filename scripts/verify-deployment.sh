@@ -69,9 +69,14 @@ fi
 
 # ── 4. OpenClaw running inside sandbox ───────────────────────────────
 echo "OpenClaw:"
-SSH_CMD="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=10 -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name $SANDBOX' sandbox@openshell-$SANDBOX"
+sandbox_ssh() {
+  ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    -o LogLevel=ERROR -o ConnectTimeout=10 \
+    -o "ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name $SANDBOX" \
+    "sandbox@openshell-$SANDBOX" "$@"
+}
 
-OPENCLAW_VER=$($SSH_CMD 'openclaw --version 2>/dev/null' 2>/dev/null)
+OPENCLAW_VER=$(sandbox_ssh 'openclaw --version 2>/dev/null' 2>/dev/null)
 if [ -n "$OPENCLAW_VER" ]; then
   pass "OpenClaw $OPENCLAW_VER"
 else
@@ -85,7 +90,7 @@ INSTALL_CODEX="${INSTALL_CODEX:-true}"
 
 echo "Tools:"
 if [ "$INSTALL_CLAUDE_CODE" = "true" ]; then
-  CLAUDE_VER=$($SSH_CMD 'claude --version 2>/dev/null' 2>/dev/null)
+  CLAUDE_VER=$(sandbox_ssh 'claude --version 2>/dev/null' 2>/dev/null)
   if [ -n "$CLAUDE_VER" ]; then
     pass "Claude Code $CLAUDE_VER"
   else
@@ -94,7 +99,7 @@ if [ "$INSTALL_CLAUDE_CODE" = "true" ]; then
 fi
 
 if [ "$INSTALL_CODEX" = "true" ]; then
-  CODEX_VER=$($SSH_CMD 'codex --version 2>/dev/null' 2>/dev/null | head -1)
+  CODEX_VER=$(sandbox_ssh 'codex --version 2>/dev/null' 2>/dev/null | head -1)
   if [ -n "$CODEX_VER" ]; then
     pass "Codex $CODEX_VER"
   else
@@ -108,7 +113,7 @@ fi
 
 # ── 6. Workspace files ──────────────────────────────────────────────
 echo "Workspace:"
-SOUL_EXISTS=$($SSH_CMD 'test -f /sandbox/.openclaw-data/workspace/SOUL.md && echo yes || echo no' 2>/dev/null)
+SOUL_EXISTS=$(sandbox_ssh 'test -f /sandbox/.openclaw-data/workspace/SOUL.md && echo yes || echo no' 2>/dev/null)
 if [ "$SOUL_EXISTS" = "yes" ]; then
   pass "SOUL.md present (workspace populated)"
 else
