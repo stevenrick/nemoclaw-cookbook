@@ -88,14 +88,14 @@ fi
 echo "=== Inference ==="
 echo "NEMOCLAW_PROVIDER: ${NEMOCLAW_PROVIDER:-not set (default: NVIDIA cloud)}"
 echo "NEMOCLAW_MODEL: ${NEMOCLAW_MODEL:-not set (default: nemotron-3-super-120b)}"
-echo "OPENAI_API_KEY: ${OPENAI_API_KEY:+SET}${OPENAI_API_KEY:-not set}"
-echo "ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:+SET}${ANTHROPIC_API_KEY:-not set}"
+echo "OPENAI_API_KEY: $([ -n "${OPENAI_API_KEY:-}" ] && echo SET || echo 'not set')"
+echo "ANTHROPIC_API_KEY: $([ -n "${ANTHROPIC_API_KEY:-}" ] && echo SET || echo 'not set')"
 echo "=== Messaging ==="
-echo "TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:+SET}${TELEGRAM_BOT_TOKEN:-not set}"
-echo "DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:+SET}${DISCORD_BOT_TOKEN:-not set}"
-echo "SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:+SET}${SLACK_BOT_TOKEN:-not set}"
+echo "TELEGRAM_BOT_TOKEN: $([ -n "${TELEGRAM_BOT_TOKEN:-}" ] && echo SET || echo 'not set')"
+echo "DISCORD_BOT_TOKEN: $([ -n "${DISCORD_BOT_TOKEN:-}" ] && echo SET || echo 'not set')"
+echo "SLACK_BOT_TOKEN: $([ -n "${SLACK_BOT_TOKEN:-}" ] && echo SET || echo 'not set')"
 echo "=== Integrations ==="
-echo "BRAVE_API_KEY: ${BRAVE_API_KEY:+SET}${BRAVE_API_KEY:-not set}"
+echo "BRAVE_API_KEY: $([ -n "${BRAVE_API_KEY:-}" ] && echo SET || echo 'not set')"
 ```
 
 If `NVIDIA_API_KEY` is missing, the placeholder, or not set, ask the user to set it and wait. **Never display the actual key value.**
@@ -216,6 +216,21 @@ brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev
 ```
 
 If `PLUGIN_MISSING`, tell the user the Codex plugin install didn't complete and ask them to re-run the `/plugin` commands inside Claude Code's TUI.
+
+## Phase 7 — Record upstream versions
+
+After a successful deployment, capture the exact versions that were deployed and update `UPSTREAM.md` in the cookbook repo. This is the "last known good" record for the community.
+
+```bash
+# On the Brev instance — capture deployed versions
+brev exec <instance> "git -C ~/NemoClaw log --oneline -1"
+brev exec <instance> "git -C ~/OpenShell log --oneline -1"
+WebFetch https://github.com/NVIDIA/NemoClaw/pkgs/container/nemoclaw%2Fsandbox-base — get the most recent commit SHA tag
+```
+
+Update `UPSTREAM.md` in the cookbook repo with the commit SHAs, descriptions, and today's date. The sandbox-base tag is a NemoClaw commit SHA — look it up from the GitHub packages page, not from `docker images` (which only shows `latest` locally).
+
+If the deployed versions differ from what's currently in `UPSTREAM.md`, note what changed in the commit message when the user commits (e.g., "docs: update UPSTREAM.md — validated against NemoClaw c99e3e8").
 
 ## Principles
 

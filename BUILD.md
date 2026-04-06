@@ -368,7 +368,7 @@ This skill walks Claude through diagnosing the conflict, understanding what chan
    git apply --3way /path/to/nemoclaw-cookbook/patches/policy.patch
    ```
 
-5. Update the blob index comment in `setup.sh`.
+5. Update `UPSTREAM.md` with the current NemoClaw and OpenShell commits and sandbox-base image tag.
 
 ### What to preserve
 

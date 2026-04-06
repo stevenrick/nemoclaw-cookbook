@@ -92,6 +92,8 @@ Our patches on top of upstream NemoClaw:
 
 ## When Upstream Changes
 
+See [UPSTREAM.md](UPSTREAM.md) for the upstream versions this cookbook was last validated against.
+
 Patches apply with `git apply --3way`, which handles minor upstream drift automatically. If patches break after an upstream NemoClaw update:
 
 ```bash
