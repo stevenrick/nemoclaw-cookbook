@@ -12,7 +12,7 @@ COOKBOOK_DIR="$(dirname "$SCRIPT_DIR")"
 # Source env for tool flags
 [ -f "$HOME/.env" ] && source "$HOME/.env"
 
-SANDBOX_NAME=$(nemoclaw list 2>/dev/null | grep '\*' | awk '{print $1}' || echo "unknown")
+SANDBOX_NAME=$(nemoclaw list 2>/dev/null | grep '\*' | awk '{print $1}' | tr -d '[:space:]' || echo "unknown")
 NEMOCLAW_COMMIT=$(git -C "$HOME/NemoClaw" rev-parse --short HEAD 2>/dev/null || echo "unknown")
 OPENSHELL_COMMIT=$(git -C "$HOME/OpenShell" rev-parse --short HEAD 2>/dev/null || echo "unknown")
 COOKBOOK_COMMIT=$(git -C "$COOKBOOK_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
