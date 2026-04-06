@@ -139,12 +139,10 @@ elif [ "$INSTALL_CODEX" = "true" ]; then
 fi
 
 # Collect providers
-PROVIDERS=$(openshell provider list --output json 2>/dev/null | python3 -c "
+PROVIDERS=$(openshell provider list 2>/dev/null | grep -oE '^\S+' | python3 -c "
 import sys, json
-try:
-    data = json.load(sys.stdin)
-    print(json.dumps([p.get('name','') for p in data]))
-except: print('[]')
+names = [l.strip() for l in sys.stdin if l.strip() and l.strip() not in ('NAME', '---')]
+print(json.dumps(names))
 " 2>/dev/null || echo "[]")
 
 cat > "$HOME/.nemoclaw/cookbook-deployment.json" <<MANIFEST
