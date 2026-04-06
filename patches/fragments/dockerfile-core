@@ -1,0 +1,9 @@
+# Suppress Node.js deprecation warnings (noisy in sandbox terminal)
+ENV NODE_NO_WARNINGS=1
+
+# Force git to use HTTPS instead of SSH (sandbox has no ssh)
+RUN git config --global url.'https://github.com/'.insteadOf 'git@github.com:' \
+    && git config --global --add url.'https://github.com/'.insteadOf 'ssh://git@github.com/' \
+    && git config --global http.sslCAInfo /etc/openshell-tls/ca-bundle.pem \
+    && cp /root/.gitconfig /sandbox/.gitconfig && chown sandbox:sandbox /sandbox/.gitconfig
+

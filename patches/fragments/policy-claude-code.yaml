@@ -1,0 +1,22 @@
+# Claude Code policy additions — auth and download endpoints
+# Upstream already provides: api.anthropic.com, statsig, sentry, /usr/local/bin/claude
+# We add: auth endpoints, download endpoints, and github binary access
+
+add_endpoints:
+  claude_code:
+    - host: platform.claude.com
+      port: 443
+      access: full
+    - host: downloads.claude.ai
+      port: 443
+      access: full
+    - host: raw.githubusercontent.com
+      port: 443
+      access: full
+    - host: storage.googleapis.com
+      port: 443
+      access: full
+
+add_binaries:
+  github:
+    - { path: /usr/local/bin/claude }
