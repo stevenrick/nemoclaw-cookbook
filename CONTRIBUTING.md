@@ -21,6 +21,9 @@ Thanks for your interest in contributing! This project provides setup automation
 - Keep patch fragments minimal and focused — they live in `patches/fragments/` and are applied by `scripts/apply-patches.sh`
 - **Always test the round-trip** before committing patch changes: reset target files, apply your patch, verify it works
 - If upstream NemoClaw broke existing patches, use `claude /refresh-patches` or see [BUILD.md § Refreshing Patches](BUILD.md#refreshing-patches-after-upstream-updates)
+- Run `shellcheck` on any new or modified shell scripts before committing — CI enforces this
+- Use `# shellcheck source=/dev/null` before `source "$HOME/.env"` (shellcheck can't follow dynamic paths)
+- When building SSH commands with ProxyCommand, use a shell function, not a string variable — quoting breaks on expansion
 - Test your changes on a clean Ubuntu 22.04 environment when possible
 - Use [Conventional Commits](https://www.conventionalcommits.org/) format (e.g., `feat:`, `fix:`, `docs:`)
 - Do not commit credentials, API keys, or tokens — use `.env.example` for templates

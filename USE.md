@@ -304,6 +304,35 @@ nemoclaw debug                        # Full diagnostic dump
 nemoclaw debug --quick                # Quick health check
 openshell doctor                      # Gateway-level diagnostics
 openshell status                      # Gateway connection status
+~/nemoclaw-cookbook/scripts/verify-deployment.sh   # Cookbook health check (gateway, sandbox, dashboard, tools, manifest)
+```
+
+## Troubleshooting
+
+### Web UI unreachable after rebuild
+The internal OpenShell port forward (18789) can die during sandbox destroy/rebuild. `verify-deployment.sh` detects and auto-restarts it, but if running manually:
+```bash
+openshell forward start 18789 my-assistant
+```
+
+### `nemoclaw` crashes with MODULE_NOT_FOUND after `git pull`
+Upstream NemoClaw added new TypeScript modules but the CLI wasn't rebuilt. Run `setup.sh` (which handles the full rebuild) or:
+```bash
+cd ~/NemoClaw && bash install.sh --non-interactive
+```
+
+### `git pull` fails in ~/NemoClaw with "local changes would be overwritten"
+Our patches modify the Dockerfile and policy YAML. Reset before pulling:
+```bash
+cd ~/NemoClaw && git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml && git pull
+```
+`setup.sh` handles this automatically.
+
+### `setup.sh` ran but sandbox still has old tools/patches
+`nemoclaw onboard` reuses an existing healthy sandbox instead of rebuilding. If upstream or patches changed, `setup.sh` auto-detects the drift and forces a rebuild. You can also force it manually:
+```bash
+export NEMOCLAW_RECREATE_SANDBOX=1
+./setup.sh
 ```
 
 ## How Security Works
