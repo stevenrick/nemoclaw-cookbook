@@ -49,6 +49,10 @@ export NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 # Tool integrations
 [ -n "${BRAVE_API_KEY:-}" ] && export BRAVE_API_KEY
 
+# Optional sandbox tools (default: true for backward compatibility)
+export INSTALL_CLAUDE_CODE="${INSTALL_CLAUDE_CODE:-true}"
+export INSTALL_CODEX="${INSTALL_CODEX:-true}"
+
 # Policy configuration
 [ -n "${NEMOCLAW_POLICY_MODE:-}" ] && export NEMOCLAW_POLICY_MODE
 [ -n "${NEMOCLAW_POLICY_PRESETS:-}" ] && export NEMOCLAW_POLICY_PRESETS
@@ -63,6 +67,7 @@ else
 fi
 if [ -d NemoClaw ]; then
   echo "  NemoClaw exists, pulling latest..."
+  git -C NemoClaw checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null || true
   git -C NemoClaw pull --ff-only || echo "  Warning: pull failed, continuing with existing checkout"
 else
   git clone https://github.com/NVIDIA/NemoClaw
@@ -83,41 +88,24 @@ docker pull ghcr.io/nvidia/nemoclaw/sandbox-base:latest
 
 echo "=== Step 4: Apply patches ==="
 # See UPSTREAM.md for the versions patches were last validated against.
-# If patches fail, see BUILD.md "Refreshing Patches" or run: claude /refresh-patches
+# Uses modular fragments (not git apply) for resilience to upstream changes.
+# If patches fail, see BUILD.md or run: claude /refresh-patches
 cd "$HOME/NemoClaw"
 git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null || true
 
-apply_patch() {
-  local patch="$1"
-  local name
-  name="$(basename "$patch")"
-  if git apply --3way "$patch" 2>/tmp/patch_err_$$; then
-    echo "  ✓ $name applied cleanly"
-  else
-    echo ""
-    echo "ERROR: $name failed to apply."
-    echo ""
-    echo "This usually means upstream NemoClaw changed the files this patch targets."
-    echo "The partially-merged files may have conflict markers (<<<<<<)."
-    echo ""
-    echo "To fix:"
-    echo "  1. cd $HOME/NemoClaw"
-    echo "  2. Resolve conflicts in the affected file(s)"
-    echo "  3. Regenerate the patch:  git diff <file> > ${SCRIPT_DIR}/patches/$name"
-    echo "  4. Re-run this script"
-    echo ""
-    echo "Or use Claude Code:  claude /refresh-patches"
-    echo ""
-    cat /tmp/patch_err_$$ 2>/dev/null
-    rm -f /tmp/patch_err_$$
-    exit 1
-  fi
-  rm -f /tmp/patch_err_$$
-}
+"${SCRIPT_DIR}/scripts/apply-patches.sh" "$HOME/NemoClaw"
 
-apply_patch "${SCRIPT_DIR}/patches/Dockerfile.patch"
-apply_patch "${SCRIPT_DIR}/patches/policy.patch"
-echo "Patches applied."
+# If a sandbox already exists, check if it's current. The manifest records the
+# NemoClaw commit the image was built from. If upstream moved, force a rebuild
+# so the new patches take effect.
+if [ -f "$HOME/.nemoclaw/cookbook-deployment.json" ]; then
+  CURRENT_NC=$(git -C "$HOME/NemoClaw" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+  MANIFEST_NC=$(python3 -c "import json; print(json.load(open('$HOME/.nemoclaw/cookbook-deployment.json')).get('nemoclaw_commit',''))" 2>/dev/null || echo "")
+  if [ "$CURRENT_NC" != "$MANIFEST_NC" ] && [ -n "$MANIFEST_NC" ]; then
+    echo "  Upstream NemoClaw changed ($MANIFEST_NC → $CURRENT_NC) — forcing sandbox rebuild."
+    export NEMOCLAW_RECREATE_SANDBOX=1
+  fi
+fi
 
 echo "=== Step 5: Install NemoClaw ==="
 cd "$HOME/NemoClaw"
@@ -145,6 +133,12 @@ else
   echo "No messaging tokens set — skipping services. Set TELEGRAM_BOT_TOKEN, DISCORD_BOT_TOKEN, or SLACK_BOT_TOKEN in ~/.env to enable."
 fi
 
+echo "=== Step 8: Verify deployment ==="
+"${SCRIPT_DIR}/scripts/verify-deployment.sh" || echo "  Some checks failed — review above and fix before proceeding."
+
+echo "=== Step 9: Write deployment manifest ==="
+"${SCRIPT_DIR}/scripts/write-manifest.sh"
+
 echo ""
 echo "=========================================="
 echo "  NemoClaw is ready!"
@@ -153,9 +147,13 @@ echo ""
 echo "Next steps:"
 echo "  1. Port-forward the Web UI:  brev port-forward <instance> -p 18789:18789"
 echo "  2. Get the tokenized URL:    cat ~/openclaw-ui-url.txt"
-echo "  3. Authenticate Codex (can be scripted via brev exec):"
-echo "     codex login --device-auth"
-echo "  4. Authenticate Claude Code + install Codex plugin inside Claude Code (interactive via brev shell):"
-echo "     brev shell <instance> → nemoclaw my-assistant connect → claude"
+if [ "$INSTALL_CODEX" = "true" ]; then
+  echo "  3. Authenticate Codex (can be scripted via brev exec):"
+  echo "     codex login --device-auth"
+fi
+if [ "$INSTALL_CLAUDE_CODE" = "true" ]; then
+  echo "  4. Authenticate Claude Code (interactive via brev shell):"
+  echo "     brev shell <instance> → nemoclaw my-assistant connect → claude"
+fi
 echo ""
 echo "See USE.md for day-to-day commands."

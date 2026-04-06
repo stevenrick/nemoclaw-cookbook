@@ -1,0 +1,8 @@
+# Core policy additions — always applied
+# Adds codeload.github.com for HTTPS git clone support
+
+add_endpoints:
+  github:
+    - host: codeload.github.com
+      port: 443
+      access: full

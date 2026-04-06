@@ -1,0 +1,34 @@
+# Codex policy additions — OpenAI auth, API access, and binary permissions
+# Creates the entire openai section and adds codex/node binaries where needed
+
+add_binaries:
+  claude_code:
+    - { path: /usr/local/bin/codex }
+  github:
+    - { path: /usr/local/bin/codex }
+    - { path: /usr/local/bin/node }
+
+new_sections:
+  openai:
+    name: openai
+    endpoints:
+      - host: api.openai.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        tls: terminate
+        rules:
+          - allow: { method: GET, path: "/**" }
+          - allow: { method: POST, path: "/**" }
+      - host: auth.openai.com
+        port: 443
+        access: full
+      - host: chatgpt.com
+        port: 443
+        access: full
+      - host: ab.chatgpt.com
+        port: 443
+        access: full
+    binaries:
+      - { path: /usr/local/bin/codex }
+      - { path: /usr/local/bin/node }

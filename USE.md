@@ -56,6 +56,8 @@ openclaw agent --agent main --local -m "hello" --session-id test  # One-off mess
 
 ## Coding Agents (Claude Code + Codex)
 
+> These tools are only available if installed during setup (default: both enabled). Check with `INSTALL_CLAUDE_CODE` and `INSTALL_CODEX` in `.env`, or look at the deployment manifest: `cat ~/.nemoclaw/cookbook-deployment.json`.
+
 NemoClaw's `coding-agent` skill automatically delegates coding tasks to Claude Code or Codex.
 Just ask your agent (via Telegram, web UI, or terminal) to build something and it will spawn
 the right coding agent in the background.
@@ -150,12 +152,10 @@ If `BRAVE_API_KEY` is set in `.env`, the sandbox can reach `api.search.brave.com
 
 ### Adding Brave Search to an existing sandbox
 
-```bash
-# If you added the key after initial setup, use:
-claude /add-integration
-```
+1. Add `BRAVE_API_KEY` to your `.env` file.
+2. Run `/upgrade` in Claude Code — it detects the new key, creates the provider, and rebuilds the sandbox.
 
-This backs up your workspace, creates the provider, recreates the sandbox, and restores your agent's memory and personality.
+`/upgrade` backs up your workspace automatically and restores your agent's memory and personality after the rebuild.
 
 ### Adding Brave Search during fresh setup
 
@@ -238,27 +238,64 @@ Backups on the host are stored at `~/.nemoclaw/backups/<timestamp>/`.
 
 ## Updating OpenClaw
 
-When the web UI shows "Update available". **Back up first** (see [Backup & Restore](#backup--restore) above), then run via `brev exec` or inside `brev shell`:
+**Claude Code users:** run `/upgrade` — it checks versions, backs up, rebuilds, restores, and re-authenticates automatically.
+
+### Manual fallback
+
+If you need to upgrade without Claude Code, run via `brev exec` or inside `brev shell`:
 
 ```bash
 source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 
-# Back up first (or use /backup from Claude Code)
-~/nemoclaw-cookbook/scripts/backup-full.sh backup my-assistant
+# 1. Back up
+~/nemoclaw-cookbook/scripts/backup-full.sh backup <sandbox>
 
-# Rebuild
+# 2. Pull latest upstream
+cd ~/nemoclaw-cookbook && git pull
+cd ~/NemoClaw && git pull --ff-only origin main
+cd ~/OpenShell && git pull --ff-only origin main && sh install.sh
 docker pull ghcr.io/nvidia/nemoclaw/sandbox-base:latest
-nemoclaw my-assistant destroy --yes
+
+# 3. Validate patches BEFORE destroying (critical — if this fails, stop here)
+cd ~/NemoClaw && git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml
+~/nemoclaw-cookbook/scripts/apply-patches.sh ~/NemoClaw
+
+# 4. Destroy and rebuild
+nemoclaw stop 2>/dev/null
+nemoclaw <sandbox> destroy --yes
 nemoclaw onboard
 
-# Restore (or use /restore from Claude Code)
-~/nemoclaw-cookbook/scripts/backup-full.sh restore my-assistant
+# 5. Restore
+~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox>
+nemoclaw start
 ```
 
+Replace `<sandbox>` with your sandbox name (run `nemoclaw list` to check).
+
 After rebuild:
-- Re-authenticate: `codex login --device-auth` then launch `claude` (login is forced on first launch)
+- Update the deployment manifest: `~/nemoclaw-cookbook/scripts/write-manifest.sh`
+- Re-authenticate: `codex login --device-auth` then launch `claude` (login forced on first launch)
 - Reinstall the Codex plugin inside Claude Code
-- Restart messaging: `nemoclaw start`
+- Restart messaging: `nemoclaw start` (with tokens exported)
+
+## Claude Code Skills
+
+If you use [Claude Code](https://claude.ai/code) in this repo, these slash commands are available:
+
+| Skill | What it does |
+|-------|-------------|
+| `/setup` | End-to-end deployment — env config, prerequisites, deploy, auth |
+| `/upgrade` | Check versions, update host tooling, rebuild sandbox if needed. Also handles adding integrations (e.g., Brave Search) — just update `.env` and run `/upgrade` |
+| `/backup` | Snapshot workspace, sessions, and skills to local `backups/` directory |
+| `/restore` | Push a local backup to a remote sandbox |
+| `/brev` | Run commands on the remote instance — inspect, manage, transfer files |
+| `/dev` | Debug NemoClaw/OpenClaw/OpenShell issues, read sandbox logs, test upstream branches |
+| `/refresh-patches` | Update patch fragments when upstream NemoClaw changes break them |
+
+Key concepts from the skills:
+- **`/upgrade` distinguishes host-only updates from sandbox rebuilds.** CLI updates (NemoClaw, OpenShell) don't need a rebuild — zero downtime. Image changes (new tools, new sandbox-base) require backup/destroy/rebuild/restore.
+- **Patches are validated before anything is destroyed.** If fragments fail against new upstream, `/upgrade` aborts with your sandbox intact.
+- **Upstream overlap is audited automatically.** `/upgrade` and `/refresh-patches` check if upstream now provides something we previously patched, so we can trim our fragments.
 
 ## Diagnostics
 
@@ -267,6 +304,35 @@ nemoclaw debug                        # Full diagnostic dump
 nemoclaw debug --quick                # Quick health check
 openshell doctor                      # Gateway-level diagnostics
 openshell status                      # Gateway connection status
+~/nemoclaw-cookbook/scripts/verify-deployment.sh   # Cookbook health check (gateway, sandbox, dashboard, tools, manifest)
+```
+
+## Troubleshooting
+
+### Web UI unreachable after rebuild
+The internal OpenShell port forward (18789) can die during sandbox destroy/rebuild. `verify-deployment.sh` detects and auto-restarts it, but if running manually:
+```bash
+openshell forward start 18789 my-assistant
+```
+
+### `nemoclaw` crashes with MODULE_NOT_FOUND after `git pull`
+Upstream NemoClaw added new TypeScript modules but the CLI wasn't rebuilt. Run `setup.sh` (which handles the full rebuild) or:
+```bash
+cd ~/NemoClaw && bash install.sh --non-interactive
+```
+
+### `git pull` fails in ~/NemoClaw with "local changes would be overwritten"
+Our patches modify the Dockerfile and policy YAML. Reset before pulling:
+```bash
+cd ~/NemoClaw && git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml && git pull
+```
+`setup.sh` handles this automatically.
+
+### `setup.sh` ran but sandbox still has old tools/patches
+`nemoclaw onboard` reuses an existing healthy sandbox instead of rebuilding. If upstream or patches changed, `setup.sh` auto-detects the drift and forces a rebuild. You can also force it manually:
+```bash
+export NEMOCLAW_RECREATE_SANDBOX=1
+./setup.sh
 ```
 
 ## How Security Works
@@ -374,6 +440,7 @@ See also: `/brev` skill in Claude Code for the full reference.
 | `~/openclaw-ui-url.txt` | Tokenized web UI URLs |
 | `~/.nemoclaw/credentials.json` | Inference provider credentials (host-side) |
 | `~/.nemoclaw/sandboxes.json` | Sandbox registry |
+| `~/.nemoclaw/cookbook-deployment.json` | Deployment manifest — versions, tools, providers (written by setup/upgrade) |
 | `~/NemoClaw/Dockerfile` or `~/.nemoclaw/source/Dockerfile` | Customized sandbox image (includes Claude Code) |
 | `~/nemoclaw-cookbook/BUILD.md` | How to rebuild from scratch |
 

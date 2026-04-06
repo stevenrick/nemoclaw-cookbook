@@ -22,7 +22,7 @@ Execute commands, transfer files, and manage the NemoClaw instance on Brev — a
 brev ls
 ```
 
-Identify the instance name (typically `srick-nemoclaw`). If no instances are listed, the user needs to create one first — ask them.
+Identify the instance name from the output. If no instances are listed, the user needs to create one first — ask them.
 
 If the instance is STOPPED, start it:
 

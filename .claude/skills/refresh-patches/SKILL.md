@@ -1,112 +1,140 @@
 ---
 name: refresh-patches
-description: Regenerate cookbook patches when upstream NemoClaw changes break them. Use after setup.sh patch step fails or when deliberately upgrading to a newer upstream.
+description: Update cookbook fragments when upstream NemoClaw changes break them or when upstream now provides something we previously patched. Use after apply-patches.sh fails or when upgrading to newer upstream.
 disable-model-invocation: true
 allowed-tools: Bash Read Write Edit Grep Glob
 ---
 
 # Refresh Patches
 
-The cookbook maintains two small unified-diff patches applied on top of upstream NemoClaw:
+The cookbook uses modular fragments (not git patches) to customize upstream NemoClaw. Fragments are applied by `scripts/apply-patches.sh` using text insertion (Dockerfile) and YAML merging (policy).
 
-| Patch | Target file | Purpose |
-|-------|------------|---------|
-| `patches/Dockerfile.patch` | `Dockerfile` | Adds Claude Code, Codex CLI, git HTTPS config |
-| `patches/policy.patch` | `nemoclaw-blueprint/policies/openclaw-sandbox.yaml` | Opens network endpoints for Claude auth, OpenAI/Codex, GitHub |
+| Fragment | Target | Purpose |
+|----------|--------|---------|
+| `patches/fragments/dockerfile-core` | `Dockerfile` | Git HTTPS config, NODE_NO_WARNINGS |
+| `patches/fragments/dockerfile-claude-code` | `Dockerfile` | Claude Code installation |
+| `patches/fragments/dockerfile-codex` | `Dockerfile` | Codex CLI installation |
+| `patches/fragments/policy-core.yaml` | `openclaw-sandbox.yaml` | codeload.github.com for HTTPS git |
+| `patches/fragments/policy-claude-code.yaml` | `openclaw-sandbox.yaml` | Claude auth endpoints + github binary |
+| `patches/fragments/policy-codex.yaml` | `openclaw-sandbox.yaml` | OpenAI section + codex/node binaries |
 
-When upstream NemoClaw changes these files, the patches may fail to apply. This skill walks through diagnosing and regenerating them.
+## Step 1 — Upstream overlap audit (do this FIRST)
 
-## Step 1 — Assess the situation
+Before fixing broken fragments, check if upstream now provides something we add. **Defer to upstream when possible — less is more.**
 
-Run these commands to understand the current state:
-
-```bash
-cd ~/NemoClaw && git log --oneline -5
-cd ~/NemoClaw && git status
-cd ~/NemoClaw && git diff HEAD -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml
-```
-
-Compare the deployed NemoClaw commit against what's recorded in `UPSTREAM.md`:
+Clone or use existing upstream checkout:
 
 ```bash
-git -C ~/NemoClaw log --oneline -1
-cat ~/nemoclaw-cookbook/UPSTREAM.md | head -10
+cd ~/NemoClaw && git fetch origin && git checkout origin/main -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml
 ```
 
-If the deployed commit is ahead of what's in `UPSTREAM.md`, upstream has moved since last validation.
+Check Dockerfile for our additions in upstream:
 
-## Step 2 — Attempt a clean apply
+```bash
+grep -c 'claude.ai/install.sh' Dockerfile        # Claude Code install
+grep -c '@openai/codex' Dockerfile                 # Codex install
+grep -c 'insteadOf.*git@github.com' Dockerfile     # Git HTTPS config
+grep -c 'NODE_NO_WARNINGS' Dockerfile              # Node warnings suppression
+```
 
-Reset the target files and try applying with `--3way`:
+Check policy for our additions in upstream:
+
+```bash
+grep -c 'platform.claude.com' nemoclaw-blueprint/policies/openclaw-sandbox.yaml
+grep -c 'api.openai.com' nemoclaw-blueprint/policies/openclaw-sandbox.yaml
+grep -c 'codeload.github.com' nemoclaw-blueprint/policies/openclaw-sandbox.yaml
+```
+
+**If upstream now provides something we patch:**
+- Remove that content from our fragment — upstream handles it now
+- If the entire fragment is subsumed, delete the fragment file
+- Update `apply-patches.sh` if a fragment was removed entirely
+
+**If upstream doesn't provide it yet:** proceed to Step 2.
+
+Restore working state:
+
+```bash
+cd ~/NemoClaw && git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml
+```
+
+## Step 2 — Diagnose the failure
+
+Run the validation script:
+
+```bash
+~/nemoclaw-cookbook/scripts/validate-patches.sh
+```
+
+This checks:
+1. Dockerfile anchor line exists (`# Set up blueprint for local resolution`)
+2. Policy section anchors exist (claude_code, nvidia, github)
+3. Full apply-patches.sh succeeds
+4. Upstream overlap audit
+
+Common failures:
+- **Anchor line changed:** upstream reworded the comment. Find the new equivalent and update `scripts/apply-patches.sh`.
+- **Policy section renamed/removed:** upstream restructured the YAML. Update the section names in `scripts/merge-policy.py` or the fragment files.
+- **YAML merge error:** upstream changed indentation or structure. Check `scripts/merge-policy.py` output.
+
+## Step 3 — Fix the fragments
+
+### Dockerfile anchor moved
+
+If `# Set up blueprint for local resolution` no longer exists:
+
+1. Read the upstream Dockerfile to find the logical equivalent insertion point
+2. Update the `ANCHOR` variable in `scripts/apply-patches.sh`
+3. Verify: reset, apply, check
+
+### Policy section renamed
+
+If a section like `claude_code` was renamed (e.g., to `anthropic`):
+
+1. Update the section name in the relevant `policy-*.yaml` fragment under `add_endpoints:` or `add_binaries:`
+2. Update `scripts/validate-patches.sh` section anchor checks
+3. Verify: reset, apply, check
+
+### Fragment content needs adjustment
+
+If the logical content of a fragment needs to change:
+
+1. Edit the fragment file in `patches/fragments/`
+2. Reset upstream files and re-run `scripts/apply-patches.sh ~/NemoClaw`
+3. Verify the result makes sense by reading the full file
+
+## Step 4 — Verify round-trip
 
 ```bash
 cd ~/NemoClaw
 git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml
-git apply --3way "${COOKBOOK_DIR}/patches/Dockerfile.patch" 2>&1 || true
-git apply --3way "${COOKBOOK_DIR}/patches/policy.patch" 2>&1 || true
+INSTALL_CLAUDE_CODE=true INSTALL_CODEX=true ~/nemoclaw-cookbook/scripts/apply-patches.sh ~/NemoClaw
 ```
 
-Where `COOKBOOK_DIR` is the path to this cookbook repo (use `!`pwd`` from the project root or find it via the skill directory path).
+Also test partial configurations:
 
-**If both apply cleanly** — the patches are still compatible. Update `UPSTREAM.md` with the current versions and you're done.
-
-**If conflicts appear** — proceed to Step 3.
-
-## Step 3 — Understand what changed upstream
-
-For each file that failed to patch, compare the upstream change with what our patch expects:
-
-1. Read the current upstream version of the file (`git show HEAD:<file>`)
-2. Read the corresponding patch file from `patches/`
-3. Identify what upstream changed in the region our patch targets (the context lines that shifted)
-
-Focus on **why** the patch failed — usually one of:
-- Lines around our insertion point were added/removed/reworded
-- The file was restructured and our target section moved
-- Our patched content was partially adopted upstream (great — we can shrink the patch)
-
-## Step 4 — Regenerate the patch
-
-For each broken patch:
-
-1. Start from a clean upstream file: `git checkout -- <file>`
-2. Manually apply the **intent** of the patch — add the same logical content, adapted to the new file structure
-3. Verify the result makes sense by reading the full file
-4. Generate a new patch: `git diff <file> > patches/<name>.patch`
-5. Reset the file: `git checkout -- <file>`
-6. Verify the new patch applies: `git apply --3way patches/<name>.patch`
-
-### What our patches add (the intent to preserve):
-
-**Dockerfile.patch** adds three `RUN` blocks after the `npm ci --omit=dev` line:
-1. Git config: force HTTPS for GitHub URLs, set SSL CA to OpenShell bundle, copy .gitconfig to sandbox user
-2. Install Claude Code native binary (with symlink at /sandbox/.local/bin/claude) + Codex CLI via npm
-
-**policy.patch** adds:
-1. Claude auth endpoints (platform.claude.com, downloads.claude.ai, raw.githubusercontent.com, storage.googleapis.com) + codex binary to the `claude_code` network policy
-2. A new `openai` network policy block (api.openai.com, auth.openai.com, chatgpt.com, ab.chatgpt.com + codex and node binaries)
-3. codeload.github.com endpoint + claude/codex/node binaries to the `github` network policy
+```bash
+git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml
+INSTALL_CLAUDE_CODE=false INSTALL_CODEX=false ~/nemoclaw-cookbook/scripts/apply-patches.sh ~/NemoClaw
+```
 
 ## Step 5 — Update references
 
-After regenerating patches:
+1. Update `UPSTREAM.md` with current versions and today's date:
 
-1. Update `UPSTREAM.md` in the cookbook repo with the current NemoClaw commit, OpenShell commit, and sandbox-base image tag. These are the versions the patches are now validated against. Update the "Last validated" date to today.
-
-   To get the values:
    ```bash
    git -C ~/NemoClaw log --oneline -1
    git -C ~/OpenShell log --oneline -1
    # sandbox-base tag: WebFetch https://github.com/NVIDIA/NemoClaw/pkgs/container/nemoclaw%2Fsandbox-base
-   # (docker images only shows "latest" locally — use the GitHub packages page for the commit SHA tag)
    ```
 
-2. Run `setup.sh` from scratch (or at least the patch step) to verify end-to-end
-3. Check that the patched Dockerfile still builds: look for syntax errors, moved anchors, etc.
+2. Run `setup.sh` end-to-end (or at least the patch + build step) to verify
+3. Check that the patched Dockerfile builds without errors
 
 ## Principles
 
-- **Preserve intent, not exact lines.** If upstream reworded a comment or reordered sections, adapt. The goal is the same logical additions.
-- **Shrink patches when possible.** If upstream adopted something we were patching in, remove that part of our patch.
-- **Minimize context.** Use 3 lines of context (the default) — more context means more breakage surface.
-- **Test the round-trip.** After regenerating, reset and re-apply to confirm.
+- **Defer to upstream first.** If upstream now provides something we patched, remove it from our fragment. Less is more.
+- **Preserve intent, not exact lines.** If upstream reworded a comment or reordered sections, adapt the anchor or fragment. The goal is the same logical additions.
+- **Shrink fragments when possible.** If upstream adopted something we were adding, remove that part.
+- **Test the round-trip.** After changes, reset and re-apply to confirm. Test all three paths: all tools, no tools, partial.
+- **Fragments are independent.** Changing one fragment should never break another.
