@@ -67,6 +67,7 @@ else
 fi
 if [ -d NemoClaw ]; then
   echo "  NemoClaw exists, pulling latest..."
+  git -C NemoClaw checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null || true
   git -C NemoClaw pull --ff-only || echo "  Warning: pull failed, continuing with existing checkout"
 else
   git clone https://github.com/NVIDIA/NemoClaw
@@ -93,6 +94,18 @@ cd "$HOME/NemoClaw"
 git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null || true
 
 "${SCRIPT_DIR}/scripts/apply-patches.sh" "$HOME/NemoClaw"
+
+# If a sandbox already exists, check if it's current. The manifest records the
+# NemoClaw commit the image was built from. If upstream moved, force a rebuild
+# so the new patches take effect.
+if [ -f "$HOME/.nemoclaw/cookbook-deployment.json" ]; then
+  CURRENT_NC=$(git -C "$HOME/NemoClaw" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+  MANIFEST_NC=$(python3 -c "import json; print(json.load(open('$HOME/.nemoclaw/cookbook-deployment.json')).get('nemoclaw_commit',''))" 2>/dev/null || echo "")
+  if [ "$CURRENT_NC" != "$MANIFEST_NC" ] && [ -n "$MANIFEST_NC" ]; then
+    echo "  Upstream NemoClaw changed ($MANIFEST_NC → $CURRENT_NC) — forcing sandbox rebuild."
+    export NEMOCLAW_RECREATE_SANDBOX=1
+  fi
+fi
 
 echo "=== Step 5: Install NemoClaw ==="
 cd "$HOME/NemoClaw"
@@ -121,42 +134,7 @@ else
 fi
 
 echo "=== Step 8: Write deployment manifest ==="
-SANDBOX_NAME=$(nemoclaw list 2>/dev/null | grep -o '\b[a-z][a-z0-9-]*\b' | head -1 || echo "my-assistant")
-NEMOCLAW_COMMIT=$(git -C "$HOME/NemoClaw" rev-parse --short HEAD 2>/dev/null || echo "unknown")
-OPENSHELL_COMMIT=$(git -C "$HOME/OpenShell" rev-parse --short HEAD 2>/dev/null || echo "unknown")
-COOKBOOK_COMMIT=$(git -C "$SCRIPT_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
-
-# Collect installed tools
-TOOLS="[]"
-if [ "$INSTALL_CLAUDE_CODE" = "true" ]; then
-  if [ "$INSTALL_CODEX" = "true" ]; then
-    TOOLS='["claude-code", "codex"]'
-  else
-    TOOLS='["claude-code"]'
-  fi
-elif [ "$INSTALL_CODEX" = "true" ]; then
-  TOOLS='["codex"]'
-fi
-
-# Collect providers
-PROVIDERS=$(openshell provider list 2>/dev/null | grep -oE '^\S+' | python3 -c "
-import sys, json
-names = [l.strip() for l in sys.stdin if l.strip() and l.strip() not in ('NAME', '---')]
-print(json.dumps(names))
-" 2>/dev/null || echo "[]")
-
-cat > "$HOME/.nemoclaw/cookbook-deployment.json" <<MANIFEST
-{
-  "deployed_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "cookbook_commit": "$COOKBOOK_COMMIT",
-  "nemoclaw_commit": "$NEMOCLAW_COMMIT",
-  "openshell_commit": "$OPENSHELL_COMMIT",
-  "sandbox_name": "$SANDBOX_NAME",
-  "tools": $TOOLS,
-  "providers": $PROVIDERS
-}
-MANIFEST
-echo "  ✓ Deployment manifest written to ~/.nemoclaw/cookbook-deployment.json"
+"${SCRIPT_DIR}/scripts/write-manifest.sh"
 
 echo ""
 echo "=========================================="

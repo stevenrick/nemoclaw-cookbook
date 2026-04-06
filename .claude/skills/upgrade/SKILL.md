@@ -206,17 +206,10 @@ brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/
 
 ## Phase 10 — Write deployment manifest
 
+Use the shared manifest script (same one setup.sh uses):
+
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && source ~/.env && SANDBOX=\$(nemoclaw list 2>/dev/null | grep '*' | awk '{print \$1}') && cat > ~/.nemoclaw/cookbook-deployment.json <<EOF
-{
-  \"deployed_at\": \"\$(date -u +%Y-%m-%dT%H:%M:%SZ)\",
-  \"cookbook_commit\": \"\$(git -C ~/nemoclaw-cookbook rev-parse --short HEAD 2>/dev/null)\",
-  \"nemoclaw_commit\": \"\$(git -C ~/NemoClaw rev-parse --short HEAD 2>/dev/null)\",
-  \"openshell_commit\": \"\$(git -C ~/OpenShell rev-parse --short HEAD 2>/dev/null)\",
-  \"sandbox_name\": \"\$SANDBOX\",
-  \"tools\": [\$([ \"\${INSTALL_CLAUDE_CODE:-true}\" = true ] && printf '\"claude-code\"')\$([ \"\${INSTALL_CLAUDE_CODE:-true}\" = true ] && [ \"\${INSTALL_CODEX:-true}\" = true ] && printf ', ')\$([ \"\${INSTALL_CODEX:-true}\" = true ] && printf '\"codex\"')]
-}
-EOF"
+brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/write-manifest.sh"
 ```
 
 ## Phase 11 — Verify and report
