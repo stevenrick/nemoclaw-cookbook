@@ -123,11 +123,21 @@ fi
 # ── 7. Services ──────────────────────────────────────────────────────
 echo "Services:"
 if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] || [ -n "${DISCORD_BOT_TOKEN:-}" ] || [ -n "${SLACK_BOT_TOKEN:-}" ]; then
-  SERVICES_STATUS=$(nemoclaw status 2>/dev/null)
-  if echo "$SERVICES_STATUS" | grep -qi "running\|bridge"; then
-    pass "Messaging services running"
+  # Check native channels inside sandbox (upstream moved messaging from host bridge to sandbox)
+  CHANNEL_STATUS=$(sandbox_ssh 'openclaw channels list 2>/dev/null | grep -i "configured\|enabled\|ok"' 2>/dev/null)
+  HOST_STATUS=$(nemoclaw status 2>/dev/null)
+  if [ -n "$CHANNEL_STATUS" ]; then
+    pass "Native messaging channels configured"
+  elif echo "$HOST_STATUS" | grep -qi "running\|bridge"; then
+    pass "Host messaging services running"
   else
-    warn "Messaging tokens configured but services may not be running (run 'nemoclaw start')"
+    warn "Messaging tokens configured but channels may not be active (run 'nemoclaw start')"
+  fi
+  # Check cloudflared tunnel (needed for Telegram webhooks)
+  if echo "$HOST_STATUS" | grep -qi "cloudflared"; then
+    pass "Cloudflare tunnel running"
+  else
+    warn "Cloudflare tunnel not detected (Telegram webhooks need it — run 'nemoclaw start')"
   fi
 else
   pass "No messaging tokens configured (services not needed)"

@@ -212,17 +212,16 @@ PR template requires: Summary, Related Issue, Changes, Type of Change, Testing, 
 
 ## Known issues
 
-### Telegram bridge timeout with long-running tasks
+### Telegram messaging architecture
 
-The host-side Telegram bridge (`scripts/telegram-bridge.js`) is a synchronous shim: it SSHes into the sandbox, runs `openclaw agent --local -m <message>`, captures stdout, and sends it to Telegram. The SSH process has a 120-second timeout.
+As of NemoClaw `4135413`, Telegram runs natively inside OpenClaw via the gateway delivery queue — no host-side bridge. The old `scripts/telegram-bridge.js` shim (which had a 120-second SSH timeout) was removed upstream.
 
-Coding agent tasks (Claude Code, Codex) routinely take 5-10+ minutes, causing:
-1. Bridge SSH process times out → response never sent to Telegram
-2. Agent continues running inside sandbox (visible in Web UI)
-3. Follow-up messages create new SSH invocations with same session ID
-4. Agent reads prior session history but doesn't know it's on Telegram
+The native channel path is async with no timeout, so long-running coding agent tasks (Claude Code, Codex) no longer cause dropped responses.
 
-The proper fix is the native channel path: `openclaw agent --deliver --channel telegram` through the gateway delivery queue. This is async with no timeout. But it requires the gateway pairing fix + runtime config overrides (PRs #928 + #1081) to land first. The bridge is an interim workaround that will be removed when native channels work.
+Configuration is baked into the sandbox image at build time via `NEMOCLAW_MESSAGING_CHANNELS_B64`. The `openclaw doctor` output shows channel status: `Telegram: ok (@BotName)`. If Telegram isn't working, check:
+1. `openclaw channels list` inside the sandbox — is it configured and enabled?
+2. `nemoclaw status` on the host — is the cloudflared tunnel running? (Telegram webhooks need it)
+3. The `ALLOWED_CHAT_IDS` allowlist — group messages are dropped if the sender isn't listed
 
 ### Dashboard unreachable after rebuild
 The internal port forward (18789) can die during sandbox destroy/rebuild. `verify-deployment.sh` detects and auto-restarts it. To fix manually: `openshell forward start 18789 <sandbox>`.
