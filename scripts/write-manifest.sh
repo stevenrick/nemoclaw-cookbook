@@ -10,6 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COOKBOOK_DIR="$(dirname "$SCRIPT_DIR")"
 
 # Source env for tool flags
+# shellcheck source=/dev/null
 [ -f "$HOME/.env" ] && source "$HOME/.env"
 
 SANDBOX_NAME=$(nemoclaw list 2>/dev/null | awk '/\*/{print $1}' | head -1 || echo "unknown")
