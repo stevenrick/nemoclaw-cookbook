@@ -88,14 +88,14 @@ fi
 echo "=== Inference ==="
 echo "NEMOCLAW_PROVIDER: ${NEMOCLAW_PROVIDER:-not set (default: NVIDIA cloud)}"
 echo "NEMOCLAW_MODEL: ${NEMOCLAW_MODEL:-not set (default: nemotron-3-super-120b)}"
-echo "OPENAI_API_KEY: ${OPENAI_API_KEY:+SET}${OPENAI_API_KEY:-not set}"
-echo "ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:+SET}${ANTHROPIC_API_KEY:-not set}"
+echo "OPENAI_API_KEY: $([ -n "${OPENAI_API_KEY:-}" ] && echo SET || echo 'not set')"
+echo "ANTHROPIC_API_KEY: $([ -n "${ANTHROPIC_API_KEY:-}" ] && echo SET || echo 'not set')"
 echo "=== Messaging ==="
-echo "TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:+SET}${TELEGRAM_BOT_TOKEN:-not set}"
-echo "DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:+SET}${DISCORD_BOT_TOKEN:-not set}"
-echo "SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:+SET}${SLACK_BOT_TOKEN:-not set}"
+echo "TELEGRAM_BOT_TOKEN: $([ -n "${TELEGRAM_BOT_TOKEN:-}" ] && echo SET || echo 'not set')"
+echo "DISCORD_BOT_TOKEN: $([ -n "${DISCORD_BOT_TOKEN:-}" ] && echo SET || echo 'not set')"
+echo "SLACK_BOT_TOKEN: $([ -n "${SLACK_BOT_TOKEN:-}" ] && echo SET || echo 'not set')"
 echo "=== Integrations ==="
-echo "BRAVE_API_KEY: ${BRAVE_API_KEY:+SET}${BRAVE_API_KEY:-not set}"
+echo "BRAVE_API_KEY: $([ -n "${BRAVE_API_KEY:-}" ] && echo SET || echo 'not set')"
 ```
 
 If `NVIDIA_API_KEY` is missing, the placeholder, or not set, ask the user to set it and wait. **Never display the actual key value.**
