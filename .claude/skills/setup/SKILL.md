@@ -217,6 +217,21 @@ brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev
 
 If `PLUGIN_MISSING`, tell the user the Codex plugin install didn't complete and ask them to re-run the `/plugin` commands inside Claude Code's TUI.
 
+## Phase 7 — Record upstream versions
+
+After a successful deployment, capture the exact versions that were deployed and update `UPSTREAM.md` in the cookbook repo. This is the "last known good" record for the community.
+
+```bash
+# On the Brev instance — capture deployed versions
+brev exec <instance> "git -C ~/NemoClaw log --oneline -1"
+brev exec <instance> "git -C ~/OpenShell log --oneline -1"
+brev exec <instance> "docker images ghcr.io/nvidia/nemoclaw/sandbox-base --format '{{.Tag}} {{.Digest}}'"
+```
+
+Update `UPSTREAM.md` in the cookbook repo with the commit SHAs, descriptions, and today's date. The sandbox-base tag is a NemoClaw commit SHA — record it as-is from the Docker image tag.
+
+If the deployed versions differ from what's currently in `UPSTREAM.md`, note what changed in the commit message when the user commits (e.g., "docs: update UPSTREAM.md — validated against NemoClaw c99e3e8").
+
 ## Principles
 
 - **Never leak secrets.** Never print, log, display, or include in output the actual values of API keys, tokens, or credentials. Only report SET / NOT SET / PLACEHOLDER. Use `sed 's/=.*/=***/'` when listing env vars. Never `cat .env` or `echo $API_KEY`.

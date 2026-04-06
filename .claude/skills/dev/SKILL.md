@@ -67,6 +67,27 @@ If pairing fails, all `openclaw` CLI commands that need the gateway will error w
 
 ## Investigating issues
 
+### Step 0 — Check upstream drift
+
+Before diving into symptoms, check whether the deployed instance is running the same upstream versions the cookbook was last validated against:
+
+```bash
+# Read the last-validated versions from the cookbook
+cat <cookbook-dir>/UPSTREAM.md
+```
+
+Then compare against what's actually deployed:
+
+```bash
+brev exec <instance> "git -C ~/NemoClaw log --oneline -1"
+brev exec <instance> "git -C ~/OpenShell log --oneline -1"
+brev exec <instance> "docker images ghcr.io/nvidia/nemoclaw/sandbox-base --format '{{.Tag}}'"
+```
+
+If the deployed versions are ahead of what's in `UPSTREAM.md`, upstream has moved since last validation. This doesn't mean the issue is caused by drift, but it's important context — note any discrepancy and factor it into diagnosis.
+
+If the deployed versions are *behind* `UPSTREAM.md`, the instance is running older code than what was last validated. Consider pulling latest and redeploying.
+
 ### Step 1 — Check the basics
 
 ```bash
