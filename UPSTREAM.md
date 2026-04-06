@@ -1,12 +1,12 @@
 # Upstream Compatibility
 
-Last validated end-to-end deployment: **2026-03-30**
+Last validated end-to-end deployment: **2026-04-06**
 
 | Component | Commit / Tag | Description | Link |
 |-----------|-------------|-------------|------|
-| NemoClaw | `c99e3e8` | `fix(onboard): reject sandbox names starting with a digit and allow retry` | [commit](https://github.com/NVIDIA/NemoClaw/commit/c99e3e8) |
-| OpenShell | `491c5d81` | `fix(bootstrap,server): persist sandbox state across gateway stop/start cycles` | [commit](https://github.com/NVIDIA/OpenShell/commit/491c5d81) |
-| sandbox-base | `c269f38` | Image tag (NemoClaw commit SHA) pulled at deploy time | [package](https://github.com/NVIDIA/NemoClaw/pkgs/container/nemoclaw%2Fsandbox-base) |
+| NemoClaw | `364969d` | `fix: clear stale SSH host keys after gateway restart (#1087)` | [commit](https://github.com/NVIDIA/NemoClaw/commit/364969d) |
+| OpenShell | `13262e1c` | `feat(cli): add sandbox exec subcommand with TTY support (#752)` | [commit](https://github.com/NVIDIA/OpenShell/commit/13262e1c) |
+| sandbox-base | `f7d4121` | Image tag (NemoClaw commit SHA) pulled at deploy time | [package](https://github.com/NVIDIA/NemoClaw/pkgs/container/nemoclaw%2Fsandbox-base) |
 
 ## What this means
 
@@ -32,7 +32,9 @@ After a successful end-to-end deployment against newer upstream:
 # On the Brev instance:
 git -C ~/NemoClaw log --oneline -1
 git -C ~/OpenShell log --oneline -1
-docker images ghcr.io/nvidia/nemoclaw/sandbox-base --format '{{.Tag}}'
+# sandbox-base tag: look up the most recent commit SHA tag at
+# https://github.com/NVIDIA/NemoClaw/pkgs/container/nemoclaw%2Fsandbox-base
+# (docker images only shows "latest" locally)
 ```
 
 Update the table above with the new values and today's date.

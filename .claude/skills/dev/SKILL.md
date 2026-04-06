@@ -81,7 +81,8 @@ Then compare against what's actually deployed:
 ```bash
 brev exec <instance> "git -C ~/NemoClaw log --oneline -1"
 brev exec <instance> "git -C ~/OpenShell log --oneline -1"
-brev exec <instance> "docker images ghcr.io/nvidia/nemoclaw/sandbox-base --format '{{.Tag}}'"
+# sandbox-base tag: WebFetch https://github.com/NVIDIA/NemoClaw/pkgs/container/nemoclaw%2Fsandbox-base
+# (docker images only shows "latest" locally — use the GitHub packages page for the commit SHA tag)
 ```
 
 If the deployed versions are ahead of what's in `UPSTREAM.md`, upstream has moved since last validation. This doesn't mean the issue is caused by drift, but it's important context — note any discrepancy and factor it into diagnosis.

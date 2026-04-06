@@ -97,7 +97,8 @@ After regenerating patches:
    ```bash
    git -C ~/NemoClaw log --oneline -1
    git -C ~/OpenShell log --oneline -1
-   docker images ghcr.io/nvidia/nemoclaw/sandbox-base --format '{{.Tag}}'
+   # sandbox-base tag: WebFetch https://github.com/NVIDIA/NemoClaw/pkgs/container/nemoclaw%2Fsandbox-base
+   # (docker images only shows "latest" locally — use the GitHub packages page for the commit SHA tag)
    ```
 
 2. Run `setup.sh` from scratch (or at least the patch step) to verify end-to-end

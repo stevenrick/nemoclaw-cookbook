@@ -225,10 +225,10 @@ After a successful deployment, capture the exact versions that were deployed and
 # On the Brev instance — capture deployed versions
 brev exec <instance> "git -C ~/NemoClaw log --oneline -1"
 brev exec <instance> "git -C ~/OpenShell log --oneline -1"
-brev exec <instance> "docker images ghcr.io/nvidia/nemoclaw/sandbox-base --format '{{.Tag}} {{.Digest}}'"
+WebFetch https://github.com/NVIDIA/NemoClaw/pkgs/container/nemoclaw%2Fsandbox-base — get the most recent commit SHA tag
 ```
 
-Update `UPSTREAM.md` in the cookbook repo with the commit SHAs, descriptions, and today's date. The sandbox-base tag is a NemoClaw commit SHA — record it as-is from the Docker image tag.
+Update `UPSTREAM.md` in the cookbook repo with the commit SHAs, descriptions, and today's date. The sandbox-base tag is a NemoClaw commit SHA — look it up from the GitHub packages page, not from `docker images` (which only shows `latest` locally).
 
 If the deployed versions differ from what's currently in `UPSTREAM.md`, note what changed in the commit message when the user commits (e.g., "docs: update UPSTREAM.md — validated against NemoClaw c99e3e8").
 
