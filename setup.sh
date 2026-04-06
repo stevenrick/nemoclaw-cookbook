@@ -82,7 +82,7 @@ echo "=== Step 3: Pull latest sandbox base image ==="
 docker pull ghcr.io/nvidia/nemoclaw/sandbox-base:latest
 
 echo "=== Step 4: Apply patches ==="
-# Patches last generated against NemoClaw Dockerfile index 2c8e594, policy index 39e93f5
+# See UPSTREAM.md for the versions patches were last validated against.
 # If patches fail, see BUILD.md "Refreshing Patches" or run: claude /refresh-patches
 cd "$HOME/NemoClaw"
 git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null || true

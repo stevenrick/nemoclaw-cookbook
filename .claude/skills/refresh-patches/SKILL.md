@@ -26,14 +26,14 @@ cd ~/NemoClaw && git status
 cd ~/NemoClaw && git diff HEAD -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml
 ```
 
-Check the blob index references in `setup.sh` (the "Patches last generated against" comment) and compare them to the current upstream file hashes:
+Compare the deployed NemoClaw commit against what's recorded in `UPSTREAM.md`:
 
 ```bash
-git hash-object ~/NemoClaw/Dockerfile
-git hash-object ~/NemoClaw/nemoclaw-blueprint/policies/openclaw-sandbox.yaml
+git -C ~/NemoClaw log --oneline -1
+cat ~/nemoclaw-cookbook/UPSTREAM.md | head -10
 ```
 
-If the hashes differ from what's in `setup.sh`, upstream has changed these files.
+If the deployed commit is ahead of what's in `UPSTREAM.md`, upstream has moved since last validation.
 
 ## Step 2 — Attempt a clean apply
 
@@ -48,7 +48,7 @@ git apply --3way "${COOKBOOK_DIR}/patches/policy.patch" 2>&1 || true
 
 Where `COOKBOOK_DIR` is the path to this cookbook repo (use `!`pwd`` from the project root or find it via the skill directory path).
 
-**If both apply cleanly** — the patches are still compatible. Update the blob index comment in `setup.sh` and you're done.
+**If both apply cleanly** — the patches are still compatible. Update `UPSTREAM.md` with the current versions and you're done.
 
 **If conflicts appear** — proceed to Step 3.
 
@@ -91,10 +91,15 @@ For each broken patch:
 
 After regenerating patches:
 
-1. Update the blob index comment in `setup.sh`:
+1. Update `UPSTREAM.md` in the cookbook repo with the current NemoClaw commit, OpenShell commit, and sandbox-base image tag. These are the versions the patches are now validated against. Update the "Last validated" date to today.
+
+   To get the values:
    ```bash
-   # Patches last generated against NemoClaw Dockerfile index <new-hash>, policy index <new-hash>
+   git -C ~/NemoClaw log --oneline -1
+   git -C ~/OpenShell log --oneline -1
+   docker images ghcr.io/nvidia/nemoclaw/sandbox-base --format '{{.Tag}}'
    ```
+
 2. Run `setup.sh` from scratch (or at least the patch step) to verify end-to-end
 3. Check that the patched Dockerfile still builds: look for syntax errors, moved anchors, etc.
 
