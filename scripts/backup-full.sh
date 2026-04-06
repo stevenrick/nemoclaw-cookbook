@@ -113,9 +113,24 @@ do_restore() {
   local src="${BACKUP_BASE}/${ts}"
 
   # Restore chat sessions if they exist in the backup
+  # Note: sessions.json is the registry. OpenClaw's gateway renames transcript .jsonl
+  # files that aren't in the registry with .reset. on startup. Since the gateway is
+  # already running when we restore, we upload sessions, then fix up any .reset.
+  # renames and merge the restored registry into the active one.
   if [ -d "${src}/sessions" ]; then
     info "Restoring chat sessions..."
     if openshell sandbox upload "$sandbox" "${src}/sessions/" "${SESSIONS_PATH}/" 2>/dev/null; then
+      # Fix .reset. renames: rename them back so the gateway can see them
+      ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+        -o "ProxyCommand=$HOME/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name $sandbox" \
+        "sandbox@openshell-$sandbox" '
+          cd /sandbox/.openclaw-data/agents/main/sessions 2>/dev/null || exit 0
+          for f in *.reset.*; do
+            [ -f "$f" ] || continue
+            orig="${f%%.reset.*}"
+            mv "$f" "$orig" 2>/dev/null && echo "  Recovered: $orig"
+          done
+        ' 2>/dev/null || true
       info "Chat sessions restored."
     else
       warn "Failed to restore chat sessions (sandbox may still be starting)"
