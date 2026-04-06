@@ -56,99 +56,28 @@ docker pull ghcr.io/nvidia/nemoclaw/sandbox-base:latest
 
 ## Step 5: Bake Claude Code into the sandbox image (optional)
 
-In `~/NemoClaw/Dockerfile`, find:
+The cookbook uses modular patch fragments in `patches/fragments/` instead of monolithic patch files. The `scripts/apply-patches.sh` script reads `INSTALL_CLAUDE_CODE` and `INSTALL_CODEX` from `.env` (both default to `true`) and applies only the relevant fragments:
 
-```dockerfile
-# Set up blueprint for local resolution
+| Fragment | Applied when | What it does |
+|----------|-------------|--------------|
+| `dockerfile-core` | Always | Git HTTPS/SSL config for sandbox |
+| `dockerfile-claude-code` | `INSTALL_CLAUDE_CODE=true` | Claude Code binary install + sandbox symlink |
+| `dockerfile-codex` | `INSTALL_CODEX=true` | Codex CLI via npm |
+| `policy-core.yaml` | Always | GitHub policy extensions (codeload.github.com) |
+| `policy-claude-code.yaml` | `INSTALL_CLAUDE_CODE=true` | Claude auth endpoints, claude binary in policies |
+| `policy-codex.yaml` | `INSTALL_CODEX=true` | OpenAI policy block, codex/node binaries |
+
+To apply:
+
+```bash
+scripts/apply-patches.sh ~/NemoClaw
 ```
 
-Add this line immediately before it:
+To skip Codex (for example), set `INSTALL_CODEX=false` in `.env` before running the script.
 
-```dockerfile
-# Force git to use HTTPS instead of SSH (sandbox has no ssh)
-RUN git config --global url.'https://github.com/'.insteadOf 'git@github.com:' \
-    && git config --global --add url.'https://github.com/'.insteadOf 'ssh://git@github.com/' \
-    && git config --global http.sslCAInfo /etc/openshell-tls/ca-bundle.pem \
-    && cp /root/.gitconfig /sandbox/.gitconfig && chown 1000:1000 /sandbox/.gitconfig
+The Dockerfile fragments add git HTTPS config (so plugin/marketplace cloning works inside the sandbox), the Claude Code binary install (resolving the symlink chain from `/root/.local/` to `/usr/local/bin/`), and the Codex CLI. The policy fragments open the network endpoints needed for Claude Code's login flow, OpenAI auth, and GitHub release downloads — without them you'd need to manually approve endpoints in `openshell term`.
 
-# Install Claude Code via native installer and Codex CLI via npm
-RUN curl -fsSL https://claude.ai/install.sh | bash \
-    && cp "$(readlink -f /root/.local/bin/claude)" /usr/local/bin/claude \
-    && chmod 755 /usr/local/bin/claude \
-    && npm install -g @openai/codex@latest
-```
-
-The native installer puts the binary in `/root/.local/` which the sandbox user can't access. The `cp` + `readlink -f` resolves the symlink chain and copies the actual binary to `/usr/local/bin/`.
-
-The git HTTPS config ensures plugin and marketplace cloning works inside the sandbox (git is redirected from SSH to HTTPS). The Codex plugin for Claude Code is installed manually after first connect (see Step 8).
-
-Also add Claude Code's SSO/auth endpoints to the network policy so Claude Code's login flow works
-without manual approval. In `~/NemoClaw/nemoclaw-blueprint/policies/openclaw-sandbox.yaml`,
-find the `claude_code` policy's `sentry.io` entry and add these three endpoints after it
-(before the `binaries:` line):
-
-```yaml
-      - host: platform.claude.com
-        port: 443
-        access: full
-      - host: downloads.claude.ai
-        port: 443
-        access: full
-      - host: raw.githubusercontent.com
-        port: 443
-        access: full
-```
-
-Also add `/usr/local/bin/codex` to the `binaries:` list alongside claude.
-
-Then add an `openai` policy block after the `claude_code` block (before `nvidia:`):
-
-```yaml
-  openai:
-    name: openai
-    endpoints:
-      - host: api.openai.com
-        port: 443
-        protocol: rest
-        enforcement: enforce
-        tls: terminate
-        rules:
-          - allow: { method: GET, path: "/**" }
-          - allow: { method: POST, path: "/**" }
-      - host: auth.openai.com
-        port: 443
-        access: full
-      - host: chatgpt.com
-        port: 443
-        access: full
-      - host: ab.chatgpt.com
-        port: 443
-        access: full
-    binaries:
-      - { path: /usr/local/bin/codex }
-```
-
-Also update the existing `github` policy — add `codeload.github.com` to endpoints and
-`claude`/`codex`/`node` to binaries:
-
-```yaml
-      - host: codeload.github.com
-        port: 443
-        access: full
-    binaries:
-      ...existing entries...
-      - { path: /usr/local/bin/claude }
-      - { path: /usr/local/bin/codex }
-      - { path: /usr/local/bin/node }
-```
-
-OpenShell policies are binary-scoped — Codex runs under `node`, so the GitHub policy
-needs to know that `node`, `claude`, and `codex` are allowed to reach GitHub endpoints.
-`codeload.github.com` is used for downloading release tarballs (e.g. plugin installs).
-
-Without these policy changes, you'd need to manually approve endpoints in `openshell term`.
-
-Both changes survive all future rebuilds.
+All changes survive future rebuilds.
 
 ## Step 6: Install NemoClaw
 
@@ -169,6 +98,8 @@ source ~/.bashrc
 ```
 
 ## Step 7: Verify
+
+> **Sandbox name:** Examples use `my-assistant`, the default. Run `nemoclaw list` to see your actual sandbox name and substitute it in all commands below.
 
 ```bash
 openshell --version
@@ -285,21 +216,21 @@ Enables web search capabilities via the Brave Search API.
    echo 'BRAVE_API_KEY=BSA-your-key-here' >> .env
    ```
 3. If this is a fresh install, run `./setup.sh` — it handles everything.
-4. If you already have a running sandbox, use Claude Code: `claude /add-integration`
-   This backs up your workspace, creates the provider, recreates the sandbox, and restores.
+4. If you already have a running sandbox, run `/upgrade` from Claude Code.
+   This backs up your workspace, recreates the sandbox with updated config, and restores.
 
 ### Adding other services
 
 To add a new API integration:
 
 1. Add the API key to `.env` in the cookbook repo
-2. Add a network policy block to `patches/policy.patch` for the service's endpoints
+2. Add a policy fragment to `patches/fragments/` for the service's endpoints
 3. Update `.env.example` with the new key
-5. Run `/add-integration` to apply to a running sandbox
+4. Run `/upgrade` to apply to a running sandbox
 
 ### Why recreation is needed
 
-OpenShell providers (credential bundles injected into the sandbox) can only be attached at sandbox creation time. Adding a new provider to an existing sandbox requires destroying and recreating it. The `/add-integration` skill automates the backup/restore around this constraint.
+OpenShell providers (credential bundles injected into the sandbox) can only be attached at sandbox creation time. Adding a new provider to an existing sandbox requires destroying and recreating it. The `/upgrade` skill automates the backup/restore around this constraint.
 
 ## Rebuilding the sandbox
 
@@ -330,7 +261,7 @@ After rebuild:
 
 ## Refreshing Patches After Upstream Updates
 
-The patches in `patches/` are unified diffs generated against a specific version of NemoClaw. When NVIDIA updates the upstream files, the patches may fail to apply.
+The patch fragments in `patches/fragments/` are unified diffs generated against a specific version of NemoClaw. When NVIDIA updates the upstream files, some fragments may fail to apply.
 
 ### Quick path (with Claude Code)
 
@@ -338,7 +269,7 @@ The patches in `patches/` are unified diffs generated against a specific version
 claude /refresh-patches
 ```
 
-This skill walks Claude through diagnosing the conflict, understanding what changed upstream, and regenerating the patches while preserving their intent.
+This skill walks Claude through diagnosing the conflict, understanding what changed upstream, and regenerating the fragments while preserving their intent.
 
 ### Manual path
 
@@ -349,30 +280,24 @@ This skill walks Claude through diagnosing the conflict, understanding what chan
    git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml
    ```
 
-2. Try applying with 3-way merge:
+2. Try applying fragments:
    ```bash
-   git apply --3way /path/to/nemoclaw-cookbook/patches/Dockerfile.patch
-   git apply --3way /path/to/nemoclaw-cookbook/patches/policy.patch
+   /path/to/nemoclaw-cookbook/scripts/apply-patches.sh ~/NemoClaw
    ```
 
-3. If conflicts appear, resolve them in the affected files, then regenerate:
-   ```bash
-   git diff Dockerfile > /path/to/nemoclaw-cookbook/patches/Dockerfile.patch
-   git diff nemoclaw-blueprint/policies/openclaw-sandbox.yaml > /path/to/nemoclaw-cookbook/patches/policy.patch
-   ```
+3. If any fragments fail, inspect the failing fragment, resolve against the current upstream file, and regenerate the fragment diff.
 
 4. Reset and verify the round-trip:
    ```bash
    git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml
-   git apply --3way /path/to/nemoclaw-cookbook/patches/Dockerfile.patch
-   git apply --3way /path/to/nemoclaw-cookbook/patches/policy.patch
+   /path/to/nemoclaw-cookbook/scripts/apply-patches.sh ~/NemoClaw
    ```
 
 5. Update `UPSTREAM.md` with the current NemoClaw and OpenShell commits and sandbox-base image tag.
 
 ### What to preserve
 
-The patches add these logical pieces — if upstream restructures things, adapt the placement but keep the intent:
+The fragments add these logical pieces — if upstream restructures things, adapt the placement but keep the intent:
 
 - **Dockerfile**: git HTTPS config, Claude Code binary install (with sandbox user symlink), Codex CLI install, sandbox user ownership fixes
 - **Policy**: Claude auth endpoints, OpenAI policy block (with node binary), GitHub policy extensions (codeload.github.com + binaries)
@@ -381,13 +306,13 @@ See the `/refresh-patches` skill for the full breakdown.
 
 ### Automated validation
 
-To check if patches still apply against the latest upstream (without modifying anything):
+To check if fragments still apply against the latest upstream (without modifying anything):
 
 ```bash
 ./scripts/validate-patches.sh
 ```
 
-This clones upstream into a temp directory, tests each patch with `--check --3way`, and reports pass/fail. Safe to run in CI on a schedule to catch upstream drift early.
+This clones upstream into a temp directory, tests each fragment, and reports pass/fail. Safe to run in CI on a schedule to catch upstream drift early.
 
 ## Troubleshooting
 
@@ -411,6 +336,8 @@ export PATH="$HOME/.local/bin:$PATH"
 | `NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1` | Accept third-party software notice | Install / onboard |
 | `NEMOCLAW_SANDBOX_NAME` | Custom sandbox name (default: `my-assistant`) | Install / onboard |
 | `NEMOCLAW_RECREATE_SANDBOX=1` | Force-recreate existing sandbox | Onboard |
+| `INSTALL_CLAUDE_CODE` | Install Claude Code in sandbox (default: `true`) | apply-patches.sh |
+| `INSTALL_CODEX` | Install Codex CLI in sandbox (default: `true`) | apply-patches.sh |
 
 ### Inference
 
@@ -469,6 +396,7 @@ Available presets: `pypi`, `npm`, `telegram`, `discord`, `slack`, `brave`, `dock
 | Sandbox registry | `~/.nemoclaw/sandboxes.json` |
 | OpenShell gateway | Docker container (K3s cluster) |
 | Sandbox image | Inside gateway (~2.4 GB) |
+| Patch fragments | `nemoclaw-cookbook/patches/fragments/` |
 | Dockerfile customizations | `~/NemoClaw/Dockerfile` or `~/.nemoclaw/source/Dockerfile` |
 
 ## Tearing Down

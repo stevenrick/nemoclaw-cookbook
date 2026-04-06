@@ -96,6 +96,9 @@ echo "DISCORD_BOT_TOKEN: $([ -n "${DISCORD_BOT_TOKEN:-}" ] && echo SET || echo '
 echo "SLACK_BOT_TOKEN: $([ -n "${SLACK_BOT_TOKEN:-}" ] && echo SET || echo 'not set')"
 echo "=== Integrations ==="
 echo "BRAVE_API_KEY: $([ -n "${BRAVE_API_KEY:-}" ] && echo SET || echo 'not set')"
+echo "=== Sandbox Tools ==="
+echo "INSTALL_CLAUDE_CODE: ${INSTALL_CLAUDE_CODE:-true}"
+echo "INSTALL_CODEX: ${INSTALL_CODEX:-true}"
 ```
 
 If `NVIDIA_API_KEY` is missing, the placeholder, or not set, ask the user to set it and wait. **Never display the actual key value.**
@@ -107,6 +110,7 @@ Confirm what's configured:
 > - Inference: [provider/model or defaults]
 > - Messaging: [which are configured / none — add later]
 > - Search: [Brave configured / not configured]
+> - Sandbox tools: [Claude Code, Codex / none]
 >
 > Want me to proceed?
 
@@ -165,14 +169,16 @@ The URL from `openclaw-ui-url.txt` will have a hostname like `127.0.0.1:18789` a
 
 ## Phase 6 — Authenticate
 
-Do everything the agent can automate first, then hand off to the human for interactive steps.
+Do everything the agent can automate first, then hand off to the human for interactive steps. Skip tools that aren't installed (check `INSTALL_CLAUDE_CODE` and `INSTALL_CODEX` from `.env`).
 
-### Step 1: Codex (agent can relay)
+**Important:** The sandbox name comes from Phase 4's `nemoclaw list` output. Use the actual discovered name, not a hardcoded default.
+
+### Step 1: Codex (agent can relay — skip if INSTALL_CODEX=false)
 
 Codex uses device-code auth that works non-interactively:
 
 ```bash
-brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name my-assistant' sandbox@openshell-my-assistant 'codex login --device-auth 2>&1'"
+brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name <sandbox>' sandbox@openshell-<sandbox> 'codex login --device-auth 2>&1'"
 ```
 
 This prints a URL and a one-time code. Relay both to the user:
@@ -183,39 +189,41 @@ This prints a URL and a one-time code. Relay both to the user:
 
 The command will print "login successful" once the user completes auth — no need to ask for confirmation.
 
-### Step 2: Claude Code + Codex plugin for Claude Code (interactive — requires human)
+### Step 2: Claude Code (interactive — requires human — skip if INSTALL_CLAUDE_CODE=false)
 
-Claude Code uses a full TUI for auth, and the Codex plugin is installed inside Claude Code's TUI. Combine these into one interactive session. Tell the user:
+Claude Code uses a full TUI for auth. If Codex is also installed, the Codex plugin should be set up inside Claude Code's TUI. Tell the user:
 
-> Last step — authenticate Claude Code and install the Codex plugin (inside Claude Code).
-> Run these commands:
+> Authenticate Claude Code (interactive — requires brev shell):
 >
 > ```
 > brev shell <instance>
-> nemoclaw my-assistant connect
+> nemoclaw <sandbox> connect
 > claude
 > ```
 >
-> Inside Claude Code's TUI:
-> 1. Follow the login prompts (it will give you a URL to open in your browser)
-> 2. Once logged in, install the Codex plugin for Claude Code:
->    ```
->    /plugin marketplace add openai/codex-plugin-cc
->    /plugin install codex@openai-codex
->    /reload-plugins
->    /codex:setup
->    ```
+> Follow the login prompts (it will give you a URL to open in your browser).
+
+If both Claude Code and Codex are installed, also instruct:
+
+> Once logged into Claude Code, install the Codex plugin:
+> ```
+> /plugin marketplace add openai/codex-plugin-cc
+> /plugin install codex@openai-codex
+> /reload-plugins
+> /codex:setup
+> ```
+
 > Let me know when you're done.
 
 ### Verify
 
-After the user confirms, verify binaries and plugin state:
+After the user confirms, verify installed tools:
 
 ```bash
-brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name my-assistant' sandbox@openshell-my-assistant 'claude --version && codex --version 2>/dev/null && ls /sandbox/.openclaw-data/plugins/*/codex* 2>/dev/null && echo PLUGIN_OK || echo PLUGIN_MISSING'"
+brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name <sandbox>' sandbox@openshell-<sandbox> 'claude --version 2>/dev/null; codex --version 2>/dev/null; ls /sandbox/.openclaw-data/plugins/*/codex* 2>/dev/null && echo PLUGIN_OK || echo PLUGIN_MISSING'"
 ```
 
-If `PLUGIN_MISSING`, tell the user the Codex plugin install didn't complete and ask them to re-run the `/plugin` commands inside Claude Code's TUI.
+Only check for tools that were installed. If `PLUGIN_MISSING` and both tools are installed, tell the user to re-run the `/plugin` commands inside Claude Code's TUI.
 
 ## Phase 7 — Record upstream versions
 

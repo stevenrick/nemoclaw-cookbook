@@ -161,7 +161,7 @@ brev exec <instance> "export PATH=... && nemoclaw my-assistant destroy --yes"
 brev exec <instance> "cd ~/NemoClaw && git fetch origin <branch-name> && git checkout <branch-name>"
 
 # 3. Reset to clean state and apply cookbook patches
-brev exec <instance> "cd ~/NemoClaw && git checkout -- . && git apply --3way ~/nemoclaw-cookbook/patches/Dockerfile.patch && git apply --3way ~/nemoclaw-cookbook/patches/policy.patch"
+brev exec <instance> "cd ~/NemoClaw && git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml && ~/nemoclaw-cookbook/scripts/apply-patches.sh ~/NemoClaw"
 
 # 4. Rebuild
 brev exec <instance> "export PATH=... && source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 && cd ~/NemoClaw && nemoclaw onboard"

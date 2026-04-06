@@ -1,0 +1,264 @@
+---
+name: upgrade
+description: Upgrade a running NemoClaw deployment — checks versions, updates host tooling, and conditionally rebuilds the sandbox. Use when you want to pull latest upstream, add/remove tools, or apply .env changes.
+allowed-tools: Bash Read Write Edit Grep Glob AskUserQuestion WebFetch
+---
+
+# NemoClaw Upgrade
+
+Upgrade a running NemoClaw deployment to latest upstream, apply .env changes, or add/remove tools. Single entry point for all post-setup changes.
+
+**Important:** The sandbox name is NOT always `my-assistant`. Always look it up via `nemoclaw list` or the deployment manifest. Use the discovered name throughout.
+
+## Phase 1 — Discover current state
+
+Find the Brev instance:
+
+```bash
+brev ls
+```
+
+If no instances, abort. If multiple, ask the user which one. If exactly one, confirm.
+
+Read the deployment manifest and discover sandbox name:
+
+```bash
+brev exec <instance> "cat ~/.nemoclaw/cookbook-deployment.json 2>/dev/null"
+brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && nemoclaw list 2>/dev/null"
+```
+
+Use the sandbox name from `nemoclaw list` (the one marked with `*`). Store it for all subsequent commands.
+
+If no manifest exists (pre-manifest deployment), bootstrap by inspecting:
+
+```bash
+brev exec <instance> "git -C ~/NemoClaw log --oneline -1 2>/dev/null"
+brev exec <instance> "git -C ~/OpenShell log --oneline -1 2>/dev/null"
+brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name <sandbox>' sandbox@openshell-<sandbox> 'claude --version 2>/dev/null && echo CLAUDE_OK || echo CLAUDE_MISSING; codex --version 2>/dev/null && echo CODEX_OK || echo CODEX_MISSING'"
+```
+
+Also read the local `.env` for tool flags:
+
+```bash
+source <cookbook-dir>/.env
+echo "INSTALL_CLAUDE_CODE: ${INSTALL_CLAUDE_CODE:-true}"
+echo "INSTALL_CODEX: ${INSTALL_CODEX:-true}"
+```
+
+## Phase 2 — Check available versions
+
+```bash
+brev exec <instance> "git -C ~/NemoClaw fetch origin && git -C ~/NemoClaw log --oneline origin/main -1"
+brev exec <instance> "git -C ~/OpenShell fetch origin && git -C ~/OpenShell log --oneline origin/main -1"
+```
+
+For sandbox-base image tag:
+
+```
+WebFetch https://github.com/NVIDIA/NemoClaw/pkgs/container/nemoclaw%2Fsandbox-base — get the most recent commit SHA tag
+```
+
+Also check if the cookbook on the remote is current:
+
+```bash
+brev exec <instance> "git -C ~/nemoclaw-cookbook log --oneline -1 2>/dev/null"
+```
+
+Compare local cookbook HEAD vs remote cookbook HEAD. If different, the remote needs `git pull`.
+
+## Phase 3 — Upstream overlap audit
+
+Before applying any changes, check if upstream now provides something we patch. This prevents trampling and duplicate entries.
+
+```bash
+brev exec <instance> "cd ~/NemoClaw && git stash 2>/dev/null; git checkout origin/main -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null"
+```
+
+Then check the clean upstream files for our additions:
+
+- **Dockerfile**: Does upstream now have `claude.ai/install.sh`, `@openai/codex`, or `insteadOf.*git@github.com`?
+- **Policy**: Does upstream now have `platform.claude.com`, `api.openai.com`, `codeload.github.com`?
+
+```bash
+brev exec <instance> "cd ~/NemoClaw && grep -c 'claude.ai/install.sh' Dockerfile; grep -c '@openai/codex' Dockerfile; grep -c 'insteadOf' Dockerfile"
+brev exec <instance> "cd ~/NemoClaw && grep -c 'platform.claude.com' nemoclaw-blueprint/policies/openclaw-sandbox.yaml; grep -c 'api.openai.com' nemoclaw-blueprint/policies/openclaw-sandbox.yaml; grep -c 'codeload.github.com' nemoclaw-blueprint/policies/openclaw-sandbox.yaml"
+```
+
+Restore:
+
+```bash
+brev exec <instance> "cd ~/NemoClaw && git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null; git stash pop 2>/dev/null || true"
+```
+
+If overlaps found:
+- Report them clearly
+- Suggest `/refresh-patches` to trim overlapping fragments
+- Ask whether to proceed (fragments still work — they just add duplicates)
+
+## Phase 4 — Triage and present changes
+
+Categorize:
+
+**Host-only updates (no rebuild needed):**
+- NemoClaw CLI: local commit behind origin/main
+- OpenShell CLI: local commit behind origin/main
+- Cookbook: remote behind local main
+
+**Sandbox rebuild required:**
+- New sandbox-base image tag
+- Tool flags changed (added/removed Claude Code or Codex)
+- .env changes that affect sandbox creation (new providers, messaging tokens)
+- NemoClaw source changes (affects the built image)
+
+Present a summary:
+
+> **Upgrade summary for `<instance>` (sandbox: `<sandbox>`):**
+>
+> Host updates:
+> - NemoClaw CLI: `c99e3e8` → `364969d` (fix: clear stale SSH host keys)
+> - OpenShell CLI: `491c5d81` → `13262e1c` (feat: sandbox exec subcommand)
+> - Cookbook: up to date
+>
+> Sandbox rebuild: **required** (new sandbox-base image)
+> - Tools: claude-code, codex (unchanged)
+>
+> ⚠ Rebuild will require re-authentication of Claude Code and Codex.
+>
+> Proceed?
+
+If nothing changed: "Everything is up to date. No changes needed."
+
+## Phase 5 — Backup
+
+Always backup before any changes that touch the sandbox:
+
+```bash
+brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh backup <sandbox>"
+```
+
+Use `timeout: 300000`. For host-only updates, skip — no sandbox disruption.
+
+## Phase 6 — Update cookbook on remote
+
+```bash
+brev exec <instance> "cd ~/nemoclaw-cookbook && git pull origin main"
+brev copy <cookbook-dir>/.env <instance>:~/.env
+```
+
+## Phase 7 — Update host tooling
+
+```bash
+brev exec <instance> "cd ~/NemoClaw && git pull --ff-only origin main"
+brev exec <instance> "cd ~/OpenShell && git pull --ff-only origin main && sh install.sh"
+brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && docker pull ghcr.io/nvidia/nemoclaw/sandbox-base:latest"
+```
+
+Use `timeout: 300000` for docker pull.
+
+## Phase 8 — Apply patches (validate BEFORE destroying)
+
+**Critical ordering.** Patches must apply before we destroy anything. If they fail, abort — the user keeps a working system.
+
+```bash
+brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && source ~/.env && cd ~/NemoClaw && git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null && ~/nemoclaw-cookbook/scripts/apply-patches.sh ~/NemoClaw"
+```
+
+If this fails:
+- Do NOT proceed with destroy
+- Tell the user: "Patches failed against new upstream. Run `/refresh-patches` then retry `/upgrade`."
+- The running sandbox is still intact
+
+## Phase 9 — Rebuild sandbox (if needed)
+
+Skip entirely if only host updates needed.
+
+### Stop services
+
+```bash
+brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && nemoclaw stop 2>/dev/null || true"
+```
+
+### Rebuild NemoClaw CLI
+
+```bash
+brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && cd ~/NemoClaw && npm ci && npm run build:cli"
+```
+
+### Destroy and recreate
+
+```bash
+brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 && nemoclaw <sandbox> destroy --yes && nemoclaw onboard"
+```
+
+Use `timeout: 600000` (10 min).
+
+### Restore
+
+```bash
+brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox>"
+```
+
+### Restart services
+
+```bash
+brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && source ~/.env && export NVIDIA_API_KEY TELEGRAM_BOT_TOKEN ALLOWED_CHAT_IDS DISCORD_BOT_TOKEN SLACK_BOT_TOKEN 2>/dev/null; nemoclaw start 2>/dev/null || true"
+```
+
+## Phase 10 — Write deployment manifest
+
+```bash
+brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && source ~/.env && SANDBOX=\$(nemoclaw list 2>/dev/null | grep '*' | awk '{print \$1}') && cat > ~/.nemoclaw/cookbook-deployment.json <<EOF
+{
+  \"deployed_at\": \"\$(date -u +%Y-%m-%dT%H:%M:%SZ)\",
+  \"cookbook_commit\": \"\$(git -C ~/nemoclaw-cookbook rev-parse --short HEAD 2>/dev/null)\",
+  \"nemoclaw_commit\": \"\$(git -C ~/NemoClaw rev-parse --short HEAD 2>/dev/null)\",
+  \"openshell_commit\": \"\$(git -C ~/OpenShell rev-parse --short HEAD 2>/dev/null)\",
+  \"sandbox_name\": \"\$SANDBOX\",
+  \"tools\": [\$([ \"\${INSTALL_CLAUDE_CODE:-true}\" = true ] && printf '\"claude-code\"')\$([ \"\${INSTALL_CLAUDE_CODE:-true}\" = true ] && [ \"\${INSTALL_CODEX:-true}\" = true ] && printf ', ')\$([ \"\${INSTALL_CODEX:-true}\" = true ] && printf '\"codex\"')]
+}
+EOF"
+```
+
+## Phase 11 — Verify and report
+
+```bash
+brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && nemoclaw list && openshell status"
+```
+
+Get the new tokenized URL (changes on rebuild):
+
+```bash
+brev exec <instance> "cat ~/openclaw-ui-url.txt 2>/dev/null"
+```
+
+Update `UPSTREAM.md` in the local cookbook repo with the new versions and today's date. Use WebFetch to look up the sandbox-base tag from GitHub packages (not `docker images`).
+
+**If sandbox was rebuilt:**
+
+> **Upgrade complete on `<instance>` (sandbox: `<sandbox>`):**
+> - NemoClaw: `<commit>`
+> - OpenShell: `<commit>`
+> - Sandbox: Ready
+> - Tools: [list from manifest]
+>
+> New Web UI URL: `http://127.0.0.1:18789/#token=<hex>`
+>
+> **Post-upgrade:** Re-authenticate Claude Code and Codex (SSO tokens don't survive rebuild).
+
+**If host-only:**
+
+> **Upgrade complete on `<instance>` (host-only, no rebuild):**
+> - NemoClaw CLI: `<old>` → `<new>`
+> - OpenShell CLI: `<old>` → `<new>`
+> - Sandbox: untouched — no re-auth needed
+
+## Principles
+
+- **Never destroy before validating patches.** If fragments fail, abort. User keeps a working system.
+- **Always backup before destroy.** Non-negotiable.
+- **Always look up the sandbox name.** Never hardcode `my-assistant`.
+- **Host-only updates are zero-disruption.** No downtime, no re-auth, no URL change.
+- **Check upstream overlap before applying.** Flag if upstream now handles something we patch.
+- **Update cookbook on remote first.** Latest patches and scripts must be in place before rebuild.
+- **Surface the new URL.** After rebuild, the tokenized URL changes.
+- **Never leak secrets.** Only SET / NOT SET.

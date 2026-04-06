@@ -1,0 +1,8 @@
+# Install Claude Code via native installer
+RUN curl -fsSL https://claude.ai/install.sh | bash \
+    && cp "$(readlink -f /root/.local/bin/claude)" /usr/local/bin/claude \
+    && chmod 755 /usr/local/bin/claude \
+    && mkdir -p /sandbox/.local/bin \
+    && ln -s /usr/local/bin/claude /sandbox/.local/bin/claude \
+    && chown -h sandbox:sandbox /sandbox/.local/bin/claude /sandbox/.local/bin /sandbox/.local
+
