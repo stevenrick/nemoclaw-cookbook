@@ -46,6 +46,12 @@ Find the Brev instance:
 brev ls
 ```
 
+If no instances are listed, abort: "No Brev instances found. Create one and run /setup first."
+
+If multiple instances are listed, ask the user which one to restore to.
+
+If exactly one instance is listed, confirm with the user before proceeding.
+
 If the instance is STOPPED, start it. Get the sandbox name:
 
 ```bash
@@ -61,7 +67,7 @@ If no sandbox exists, abort: "No sandbox found on the remote. Run /setup first t
 Create a tarball of the chosen backup:
 
 ```bash
-cd <cookbook-dir>/backups && tar czf /tmp/nemoclaw-restore-<timestamp>.tar.gz <timestamp>/
+cd <cookbook-dir>/backups && COPYFILE_DISABLE=1 tar czf /tmp/nemoclaw-restore-<timestamp>.tar.gz <timestamp>/
 ```
 
 Copy to remote:
