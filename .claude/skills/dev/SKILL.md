@@ -224,6 +224,15 @@ Coding agent tasks (Claude Code, Codex) routinely take 5-10+ minutes, causing:
 
 The proper fix is the native channel path: `openclaw agent --deliver --channel telegram` through the gateway delivery queue. This is async with no timeout. But it requires the gateway pairing fix + runtime config overrides (PRs #928 + #1081) to land first. The bridge is an interim workaround that will be removed when native channels work.
 
+### Dashboard unreachable after rebuild
+The internal port forward (18789) can die during sandbox destroy/rebuild. `verify-deployment.sh` detects and auto-restarts it. To fix manually: `openshell forward start 18789 <sandbox>`.
+
+### NemoClaw CLI crash after `git pull`
+`MODULE_NOT_FOUND` errors mean upstream added new TypeScript modules but the CLI wasn't rebuilt. Run `setup.sh` or `cd ~/NemoClaw && bash install.sh --non-interactive`.
+
+### `git pull` fails with "local changes would be overwritten"
+Cookbook fragments modify the Dockerfile and policy YAML. Reset before pulling: `git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml`. `setup.sh` handles this automatically.
+
 ### `brev copy` unreliable for directories
 
 `brev copy` for directory transfers frequently times out or fails with SCP errors. Use `git clone` on the remote instance instead:
