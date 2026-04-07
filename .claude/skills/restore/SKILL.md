@@ -98,6 +98,12 @@ This restores workspace files, chat sessions, and skills via the upstream backup
 
 ## Phase 5 — Verify
 
+Ensure the tokenized UI URL file exists (rebuild changes the token):
+
+```bash
+brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/save-ui-url.sh"
+```
+
 Run the comprehensive health check:
 
 ```bash
