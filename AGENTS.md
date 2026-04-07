@@ -12,6 +12,7 @@ scripts/
   apply-patches.sh    # Applies fragments to upstream (replaces git apply)
   merge-policy.py     # YAML-aware policy fragment merger
   validate-patches.sh # Check fragments still work against upstream
+  save-ui-url.sh      # Extract gateway token → ~/openclaw-ui-url.txt
   backup-full.sh      # Workspace, chat history, and skills backup/restore
 BUILD.md              # Step-by-step setup with explanations
 USE.md                # Day-to-day commands and features

@@ -204,9 +204,15 @@ brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/
 brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && source ~/.env && export NVIDIA_API_KEY TELEGRAM_BOT_TOKEN ALLOWED_CHAT_IDS DISCORD_BOT_TOKEN SLACK_BOT_TOKEN 2>/dev/null; nemoclaw start 2>/dev/null || true"
 ```
 
-## Phase 10 — Write deployment manifest
+## Phase 10 — Save tokenized UI URL and write deployment manifest
 
-Use the shared manifest script (same one setup.sh uses):
+**If sandbox was rebuilt**, the gateway token has changed. Regenerate the URL file:
+
+```bash
+brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/save-ui-url.sh"
+```
+
+Then write the deployment manifest:
 
 ```bash
 brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/write-manifest.sh"

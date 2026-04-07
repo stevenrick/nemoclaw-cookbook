@@ -113,7 +113,12 @@ bash install.sh --non-interactive
 # shellcheck source=/dev/null
 source "$HOME/.bashrc" 2>/dev/null || true
 
-echo "=== Step 6: Add optional integrations ==="
+echo "=== Step 6: Save tokenized UI URL ==="
+# Token is available as soon as the sandbox is running (step 5).
+# Extract it now, before any optional steps, so the URL file exists ASAP.
+"${SCRIPT_DIR}/scripts/save-ui-url.sh" || echo "  URL extraction failed — retrieve manually (see BUILD.md)."
+
+echo "=== Step 7: Add optional integrations ==="
 if [ -n "${BRAVE_API_KEY:-}" ]; then
   echo "  Adding Brave Search provider..."
   openshell provider create --name brave-search --type generic --credential BRAVE_API_KEY 2>/dev/null \
@@ -122,7 +127,7 @@ if [ -n "${BRAVE_API_KEY:-}" ]; then
   echo "  ✓ Brave Search provider configured"
 fi
 
-echo "=== Step 7: Start services ==="
+echo "=== Step 8: Start services ==="
 if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] || [ -n "${DISCORD_BOT_TOKEN:-}" ] || [ -n "${SLACK_BOT_TOKEN:-}" ]; then
   # Reload env to pick up nvm
   export NVM_DIR="$HOME/.nvm"
@@ -133,10 +138,10 @@ else
   echo "No messaging tokens set — skipping services. Set TELEGRAM_BOT_TOKEN, DISCORD_BOT_TOKEN, or SLACK_BOT_TOKEN in ~/.env to enable."
 fi
 
-echo "=== Step 8: Verify deployment ==="
+echo "=== Step 9: Verify deployment ==="
 "${SCRIPT_DIR}/scripts/verify-deployment.sh" || echo "  Some checks failed — review above and fix before proceeding."
 
-echo "=== Step 9: Write deployment manifest ==="
+echo "=== Step 10: Write deployment manifest ==="
 "${SCRIPT_DIR}/scripts/write-manifest.sh"
 
 echo ""

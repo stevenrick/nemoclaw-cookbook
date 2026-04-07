@@ -181,13 +181,22 @@ NVIDIA_API_KEY=<key> TELEGRAM_BOT_TOKEN=<token> ALLOWED_CHAT_IDS=<id> nemoclaw s
 
 This also starts a Cloudflare quick tunnel for the Telegram webhook URL.
 
-## Step 10: Save your tokenized UI URL
+## Step 10: Tokenized UI URL
 
-The installer prints tokenized URLs at the end. Save them:
+`setup.sh` automatically extracts the gateway auth token from the sandbox and writes it to `~/openclaw-ui-url.txt`. Verify it exists:
 
 ```bash
 cat ~/openclaw-ui-url.txt
 # http://127.0.0.1:18789/#token=<hex>
+```
+
+If the file is missing (e.g., manual install), extract the token yourself:
+
+```bash
+# From sandbox logs:
+nemoclaw my-assistant logs | grep 'Local UI'
+# Or directly from sandbox config:
+nemoclaw my-assistant connect -c "jq -r '.gateway.auth.token' /sandbox/.openclaw/openclaw.json"
 ```
 
 Treat these like passwords. They change on every sandbox rebuild.
