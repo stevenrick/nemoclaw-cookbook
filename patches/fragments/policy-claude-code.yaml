@@ -1,9 +1,14 @@
-# Claude Code policy additions — auth and download endpoints
-# Upstream already provides: api.anthropic.com, statsig, sentry, /usr/local/bin/claude
-# We add: auth endpoints, download endpoints, and github binary access
+# Claude Code policy additions — auth, download, and API endpoints
+# Upstream provides api.anthropic.com with restrictive REST rules (POST /v1/messages only),
+# but Claude Code also hits /api/hello, /api/organizations, etc. for auth/session flows.
+# We add api.anthropic.com with access: full to use a CONNECT tunnel instead,
+# plus auth endpoints, download endpoints, and github binary access.
 
 add_endpoints:
   claude_code:
+    - host: api.anthropic.com
+      port: 443
+      access: full
     - host: platform.claude.com
       port: 443
       access: full

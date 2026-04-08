@@ -24,7 +24,7 @@ Read the deployment manifest and discover sandbox name:
 
 ```bash
 brev exec <instance> "cat ~/.nemoclaw/cookbook-deployment.json 2>/dev/null"
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && nemoclaw list 2>/dev/null"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && nemoclaw list 2>/dev/null"
 ```
 
 Use the sandbox name from `nemoclaw list` (the one marked with `*`). Store it for all subsequent commands.
@@ -133,7 +133,7 @@ If nothing changed: "Everything is up to date. No changes needed."
 Always backup before any changes that touch the sandbox:
 
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh backup <sandbox>"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh backup <sandbox>"
 ```
 
 Use `timeout: 300000`. For host-only updates, skip — no sandbox disruption.
@@ -150,7 +150,7 @@ brev copy <cookbook-dir>/.env <instance>:~/.env
 ```bash
 brev exec <instance> "cd ~/NemoClaw && git pull --ff-only origin main"
 brev exec <instance> "cd ~/OpenShell && git pull --ff-only origin main && sh install.sh"
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && docker pull ghcr.io/nvidia/nemoclaw/sandbox-base:latest"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && docker pull ghcr.io/nvidia/nemoclaw/sandbox-base:latest"
 ```
 
 Use `timeout: 300000` for docker pull.
@@ -160,7 +160,7 @@ Use `timeout: 300000` for docker pull.
 **Critical ordering.** Patches must apply before we destroy anything. If they fail, abort — the user keeps a working system.
 
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && source ~/.env && cd ~/NemoClaw && git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null && ~/nemoclaw-cookbook/scripts/apply-patches.sh ~/NemoClaw"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && source ~/.env && cd ~/NemoClaw && git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null && ~/nemoclaw-cookbook/scripts/apply-patches.sh ~/NemoClaw"
 ```
 
 If this fails:
@@ -175,19 +175,27 @@ Skip entirely if only host updates needed.
 ### Stop services
 
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && nemoclaw stop 2>/dev/null || true"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && nemoclaw stop 2>/dev/null || true"
 ```
 
 ### Rebuild NemoClaw CLI
 
+`npm ci` triggers the prepare hook which builds the CLI and then strips devDeps. Do NOT run `npm run build:cli` separately after — `tsc` will have been removed.
+
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && cd ~/NemoClaw && npm ci && npm run build:cli"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && cd ~/NemoClaw && npm ci"
+```
+
+If `npm ci` fails to build (e.g., prepare hook doesn't find tsc), install typescript explicitly:
+
+```bash
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && cd ~/NemoClaw && npm install typescript && npm run build:cli"
 ```
 
 ### Destroy and recreate
 
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 && nemoclaw <sandbox> destroy --yes && nemoclaw onboard"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 && nemoclaw <sandbox> destroy --yes && nemoclaw onboard"
 ```
 
 Use `timeout: 600000` (10 min).
@@ -195,13 +203,13 @@ Use `timeout: 600000` (10 min).
 ### Restore
 
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox>"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox>"
 ```
 
 ### Restart services
 
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && source ~/.env && export NVIDIA_API_KEY TELEGRAM_BOT_TOKEN ALLOWED_CHAT_IDS DISCORD_BOT_TOKEN SLACK_BOT_TOKEN 2>/dev/null; nemoclaw start 2>/dev/null || true"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && source ~/.env && export NVIDIA_API_KEY TELEGRAM_BOT_TOKEN ALLOWED_CHAT_IDS DISCORD_BOT_TOKEN SLACK_BOT_TOKEN 2>/dev/null; nemoclaw start 2>/dev/null || true"
 ```
 
 ## Phase 10 — Save tokenized UI URL and write deployment manifest
@@ -209,13 +217,13 @@ brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/
 **If sandbox was rebuilt**, the gateway token has changed. Regenerate the URL file:
 
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/save-ui-url.sh"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/save-ui-url.sh"
 ```
 
 Then write the deployment manifest:
 
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/write-manifest.sh"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/write-manifest.sh"
 ```
 
 ## Phase 11 — Verify and report
@@ -223,7 +231,7 @@ brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/
 Run the comprehensive health check:
 
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/verify-deployment.sh"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/verify-deployment.sh"
 ```
 
 This checks: gateway health, sandbox status, dashboard reachability (auto-restarts the internal forward if dead), OpenClaw running, tools installed, workspace files, services, and manifest accuracy. If any check fails, diagnose before reporting success.

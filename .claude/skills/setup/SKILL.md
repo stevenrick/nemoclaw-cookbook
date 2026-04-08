@@ -128,7 +128,7 @@ The `.env` lives in the repo locally (gitignored) but gets copied to `~/.env` on
 Then run setup:
 
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && cd ~/nemoclaw-cookbook && ./setup.sh"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && cd ~/nemoclaw-cookbook && ./setup.sh"
 ```
 
 This takes ~5-10 minutes. The script handles: cloning repos, installing OpenShell, pulling the Docker image, applying patches, installing NemoClaw, configuring integrations, and starting services.
@@ -146,7 +146,7 @@ Use `timeout: 600000` for the brev exec call (10 min max).
 Run the comprehensive health check (setup.sh runs this automatically as Step 9):
 
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/verify-deployment.sh"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/verify-deployment.sh"
 ```
 
 This checks gateway, sandbox, dashboard, OpenClaw, tools, workspace, services, and manifest. If the dashboard port forward is dead, it auto-restarts it.
@@ -154,7 +154,7 @@ This checks gateway, sandbox, dashboard, OpenClaw, tools, workspace, services, a
 **If sandbox shows but NemoClaw doesn't recognize it:**
 
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 && nemoclaw onboard && ~/nemoclaw-cookbook/scripts/save-ui-url.sh"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 && nemoclaw onboard && ~/nemoclaw-cookbook/scripts/save-ui-url.sh"
 ```
 
 ## Phase 5 — Connect
@@ -168,7 +168,7 @@ brev exec <instance> "cat ~/openclaw-ui-url.txt 2>/dev/null"
 If the file is missing (manual onboard, or extraction failed), regenerate it:
 
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/save-ui-url.sh"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/save-ui-url.sh"
 ```
 
 The URL from `openclaw-ui-url.txt` will have a hostname like `127.0.0.1:18789` and a `/#token=<hex>` fragment. If the hostname differs, replace only the hostname with `127.0.0.1:18789` — preserve the exact path and `/#token=` fragment. **Always use `127.0.0.1`, not `localhost`** — the sandbox only allows `127.0.0.1` as an origin.

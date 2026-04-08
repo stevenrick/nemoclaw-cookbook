@@ -27,14 +27,16 @@ A workflow for diagnosing issues, testing upstream changes, and contributing fix
 
 ### Sandbox security model
 
-The sandbox has two partitions with different permissions:
+The sandbox enforces Landlock at the kernel level. As of upstream `045a340`, `/sandbox` itself is read-only — only specific subdirectories are writable:
 
 | Path | Access | Purpose |
 |------|--------|---------|
-| `/sandbox/.openclaw/` | **Read-only** (Landlock enforced at kernel level) | Frozen config, auth tokens, symlinks to writable state |
+| `/sandbox/` | **Read-only** (Landlock enforced at kernel level) | Root of sandbox home — no arbitrary file creation |
+| `/sandbox/.openclaw/` | **Read-only** (Landlock + `chattr +i`) | Frozen config, auth tokens, symlinks to writable state |
 | `/sandbox/.openclaw-data/` | **Read-write** | Agent sessions, workspace, plugins, writable state |
+| `/tmp/` | **Read-write** | Temporary files, logs |
 
-**Critical: Landlock enforcement means even root cannot write to `/sandbox/.openclaw/`.** File permissions (chmod/chown) are irrelevant — the kernel blocks all writes. Any runtime config changes must go through `/sandbox/.openclaw-data/`.
+**Critical: Landlock enforcement means even root cannot write outside allowed paths.** File permissions (chmod/chown) are irrelevant — the kernel blocks all writes. Any runtime state must go through `/sandbox/.openclaw-data/` or `/tmp/`.
 
 Additional hardening:
 - `chattr +i` on `/sandbox/.openclaw/` and its contents (immutable flag)
@@ -93,7 +95,7 @@ If the deployed versions are *behind* `UPSTREAM.md`, the instance is running old
 
 ```bash
 # Host-side status
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && nemoclaw list && openshell sandbox list && openshell status"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && nemoclaw list && openshell sandbox list && openshell status"
 
 # Inside sandbox — gateway health
 brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name my-assistant' sandbox@openshell-my-assistant 'openclaw status 2>&1'"
@@ -258,7 +260,7 @@ These are fundamental to the NemoClaw design and cannot be patched around:
 
 ## Upstream context
 
-Key open PRs and issues as of 2026-04-05:
+Key PRs and issues as of 2026-04-05 (some may have merged — check `gh pr view` to confirm):
 
 | # | Type | Title | Relevance |
 |---|------|-------|-----------|
