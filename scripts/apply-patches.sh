@@ -84,7 +84,7 @@ echo "  Applying policy fragments..."
 # Check python3 + PyYAML availability
 if ! python3 -c "import yaml" 2>/dev/null; then
   echo "  Installing PyYAML for policy merging..."
-  pip3 install --quiet pyyaml 2>/dev/null || pip install --quiet pyyaml
+  pip3 install --quiet 'pyyaml>=6,<7' 2>/dev/null || pip install --quiet 'pyyaml>=6,<7'
 fi
 
 # Collect applicable policy fragments
