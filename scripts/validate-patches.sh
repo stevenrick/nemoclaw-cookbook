@@ -52,7 +52,7 @@ done
 # ── Check 3: Full apply test ────────────────────────────────────────
 echo "Running full apply-patches.sh (all tools enabled)..."
 # Ensure PyYAML is available
-pip3 install --quiet pyyaml 2>/dev/null || pip install --quiet pyyaml 2>/dev/null || true
+pip3 install --quiet 'pyyaml>=6,<7' 2>/dev/null || pip install --quiet 'pyyaml>=6,<7' 2>/dev/null || true
 
 if INSTALL_CLAUDE_CODE=true INSTALL_CODEX=true "$COOKBOOK_DIR/scripts/apply-patches.sh" "$TMPDIR/NemoClaw" 2>&1; then
   echo "  ✓ Fragments applied successfully"
