@@ -53,10 +53,10 @@ Then replace the hostname in that URL with `127.0.0.1:18789` and give it to the 
 
 ### Running commands on the host
 
-Commands run via `brev exec` land on the Brev VM (the host). NemoClaw management commands (`nemoclaw`, `openshell`) run here. PATH must be set explicitly since `.bashrc` isn't sourced in non-interactive mode:
+Commands run via `brev exec` land on the Brev VM (the host). NemoClaw management commands (`nemoclaw`, `openshell`) run here. Source nvm and set PATH explicitly since `.bashrc` isn't sourced in non-interactive mode:
 
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && <command>"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && <command>"
 ```
 
 ### Running commands inside the sandbox
@@ -141,7 +141,7 @@ The backup script (`scripts/backup-full.sh`) backs up both `workspace/` and `age
 ### Check NemoClaw status
 
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && nemoclaw list && openshell sandbox list && openshell status"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && nemoclaw list && openshell sandbox list && openshell status"
 ```
 
 ### Start Telegram bridge
@@ -149,7 +149,7 @@ brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/
 Requires env vars in the process environment (not a file):
 
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && export TELEGRAM_BOT_TOKEN=<token> ALLOWED_CHAT_IDS=<id> NVIDIA_API_KEY=<key> && nemoclaw start"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && export TELEGRAM_BOT_TOKEN=<token> ALLOWED_CHAT_IDS=<id> NVIDIA_API_KEY=<key> && nemoclaw start"
 ```
 
 ### Read sandbox workspace files
@@ -177,7 +177,7 @@ brev exec <instance> "cd ~/nemoclaw-cookbook && ./setup.sh"
 - **No browser auth for Claude.** Claude Code uses a full TUI — auth requires `brev shell` (interactive). Codex auth (`codex login --device-auth`) works via `brev exec` — it prints a URL + code that can be relayed to the user.
 - **Timeouts.** Long-running commands may exceed the 2-minute default Bash timeout. Use `timeout` parameter up to 600000ms (10 min), or run in background and poll.
 - **No stdin.** Commands that prompt for input will hang. Always use non-interactive flags (e.g., `NEMOCLAW_NON_INTERACTIVE=1`).
-- **PATH not set.** Non-interactive SSH doesn't source `.bashrc`. Always export PATH explicitly for `nemoclaw`/`openshell` commands.
+- **PATH not set.** Non-interactive SSH doesn't source `.bashrc`. Always source nvm and export PATH for `nemoclaw`/`openshell` commands.
 
 ## Principles
 

@@ -391,7 +391,7 @@ When messaging tokens are set during onboard, NemoClaw auto-detects them and sug
 | `NEMOCLAW_POLICY_MODE` | `suggested` (default), `custom`, or `skip` | Install / onboard |
 | `NEMOCLAW_POLICY_PRESETS` | Comma-separated presets (default: `pypi,npm`) | Install / onboard |
 
-Available presets: `pypi`, `npm`, `telegram`, `discord`, `slack`, `brave`, `docker`, `huggingface`, `jira`, `outlook`
+Available presets: `pypi`, `npm`, `telegram`, `discord`, `slack`, `brave`, `brew`, `docker`, `huggingface`, `jira`, `outlook`
 
 ## What Gets Installed Where
 
@@ -407,6 +407,34 @@ Available presets: `pypi`, `npm`, `telegram`, `discord`, `slack`, `brave`, `dock
 | Sandbox image | Inside gateway (~2.4 GB) |
 | Patch fragments | `nemoclaw-cookbook/patches/fragments/` |
 | Dockerfile customizations | `~/NemoClaw/Dockerfile` or `~/.nemoclaw/source/Dockerfile` |
+
+## Sandbox Security Model
+
+The sandbox enforces defense-in-depth via multiple kernel and container mechanisms:
+
+- **Landlock** — `/sandbox` is mounted read-only at the kernel level. The agent's writable state lives in `/sandbox/.openclaw-data/` (workspace, sessions, plugins). Even root cannot write outside the allowed paths.
+- **seccomp** — Restricts available syscalls to a safe subset.
+- **Network namespacing** — All egress is proxied through OpenShell's L7 policy engine. Only explicitly allowed endpoints are reachable.
+- **Immutable config** — `/sandbox/.openclaw/openclaw.json` is protected by `chattr +i` and verified via SHA-256 hash at startup.
+- **Privilege separation** — The gateway runs as a separate `gateway` user with `no-new-privileges`.
+
+This means workspace files in `/sandbox/.openclaw-data/workspace/` are writable, but `/sandbox/.openclaw/` is frozen at build time.
+
+## Advanced Onboarding Options
+
+### Custom sandbox images (`--from`)
+
+You can build from a custom Dockerfile instead of the stock sandbox-base image:
+
+```bash
+nemoclaw onboard --from /path/to/Dockerfile
+```
+
+This is useful for pre-baking additional tools or dependencies. The cookbook's patching workflow (apply-patches.sh) is still the recommended approach for Claude Code and Codex, but `--from` can be combined with it for further customization.
+
+### Interactive preset selection
+
+When running `nemoclaw onboard` interactively (without `NEMOCLAW_NON_INTERACTIVE=1`), the installer now presents a checkbox UI for selecting policy presets. It auto-detects configured credentials and pre-checks the relevant presets. The env var approach (`NEMOCLAW_POLICY_PRESETS`) still works for non-interactive installs.
 
 ## Tearing Down
 
