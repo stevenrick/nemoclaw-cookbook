@@ -55,7 +55,7 @@ If exactly one instance is listed, confirm with the user before proceeding.
 If the instance is STOPPED, start it. Get the sandbox name:
 
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && nemoclaw list 2>/dev/null"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && nemoclaw list 2>/dev/null"
 ```
 
 If no sandbox exists, abort: "No sandbox found on the remote. Run /setup first to create one, then /restore."
@@ -91,7 +91,7 @@ rm /tmp/nemoclaw-restore-<timestamp>.tar.gz
 ## Phase 4 — Run restore on remote
 
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> <timestamp>" --timeout 300000
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> <timestamp>" --timeout 300000
 ```
 
 This restores workspace files, chat sessions, and skills via the upstream backup script and our enhancements.
@@ -101,13 +101,13 @@ This restores workspace files, chat sessions, and skills via the upstream backup
 Ensure the tokenized UI URL file exists (rebuild changes the token):
 
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/save-ui-url.sh"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/save-ui-url.sh"
 ```
 
 Run the comprehensive health check:
 
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/verify-deployment.sh"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/verify-deployment.sh"
 ```
 
 This checks gateway, sandbox, dashboard reachability, OpenClaw, tools, workspace files (confirms SOUL.md exists after restore), services, and manifest accuracy. If the dashboard port forward died, it auto-restarts it.

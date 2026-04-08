@@ -1,12 +1,12 @@
 # Upstream Compatibility
 
-Last validated end-to-end deployment: **2026-04-06**
+Last validated end-to-end deployment: **2026-04-08**
 
 | Component | Commit / Tag | Description | Link |
 |-----------|-------------|-------------|------|
-| NemoClaw | `4135413` | `fix(security): log egress endpoints before applying policy presets (#867)` | [commit](https://github.com/NVIDIA/NemoClaw/commit/4135413) |
-| OpenShell | `13262e1c` | `feat(cli): add sandbox exec subcommand with TTY support (#752)` | [commit](https://github.com/NVIDIA/OpenShell/commit/13262e1c) |
-| sandbox-base | `f7d4121` | Image tag (NemoClaw commit SHA) pulled at deploy time | [package](https://github.com/NVIDIA/NemoClaw/pkgs/container/nemoclaw%2Fsandbox-base) |
+| NemoClaw | `86f94a2` | `fix(inference): increase timeout for local providers to 180s` | [commit](https://github.com/NVIDIA/NemoClaw/commit/86f94a2) |
+| OpenShell | `c2e52567` | `ci(gpu): add separate GPU test workflows (#773)` | [commit](https://github.com/NVIDIA/OpenShell/commit/c2e52567) |
+| sandbox-base | `latest` | Image tag pulled at deploy time | [package](https://github.com/NVIDIA/NemoClaw/pkgs/container/nemoclaw%2Fsandbox-base) |
 
 ## What this means
 

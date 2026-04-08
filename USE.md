@@ -42,7 +42,7 @@ brev exec <instance> "cat ~/openclaw-ui-url.txt"
 If the file is missing, regenerate it:
 
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/save-ui-url.sh"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/save-ui-url.sh"
 ```
 
 Replace the hostname with `127.0.0.1:18789` and open in your browser. **Use `127.0.0.1`, not `localhost`** — the sandbox only allows `127.0.0.1` as an origin.
@@ -415,10 +415,10 @@ When running on a Brev instance, you can manage everything from your local machi
 
 ### Commands on the host (nemoclaw, openshell)
 
-Non-interactive SSH doesn't source `.bashrc`, so PATH must be set explicitly:
+Non-interactive SSH doesn't source `.bashrc`, so source nvm and set PATH explicitly:
 
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" && nemoclaw list"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && nemoclaw list"
 ```
 
 ### Commands inside the sandbox
@@ -434,7 +434,7 @@ brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev
 ### Starting Telegram remotely
 
 ```bash
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH\" \
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" \
   && NVIDIA_API_KEY=<key> TELEGRAM_BOT_TOKEN=<token> ALLOWED_CHAT_IDS=<id> nemoclaw start"
 ```
 
