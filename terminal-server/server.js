@@ -1,12 +1,22 @@
 #!/usr/bin/env node
-// WebSocket terminal server — spawns a PTY process and bridges it to a
-// WebSocket client (xterm.js in the browser). Nginx proxies /ws/terminal here.
+// WebSocket terminal server — spawns an openshell terminal session and bridges
+// it to a WebSocket client (xterm.js in the browser).
+//
+// Security:
+//   - Binds to 127.0.0.1 only (loopback) — not reachable from outside the host
+//   - Requires a valid gateway auth token as ?token= query parameter
+//   - Token is read from ~/openclaw-ui-url.txt at startup (same token the UI uses)
+//   - The spawned command is hardcoded to "openshell term" — callers cannot choose
+//
+// Nginx proxies /ws/terminal?token=<hex> to this server. External access is
+// authenticated by Brev Secure Links (Cloudflare Access) before reaching nginx.
 //
 // Usage: node server.js [--port 3001]
-//
-// Query params:
-//   ?cmd=openshell+term   (default: "openshell term")
 
+"use strict";
+
+const fs = require("fs");
+const path = require("path");
 const WebSocket = require("ws");
 const pty = require("node-pty");
 
@@ -17,19 +27,77 @@ const PORT = parseInt(
   10,
 );
 
-const wss = new WebSocket.Server({ port: PORT });
-console.log(`[terminal-server] listening on port ${PORT}`);
+// Hardcoded command — never accept commands from the client.
+const SHELL_CMD = "openshell";
+const SHELL_ARGS = ["term"];
+
+// ── Token authentication ──────────────────────────────────────────────
+// Read the expected token from the local UI URL file. This is the same
+// token the browser uses for the OpenClaw dashboard, so it's already
+// known to authenticated users.
+
+function loadExpectedToken() {
+  const urlFile = path.join(
+    process.env.HOME || "/home/ubuntu",
+    "openclaw-ui-url.txt",
+  );
+  try {
+    const url = fs.readFileSync(urlFile, "utf-8").trim();
+    const match = url.match(/#token=([0-9a-fA-F]+)/);
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+let expectedToken = loadExpectedToken();
+
+// Re-read the token periodically (it changes on sandbox rebuild).
+setInterval(() => {
+  expectedToken = loadExpectedToken();
+}, 60_000);
+
+function authenticateRequest(req) {
+  if (!expectedToken) {
+    // No token file yet (sandbox may not be ready). Reject all connections
+    // rather than running unauthenticated.
+    return false;
+  }
+  const url = new URL(req.url || "/", `http://127.0.0.1:${PORT}`);
+  const clientToken = url.searchParams.get("token") || "";
+  // Constant-time comparison to prevent timing attacks.
+  if (clientToken.length !== expectedToken.length) return false;
+  const a = Buffer.from(clientToken, "utf-8");
+  const b = Buffer.from(expectedToken, "utf-8");
+  return require("crypto").timingSafeEqual(a, b);
+}
+
+// ── Server ────────────────────────────────────────────────────────────
+
+const wss = new WebSocket.Server({
+  port: PORT,
+  host: "127.0.0.1", // Loopback only — nginx proxies external traffic
+});
+
+console.log(`[terminal-server] listening on 127.0.0.1:${PORT}`);
+if (expectedToken) {
+  console.log("[terminal-server] token authentication enabled");
+} else {
+  console.log(
+    "[terminal-server] WARNING: no token found — all connections will be rejected until ~/openclaw-ui-url.txt exists",
+  );
+}
 
 wss.on("connection", (ws, req) => {
-  const url = new URL(req.url || "/", `http://localhost:${PORT}`);
-  const cmdParam = url.searchParams.get("cmd") || "openshell term";
-  const parts = cmdParam.split(" ").filter(Boolean);
-  const cmd = parts[0];
-  const args = parts.slice(1);
+  if (!authenticateRequest(req)) {
+    console.log("[terminal-server] rejected: invalid or missing token");
+    ws.close(4001, "Unauthorized");
+    return;
+  }
 
-  console.log(`[terminal-server] new connection: ${cmd} ${args.join(" ")}`);
+  console.log("[terminal-server] authenticated connection");
 
-  const shell = pty.spawn(cmd, args, {
+  const shell = pty.spawn(SHELL_CMD, SHELL_ARGS, {
     name: "xterm-256color",
     cols: 120,
     rows: 40,
@@ -62,6 +130,7 @@ wss.on("connection", (ws, req) => {
         shell.resize(parsed.cols, parsed.rows);
       }
     } catch {
+      // Raw text fallback — write directly to the PTY.
       shell.write(msg.toString());
     }
   });

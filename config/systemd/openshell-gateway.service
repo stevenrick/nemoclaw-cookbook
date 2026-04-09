@@ -1,6 +1,7 @@
 # OpenShell gateway — manages the K3s cluster that hosts NemoClaw sandboxes.
-# Auto-starts on boot; ExecStartPost ensures the container is running even if
-# openshell reports "already exists, reusing".
+# Auto-starts on boot via systemd. ExecStop only stops the container — it does
+# NOT destroy the gateway. Destruction is an explicit operation (nemoclaw destroy)
+# that should never happen as a side effect of service restart or host shutdown.
 
 [Unit]
 Description=OpenShell Gateway for NemoClaw
@@ -14,8 +15,9 @@ User=ubuntu
 Environment=HOME=/home/ubuntu
 ExecStart=/home/ubuntu/.local/bin/openshell gateway start --name nemoclaw
 ExecStartPost=/usr/bin/docker start openshell-cluster-nemoclaw
-ExecStop=/home/ubuntu/.local/bin/openshell gateway destroy -g nemoclaw
+ExecStop=/usr/bin/docker stop openshell-cluster-nemoclaw
 TimeoutStartSec=120
+TimeoutStopSec=30
 
 [Install]
 WantedBy=multi-user.target
