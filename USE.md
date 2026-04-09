@@ -56,6 +56,18 @@ If the internal OpenShell port forward stops (sandbox is running but Web UI is u
 brev exec <instance> "openshell forward start 18789 my-assistant --background"
 ```
 
+## Browser Terminal
+
+If the terminal server is enabled (`ENABLE_TERMINAL_SERVER=true` in `.env`, default), you can access an `openshell term` session in the browser:
+
+```
+https://<your-secure-link>/terminal#token=<hex>
+```
+
+Or via port-forward: `http://127.0.0.1/terminal#token=<hex>` (requires nginx on port 80).
+
+This gives you the OpenShell egress approval TUI — approve or deny sandbox network requests from any browser.
+
 ## OpenClaw (inside the sandbox)
 
 ```bash
