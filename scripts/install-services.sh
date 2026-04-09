@@ -88,12 +88,11 @@ if [ -n "$TUNNEL_FQDN" ]; then
   export CHAT_UI_URL="https://$TUNNEL_FQDN"
   echo "  ✓ Access mode: Secure Link (FQDN)"
   echo "  ✓ CHAT_UI_URL=$CHAT_UI_URL"
-  echo "https://$TUNNEL_FQDN" > "$HOME/openclaw-tunnel-url.txt"
+  # Tokenized tunnel URL is written by save-ui-url.sh (runs later in setup)
 else
   echo "  ✓ Access mode: port-forward (local)"
   echo "    To use a Secure Link instead, set TUNNEL_FQDN in ~/.env"
   echo "    and configure it in Brev (Settings → Secure Links)."
-  rm -f "$HOME/openclaw-tunnel-url.txt"
 fi
 
 # ── 6. Start services ───────────────────────────────────────────────
