@@ -79,7 +79,10 @@ fi
 # If TUNNEL_FQDN is set in .env, the user has configured Brev Secure Links
 # and wants to access the Web UI via that domain. Otherwise, the system uses
 # brev port-forward (local access only).
+# Strip protocol prefix if user included it (e.g. https://foo.brevlab.com → foo.brevlab.com)
 TUNNEL_FQDN="${TUNNEL_FQDN:-}"
+TUNNEL_FQDN="${TUNNEL_FQDN#https://}"
+TUNNEL_FQDN="${TUNNEL_FQDN#http://}"
 
 if [ -n "$TUNNEL_FQDN" ]; then
   export CHAT_UI_URL="https://$TUNNEL_FQDN"
