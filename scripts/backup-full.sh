@@ -11,6 +11,12 @@ set -euo pipefail
 BACKUP_BASE="${HOME}/.nemoclaw/backups"
 SESSIONS_PATH="/sandbox/.openclaw-data/agents/main/sessions"
 SKILLS_PATH="/sandbox/.openclaw-data/skills"
+WORKSPACE_PATH="/sandbox/.openclaw/workspace"
+
+# Files and dirs that upstream backup-workspace.sh doesn't cover yet.
+# We download/upload these ourselves so backups are complete.
+EXTRA_FILES=(HEARTBEAT.md TOOLS.md)
+EXTRA_DIRS=(.openclaw)
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -69,6 +75,23 @@ do_backup() {
   [ -n "$ts" ] || fail "Could not find backup directory after upstream backup"
   local dest="${BACKUP_BASE}/${ts}"
 
+  # Back up extra workspace files that upstream doesn't cover
+  info "Backing up extra workspace files..."
+  for f in "${EXTRA_FILES[@]}"; do
+    if openshell sandbox download "$sandbox" "${WORKSPACE_PATH}/${f}" "${dest}/"; then
+      info "  + ${f}"
+    else
+      warn "Skipped ${f} (not found)"
+    fi
+  done
+  for d in "${EXTRA_DIRS[@]}"; do
+    if openshell sandbox download "$sandbox" "${WORKSPACE_PATH}/${d}/" "${dest}/${d}/"; then
+      info "  + ${d}/"
+    else
+      warn "Skipped ${d}/ (not found)"
+    fi
+  done
+
   # Back up chat sessions
   info "Backing up chat sessions..."
   local sessions_dir="${dest}/sessions"
@@ -121,6 +144,26 @@ do_restore() {
   # --- Workspace phase: workspace files (safe to restore while gateway is running) ---
   if [ "$phase" = "all" ] || [ "$phase" = "workspace" ]; then
     "$upstream" restore "$sandbox" "$ts"
+
+    # Restore extra workspace files that upstream doesn't cover
+    for f in "${EXTRA_FILES[@]}"; do
+      if [ -f "${src}/${f}" ]; then
+        if openshell sandbox upload "$sandbox" "${src}/${f}" "${WORKSPACE_PATH}/"; then
+          info "  + ${f}"
+        else
+          warn "Failed to restore ${f}"
+        fi
+      fi
+    done
+    for d in "${EXTRA_DIRS[@]}"; do
+      if [ -d "${src}/${d}" ]; then
+        if openshell sandbox upload "$sandbox" "${src}/${d}/" "${WORKSPACE_PATH}/${d}/"; then
+          info "  + ${d}/"
+        else
+          warn "Failed to restore ${d}/"
+        fi
+      fi
+    done
 
     if [ -d "${src}/skills" ]; then
       info "Restoring skills..."
