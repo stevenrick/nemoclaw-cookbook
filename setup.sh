@@ -113,6 +113,11 @@ bash install.sh --non-interactive
 # shellcheck source=/dev/null
 source "$HOME/.bashrc" 2>/dev/null || true
 
+echo "=== Step 5b: Install services (nginx, systemd, terminal server) ==="
+"${SCRIPT_DIR}/scripts/install-services.sh"
+# CHAT_UI_URL may now be set by install-services.sh (cloudflared FQDN detection)
+[ -n "${CHAT_UI_URL:-}" ] && export CHAT_UI_URL
+
 echo "=== Step 6: Save tokenized UI URL ==="
 # Token is available as soon as the sandbox is running (step 5).
 # Extract it now, before any optional steps, so the URL file exists ASAP.
@@ -128,19 +133,22 @@ if [ -n "${BRAVE_API_KEY:-}" ]; then
 fi
 
 echo "=== Step 8: Start services ==="
+# Reload env to pick up nvm
+export NVM_DIR="$HOME/.nvm"
+# shellcheck source=/dev/null
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+
+# Ensure the internal OpenShell port forward is running (it dies on sandbox rebuild)
+SANDBOX=$(nemoclaw list 2>/dev/null | awk '/\*/{print $1}' | head -1)
+if [ -n "$SANDBOX" ]; then
+  openshell forward start 18789 "$SANDBOX" --background 2>/dev/null || true
+fi
+
+# Start messaging bridges if tokens are configured
 if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] || [ -n "${DISCORD_BOT_TOKEN:-}" ] || [ -n "${SLACK_BOT_TOKEN:-}" ]; then
-  # Reload env to pick up nvm
-  export NVM_DIR="$HOME/.nvm"
-  # shellcheck source=/dev/null
-  [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
   nemoclaw start
-  # Ensure the internal OpenShell port forward is running (it dies on sandbox rebuild)
-  SANDBOX=$(nemoclaw list 2>/dev/null | awk '/\*/{print $1}' | head -1)
-  if [ -n "$SANDBOX" ]; then
-    openshell forward start 18789 "$SANDBOX" --background 2>/dev/null
-  fi
 else
-  echo "No messaging tokens set — skipping services. Set TELEGRAM_BOT_TOKEN, DISCORD_BOT_TOKEN, or SLACK_BOT_TOKEN in ~/.env to enable."
+  echo "  No messaging tokens set — skipping bridges. Set TELEGRAM_BOT_TOKEN, DISCORD_BOT_TOKEN, or SLACK_BOT_TOKEN in ~/.env to enable."
 fi
 
 echo "=== Step 9: Verify deployment ==="
@@ -154,15 +162,21 @@ echo "=========================================="
 echo "  NemoClaw is ready!"
 echo "=========================================="
 echo ""
+if [ -f "$HOME/openclaw-tunnel-url.txt" ]; then
+  TUNNEL_URL=$(cat "$HOME/openclaw-tunnel-url.txt")
+  echo "Web UI (via tunnel): $TUNNEL_URL"
+  echo "  Open this URL in your browser — no port forwarding needed."
+  echo ""
+fi
+echo "Web UI (local):      cat ~/openclaw-ui-url.txt"
+echo ""
 echo "Next steps:"
-echo "  1. Port-forward the Web UI:  brev port-forward <instance> -p 18789:18789"
-echo "  2. Get the tokenized URL:    cat ~/openclaw-ui-url.txt"
 if [ "$INSTALL_CODEX" = "true" ]; then
-  echo "  3. Authenticate Codex (can be scripted via brev exec):"
+  echo "  1. Authenticate Codex (can be scripted via brev exec):"
   echo "     codex login --device-auth"
 fi
 if [ "$INSTALL_CLAUDE_CODE" = "true" ]; then
-  echo "  4. Authenticate Claude Code (interactive via brev shell):"
+  echo "  2. Authenticate Claude Code (interactive via brev shell):"
   echo "     brev shell <instance> → nemoclaw my-assistant connect → claude"
 fi
 echo ""
