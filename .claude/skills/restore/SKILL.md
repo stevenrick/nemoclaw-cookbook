@@ -90,11 +90,29 @@ rm /tmp/nemoclaw-restore-<timestamp>.tar.gz
 
 ## Phase 4 — Run restore on remote
 
+Restore happens in two phases. Workspace files and skills can be restored at any time (they're read from disk on each request). Session files must be restored **after** `nemoclaw start` so they overwrite whatever the gateway/channels created on reconnect.
+
+### Phase 4a — Restore workspace + skills
+
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> <timestamp>" --timeout 300000
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> <timestamp> workspace" --timeout 300000
 ```
 
-This restores workspace files, chat sessions, and skills via the upstream backup script and our enhancements.
+### Phase 4b — Restore sessions (after nemoclaw start)
+
+If services are not already running, start them first:
+
+```bash
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && source ~/.env && export NVIDIA_API_KEY TELEGRAM_BOT_TOKEN ALLOWED_CHAT_IDS DISCORD_BOT_TOKEN SLACK_BOT_TOKEN 2>/dev/null; nemoclaw start 2>/dev/null || true"
+```
+
+Then restore sessions:
+
+```bash
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> <timestamp> sessions" --timeout 300000
+```
+
+This uploads sessions.json and JSONL transcripts, overwriting whatever the gateway created during channel reconnect. The gateway reads sessions.json from disk on each write operation, so the restored sessions take effect on the next message.
 
 ## Phase 5 — Verify
 
