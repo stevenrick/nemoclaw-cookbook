@@ -28,6 +28,19 @@ Thanks for your interest in contributing! This project provides setup automation
 - Use [Conventional Commits](https://www.conventionalcommits.org/) format (e.g., `feat:`, `fix:`, `docs:`)
 - Do not commit credentials, API keys, or tokens — use `.env.example` for templates
 
+## CI Pipeline
+
+Every PR and push to `main` runs these checks:
+
+| Job | What it validates |
+|-----|-------------------|
+| **Secret scanning** | No credentials or tokens committed (gitleaks) |
+| **Validate patches** | Fragment anchors exist in upstream, `apply-patches.sh` succeeds, overlap audit |
+| **Shellcheck** | All `.sh` scripts pass lint |
+| **Docker build** | Full sandbox image builds from patched upstream Dockerfile |
+
+A **daily scheduled workflow** (`upstream-drift`) runs `validate-patches.sh` against latest upstream and opens a GitHub issue (labeled `upstream-drift`) if patches no longer apply. It auto-closes when they apply again.
+
 ## Security
 
 Do not report security vulnerabilities through GitHub issues. See [SECURITY.md](SECURITY.md) for instructions.
