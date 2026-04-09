@@ -226,6 +226,28 @@ nemoclaw my-assistant connect         # Shell in (via brev shell)
 nemoclaw my-assistant destroy         # Delete (WARNING: deletes workspace files)
 ```
 
+## System Services
+
+The deployment uses systemd for infrastructure. All services auto-start on boot.
+
+```bash
+# Check status
+systemctl status openshell-gateway     # OpenShell gateway (sandbox runtime)
+systemctl status nemoclaw-terminal     # Browser terminal server (if enabled)
+sudo systemctl status nginx            # Reverse proxy
+
+# View logs
+journalctl -u openshell-gateway -f     # Follow gateway logs
+journalctl -u nemoclaw-terminal -n 50  # Last 50 terminal server lines
+sudo tail -f /var/log/nginx/error.log  # nginx errors
+
+# Restart (brief interruption)
+systemctl restart openshell-gateway    # Restart gateway
+sudo systemctl restart nginx           # Restart proxy
+```
+
+**`nemoclaw start/stop` vs `systemctl`:** `nemoclaw start` only starts the Cloudflare tunnel (needed for Telegram webhooks). The gateway and sandbox run continuously under systemd, independent of `nemoclaw start/stop`.
+
 ## Network Policies
 
 ```bash
@@ -237,7 +259,11 @@ Default presets: `pypi`, `npm`, `telegram` (plus built-in policies for GitHub, D
 
 ## Backup & Restore
 
-Snapshot your entire sandbox state to your local machine, and restore it later to any NemoClaw instance. Backups include all workspace files (SOUL.md, USER.md, IDENTITY.md, AGENTS.md, HEARTBEAT.md, TOOLS.md, memory/, .openclaw/ state), chat session history, and installed skills.
+Snapshot your sandbox state to your local machine, and restore it later to any NemoClaw instance.
+
+**What's backed up:** workspace files (SOUL.md, USER.md, IDENTITY.md, AGENTS.md, HEARTBEAT.md, TOOLS.md, memory/), chat session history, and installed skills.
+
+**Not backed up:** infrastructure config (nginx, systemd — reinstalled by `install-services.sh`), Docker images (pulled fresh on rebuild), API credentials (stay in `.env` on host).
 
 **Claude Code users:** use `/backup` and `/restore` — they handle the full workflow interactively.
 

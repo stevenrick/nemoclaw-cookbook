@@ -4,9 +4,6 @@
 add_binaries:
   claude_code:
     - { path: /usr/local/bin/codex }
-  github:
-    - { path: /usr/local/bin/codex }
-    - { path: /usr/local/bin/node }
 
 new_sections:
   openai:

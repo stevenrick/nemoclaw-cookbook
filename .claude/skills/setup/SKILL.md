@@ -125,13 +125,14 @@ Then run setup:
 brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && cd ~/nemoclaw-cookbook && ./setup.sh"
 ```
 
-This takes ~5-10 minutes. The script handles: cloning repos, installing OpenShell, pulling the Docker image, applying patches, installing NemoClaw, configuring integrations, and starting services.
+This takes ~5-10 minutes. The script handles: cloning repos, installing OpenShell, pulling the Docker image, applying patches, installing NemoClaw, deploying infrastructure services (nginx, systemd, terminal server via `install-services.sh`), configuring integrations, and starting services.
 
 If setup fails, diagnose the error:
 - Patch failure → suggest `claude /refresh-patches`
 - Docker error → check if Docker is running and has enough disk
 - Network error → check connectivity
 - NemoClaw install error → check the install.sh output for specifics
+- Service install error → re-run just: `~/nemoclaw-cookbook/scripts/install-services.sh`
 
 Use `timeout: 600000` for the brev exec call (10 min max).
 

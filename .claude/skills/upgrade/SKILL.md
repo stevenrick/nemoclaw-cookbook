@@ -29,6 +29,15 @@ brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$
 
 Use the sandbox name from `nemoclaw list` (the one marked with `*`). Store it for all subsequent commands.
 
+Check infrastructure state (detects pre-systemd deployments that need migration):
+
+```bash
+brev exec <instance> "[ -f /etc/systemd/system/openshell-gateway.service ] && echo SYSTEMD_OK || echo SYSTEMD_MISSING"
+brev exec <instance> "command -v nginx >/dev/null 2>&1 && echo NGINX_OK || echo NGINX_MISSING"
+```
+
+If either is `MISSING`, the upgrade will include installing infrastructure services (Phase 7b).
+
 If no manifest exists (pre-manifest deployment), bootstrap by inspecting:
 
 ```bash
@@ -154,6 +163,14 @@ brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$
 ```
 
 Use `timeout: 300000` for docker pull.
+
+## Phase 7b — Install/update infrastructure services
+
+Always run this — it's idempotent. For pre-systemd deployments this installs nginx, systemd units, and the terminal server. For existing deployments it updates configs and restarts services.
+
+```bash
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/install-services.sh"
+```
 
 ## Phase 8 — Apply patches (validate BEFORE destroying)
 
