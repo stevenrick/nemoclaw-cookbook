@@ -134,6 +134,11 @@ if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] || [ -n "${DISCORD_BOT_TOKEN:-}" ] || [ -n "
   # shellcheck source=/dev/null
   [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
   nemoclaw start
+  # Ensure the internal OpenShell port forward is running (it dies on sandbox rebuild)
+  SANDBOX=$(nemoclaw list 2>/dev/null | awk '/\*/{print $1}' | head -1)
+  if [ -n "$SANDBOX" ]; then
+    openshell forward start 18789 "$SANDBOX" --background 2>/dev/null
+  fi
 else
   echo "No messaging tokens set — skipping services. Set TELEGRAM_BOT_TOKEN, DISCORD_BOT_TOKEN, or SLACK_BOT_TOKEN in ~/.env to enable."
 fi
