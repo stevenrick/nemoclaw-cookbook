@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NemoClaw Terminal</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #1e1e1e; height: 100vh; display: flex; flex-direction: column; }
+    #header {
+      background: #2d2d2d; color: #ccc; padding: 8px 16px;
+      font-family: system-ui, sans-serif; font-size: 13px;
+      display: flex; justify-content: space-between; align-items: center;
+      border-bottom: 1px solid #444;
+    }
+    #header .title { font-weight: 600; }
+    #status { font-size: 12px; }
+    #status.connected { color: #4ec9b0; }
+    #status.disconnected { color: #f44747; }
+    #status.connecting { color: #dcdcaa; }
+    #terminal { flex: 1; padding: 4px; }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <span class="title">NemoClaw Terminal</span>
+    <span id="status" class="connecting">connecting...</span>
+  </div>
+  <div id="terminal"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+  <script>
+    (function () {
+      "use strict";
+
+      var statusEl = document.getElementById("status");
+
+      // Extract the auth token from the page URL hash fragment.
+      // Expected URL: /terminal#token=<hex> or /terminal?token=<hex>
+      function getToken() {
+        var hash = window.location.hash.replace(/^#/, "");
+        var hashParams = new URLSearchParams(hash);
+        if (hashParams.get("token")) return hashParams.get("token");
+        var searchParams = new URLSearchParams(window.location.search);
+        return searchParams.get("token") || "";
+      }
+
+      var token = getToken();
+      if (!token) {
+        statusEl.textContent = "error: no token in URL";
+        statusEl.className = "disconnected";
+        document.getElementById("terminal").innerHTML =
+          '<p style="color:#f44747;padding:20px;font-family:monospace;">' +
+          "Missing auth token. Use: /terminal#token=&lt;hex&gt;</p>";
+        return;
+      }
+
+      // Set up xterm.js
+      var term = new Terminal({
+        cursorBlink: true,
+        fontSize: 14,
+        fontFamily: '"Cascadia Code", "Fira Code", "Menlo", monospace',
+        theme: { background: "#1e1e1e" },
+      });
+      var fitAddon = new FitAddon.FitAddon();
+      term.loadAddon(fitAddon);
+      term.open(document.getElementById("terminal"));
+      fitAddon.fit();
+
+      // Build WebSocket URL — connect to the same host the page was loaded from.
+      var wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
+      var wsUrl = wsProto + "//" + window.location.host + "/ws/terminal?token=" + encodeURIComponent(token);
+
+      var ws = new WebSocket(wsUrl);
+
+      ws.onopen = function () {
+        statusEl.textContent = "connected";
+        statusEl.className = "connected";
+        // Send initial resize so the server PTY matches the browser terminal size.
+        var dims = fitAddon.proposeDimensions();
+        if (dims) {
+          ws.send(JSON.stringify({ type: "resize", cols: dims.cols, rows: dims.rows }));
+        }
+      };
+
+      ws.onmessage = function (event) {
+        try {
+          var msg = JSON.parse(event.data);
+          if (msg.type === "output") {
+            term.write(msg.data);
+          } else if (msg.type === "exit") {
+            term.write("\r\n[session ended with code " + msg.code + "]\r\n");
+            statusEl.textContent = "disconnected";
+            statusEl.className = "disconnected";
+          }
+        } catch (e) {
+          // Non-JSON data — write raw.
+          term.write(event.data);
+        }
+      };
+
+      ws.onclose = function () {
+        statusEl.textContent = "disconnected";
+        statusEl.className = "disconnected";
+      };
+
+      ws.onerror = function () {
+        statusEl.textContent = "error";
+        statusEl.className = "disconnected";
+      };
+
+      // Terminal input → WebSocket
+      term.onData(function (data) {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "input", data: data }));
+        }
+      });
+
+      // Resize handling
+      window.addEventListener("resize", function () {
+        fitAddon.fit();
+      });
+      term.onResize(function (size) {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "resize", cols: size.cols, rows: size.rows }));
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

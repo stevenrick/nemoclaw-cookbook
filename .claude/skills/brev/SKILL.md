@@ -30,24 +30,24 @@ If the instance is STOPPED, start it:
 brev start <instance-name>
 ```
 
-## Phase 2 — Connect (port forward)
+## Phase 2 — Connect (Web UI)
 
-The Web UI runs on port 18789 inside the instance. Forward it to localhost:
+**If `TUNNEL_FQDN` is configured** (Secure Link — check `.env`):
 
 ```bash
-# Check if already forwarded
-lsof -i :18789 2>/dev/null && echo "already forwarded" || brev port-forward <instance> -p 18789:18789
+brev exec <instance> "cat ~/openclaw-tunnel-url.txt 2>/dev/null"
 ```
 
-`brev port-forward` returns immediately — it backgrounds the SSH tunnel automatically and reuses existing connections via multiplexing. Once running, the Web UI is at `http://127.0.0.1:18789`. **Always use `127.0.0.1`, not `localhost`** — the sandbox only allows `127.0.0.1` as an origin.
+Give this URL to the user — nginx proxies to the dashboard with Origin rewriting, so it works directly in any browser.
 
-To get the tokenized URL (includes auth token):
+**If no Secure Link** (port-forward fallback):
 
 ```bash
+lsof -i :18789 2>/dev/null && echo "already forwarded" || brev port-forward <instance> -p 18789:18789
 brev exec <instance> "cat ~/openclaw-ui-url.txt 2>/dev/null"
 ```
 
-Then replace the hostname in that URL with `127.0.0.1:18789` and give it to the user.
+Use `127.0.0.1` (not `localhost`) — the sandbox CORS config requires it.
 
 ## Phase 3 — Execute the requested work
 
@@ -182,6 +182,6 @@ brev exec <instance> "cd ~/nemoclaw-cookbook && ./setup.sh"
 ## Principles
 
 - **Prefer `brev exec` over asking the user to SSH in.** If you can do it remotely, do it.
-- **Port forward instead of public URLs.** `brev port-forward` to localhost is simpler and more secure than configuring Cloudflare tunnels.
+- **Prefer Secure Links when configured.** If `TUNNEL_FQDN` is set in `.env`, use `~/openclaw-tunnel-url.txt`. Fall back to `brev port-forward` only when no Secure Link is configured.
 - **Report results, don't dump raw output.** Summarize what you find; include key details.
 - **Check instance status first.** A stopped instance will cause exec to auto-start it (with a 10-min timeout), but it's better to be explicit.

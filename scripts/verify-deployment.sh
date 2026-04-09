@@ -146,7 +146,52 @@ else
   pass "No messaging tokens configured (services not needed)"
 fi
 
-# ── 8. Deployment manifest ──────────────────────────────────────────
+# ── 8. Infrastructure services ──────────────────────────────────────
+echo "Infrastructure:"
+# nginx
+if systemctl is-active --quiet nginx 2>/dev/null; then
+  NGINX_HTTP=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 http://127.0.0.1:80/ 2>/dev/null || echo "000")
+  if [ "$NGINX_HTTP" = "200" ]; then
+    pass "nginx proxy active (port 80 → 18789)"
+  else
+    warn "nginx running but proxy returning HTTP $NGINX_HTTP"
+  fi
+else
+  warn "nginx not running (install with: ~/nemoclaw-cookbook/scripts/install-services.sh)"
+fi
+
+# OpenShell gateway systemd
+if [ -f /etc/systemd/system/openshell-gateway.service ]; then
+  pass "openshell-gateway.service installed"
+else
+  warn "openshell-gateway.service not installed (systemd auto-start unavailable)"
+fi
+
+# Terminal server
+ENABLE_TERMINAL_SERVER="${ENABLE_TERMINAL_SERVER:-true}"
+if [ "$ENABLE_TERMINAL_SERVER" = "true" ]; then
+  if systemctl is-active --quiet nemoclaw-terminal 2>/dev/null; then
+    pass "Terminal WebSocket server running"
+  else
+    warn "Terminal server enabled but not running (check: systemctl status nemoclaw-terminal)"
+  fi
+fi
+
+# Tunnel / access mode
+TUNNEL_FQDN="${TUNNEL_FQDN:-}"
+TUNNEL_FQDN="${TUNNEL_FQDN#https://}"
+TUNNEL_FQDN="${TUNNEL_FQDN#http://}"
+if [ -n "$TUNNEL_FQDN" ]; then
+  if [ -f "$HOME/openclaw-tunnel-url.txt" ]; then
+    pass "Secure Link configured ($TUNNEL_FQDN)"
+  else
+    warn "TUNNEL_FQDN set but tokenized URL not saved (run save-ui-url.sh)"
+  fi
+else
+  pass "Access mode: port-forward (no TUNNEL_FQDN set)"
+fi
+
+# ── 9. Deployment manifest ──────────────────────────────────────────
 echo "Manifest:"
 if [ -f "$HOME/.nemoclaw/cookbook-deployment.json" ]; then
   MANIFEST_NC=$(python3 -c "import json; print(json.load(open('$HOME/.nemoclaw/cookbook-deployment.json')).get('nemoclaw_commit',''))" 2>/dev/null)

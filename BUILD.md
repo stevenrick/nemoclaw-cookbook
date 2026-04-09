@@ -203,13 +203,22 @@ Treat these like passwords. They change on every sandbox rebuild.
 
 ## Accessing the Web UI
 
-Port-forward the Web UI to your local machine:
+**Option A: Secure Link (recommended)** — no port forwarding needed:
+
+1. Go to Brev Settings → Secure Links → create a link for port 80 on your instance
+2. Set `TUNNEL_FQDN=your-link.brevlab.com` in `~/.env`
+3. Run `setup.sh` (or re-run `scripts/install-services.sh` + `scripts/save-ui-url.sh`)
+4. Open the URL from `~/openclaw-tunnel-url.txt` in your browser
+
+The nginx reverse proxy rewrites the Origin header so the sandbox CORS check passes regardless of your browser's domain.
+
+**Option B: Port forward (local-only fallback)**:
 
 ```bash
 brev port-forward <instance-name> -p 18789:18789
 ```
 
-Then open `http://127.0.0.1:18789/#token=<hex>` in your browser (get the token from `~/openclaw-ui-url.txt` on the instance). **Use `127.0.0.1`, not `localhost`** — the sandbox only allows `127.0.0.1` as an origin. This returns immediately — Brev backgrounds the SSH tunnel.
+Then open `http://127.0.0.1:18789/#token=<hex>` from `~/openclaw-ui-url.txt`. Use `127.0.0.1`, not `localhost`.
 
 ## Adding Integrations
 
