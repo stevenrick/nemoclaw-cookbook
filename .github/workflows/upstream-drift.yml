@@ -1,0 +1,70 @@
+name: Upstream drift check
+
+on:
+  schedule:
+    - cron: "0 12 * * *" # daily at noon UTC
+  workflow_dispatch: # allow manual trigger
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check-drift:
+    name: Validate patches against latest upstream
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run patch validation
+        id: validate
+        run: |
+          pip3 install --quiet 'pyyaml>=6,<7'
+          if ./scripts/validate-patches.sh 2>&1 | tee /tmp/validation.log; then
+            echo "status=pass" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=fail" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check for existing drift issue
+        if: steps.validate.outputs.status == 'fail'
+        id: existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create "upstream-drift" --description "Patches no longer apply against upstream" --color "d93f0b" 2>/dev/null || true
+          count=$(gh issue list --label "upstream-drift" --state open --json number --jq length)
+          echo "open_issues=$count" >> "$GITHUB_OUTPUT"
+
+      - name: Open drift issue
+        if: steps.validate.outputs.status == 'fail' && steps.existing.outputs.open_issues == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --title "Upstream drift: patches no longer apply cleanly" \
+            --label "upstream-drift" \
+            --body "$(cat <<'EOF'
+          The daily upstream drift check failed. Cookbook patches no longer apply cleanly against the latest NemoClaw upstream.
+
+          **Validation output:**
+          ```
+          $(cat /tmp/validation.log)
+          ```
+
+          **Next steps:**
+          1. Run `/refresh-patches` in Claude Code to update fragments
+          2. Or manually inspect `scripts/validate-patches.sh` output
+
+          *This issue was created automatically by the upstream-drift workflow.*
+          EOF
+          )"
+
+      - name: Close stale drift issues
+        if: steps.validate.outputs.status == 'pass'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue list --label "upstream-drift" --state open --json number --jq '.[].number' | while read -r num; do
+            gh issue close "$num" --comment "Patches apply cleanly again — closing automatically."
+          done
