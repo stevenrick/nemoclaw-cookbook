@@ -200,10 +200,12 @@ brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$
 
 Use `timeout: 600000` (10 min).
 
-### Restore
+### Restore workspace (phase 1 — before nemoclaw start)
+
+Workspace files (SOUL.md, USER.md, memory/, skills) are read from disk on each request, so restoring them while the gateway is running is safe.
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox>"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' workspace"
 ```
 
 ### Restart services
@@ -216,6 +218,14 @@ Then restart the internal OpenShell port forward (it dies on sandbox rebuild):
 
 ```bash
 brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && SANDBOX=\$(nemoclaw list 2>/dev/null | awk '/\\*/{print \$1}' | head -1) && [ -n \"\$SANDBOX\" ] && openshell forward start 18789 \"\$SANDBOX\" --background 2>/dev/null"
+```
+
+### Restore sessions (phase 2 — after nemoclaw start)
+
+Session files (sessions.json + JSONL transcripts) must be restored AFTER `nemoclaw start`. The gateway reads sessions.json from disk on each write, so uploading the backup version makes the next gateway operation pick up the restored sessions. Restoring before start would be overwritten when channels reconnect.
+
+```bash
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' sessions"
 ```
 
 ## Phase 10 — Save tokenized UI URL and write deployment manifest

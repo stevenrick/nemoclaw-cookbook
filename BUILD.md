@@ -259,14 +259,15 @@ nemoclaw my-assistant destroy --yes
 # 3. Rebuild
 nemoclaw onboard
 
-# 4. Restore workspace, chat history, and skills (or use /restore from Claude Code)
-~/nemoclaw-cookbook/scripts/backup-full.sh restore my-assistant
+# 4. Restore workspace + skills, start services, then restore sessions
+~/nemoclaw-cookbook/scripts/backup-full.sh restore my-assistant '' workspace
+nemoclaw start
+~/nemoclaw-cookbook/scripts/backup-full.sh restore my-assistant '' sessions
 ```
 
 After rebuild:
 1. Re-authenticate: run `codex login --device-auth` then launch `claude` (login is forced on first launch) inside the sandbox (SSO tokens don't survive rebuilds)
 2. Reinstall the Codex plugin for Claude Code (`/plugin marketplace add openai/codex-plugin-cc`, etc.)
-3. Restart messaging: `nemoclaw start` (with tokens exported)
 
 ## Refreshing Patches After Upstream Updates
 

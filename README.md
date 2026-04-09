@@ -118,9 +118,11 @@ Or see [BUILD.md § Refreshing Patches](BUILD.md#refreshing-patches-after-upstre
 **Manual (on the host):**
 
 ```bash
-~/nemoclaw-cookbook/scripts/backup-full.sh backup <sandbox>    # back up
-~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox>   # restore latest
-~/nemoclaw-cookbook/scripts/backup-full.sh list                # list backups
+~/nemoclaw-cookbook/scripts/backup-full.sh backup <sandbox>                  # back up
+~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox>                 # restore all (gateway not running)
+~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' workspace    # restore workspace only
+~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' sessions     # restore sessions only (after start)
+~/nemoclaw-cookbook/scripts/backup-full.sh list                              # list backups
 ```
 
 Replace `<sandbox>` with your sandbox name (default: `my-assistant`).
