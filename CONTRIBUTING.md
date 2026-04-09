@@ -27,6 +27,9 @@ Thanks for your interest in contributing! This project provides setup automation
 - Test your changes on a clean Ubuntu 22.04 environment when possible
 - Use [Conventional Commits](https://www.conventionalcommits.org/) format (e.g., `feat:`, `fix:`, `docs:`)
 - Do not commit credentials, API keys, or tokens — use `.env.example` for templates
+- For systemd unit changes: validate syntax with `systemd-analyze verify /path/to/unit`
+- For nginx config changes: test with `sudo nginx -t`
+- `scripts/install-services.sh` must remain idempotent — safe to run multiple times without side effects
 
 ## CI Pipeline
 

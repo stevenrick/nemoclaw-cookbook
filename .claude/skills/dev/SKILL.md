@@ -228,6 +228,14 @@ Configuration is baked into the sandbox image at build time via `NEMOCLAW_MESSAG
 ### Dashboard unreachable after rebuild
 The internal port forward (18789) can die during sandbox destroy/rebuild. `verify-deployment.sh` detects and auto-restarts it. To fix manually: `openshell forward start 18789 <sandbox> --background`.
 
+### Systemd service failures
+Check which services failed: `systemctl list-units --type=service --state=failed`. Then inspect logs:
+- Gateway: `journalctl -u openshell-gateway -n 100`
+- Terminal server: `journalctl -u nemoclaw-terminal -n 50`
+- nginx: `sudo tail -50 /var/log/nginx/error.log` and `sudo nginx -t` for config syntax
+
+Common fixes: `systemctl restart <service>`, or re-run `~/nemoclaw-cookbook/scripts/install-services.sh` to reset all services.
+
 ### NemoClaw CLI crash after `git pull`
 `MODULE_NOT_FOUND` errors mean upstream added new TypeScript modules but the CLI wasn't rebuilt. Run `setup.sh` or `cd ~/NemoClaw && bash install.sh --non-interactive`.
 

@@ -81,6 +81,10 @@ See [BUILD.md](BUILD.md) for the full step-by-step walkthrough with explanations
 - **NemoClaw** — CLI stack running an OpenClaw AI assistant inside an OpenShell sandbox
 - **Claude Code** — installed via native installer (Codex plugin for Claude Code installed post-deploy)
 - **Codex CLI** — OpenAI's coding agent
+- **nginx reverse proxy** — port 80 → dashboard with Origin rewriting (no more `127.0.0.1 vs localhost` issues)
+- **systemd services** — gateway and terminal server auto-start on boot with crash recovery
+- **Browser terminal** — `openshell term` in the browser at `/terminal` for network policy management (optional)
+- **Secure Links** — set `TUNNEL_FQDN` in `.env` to access the Web UI via Brev Secure Link (no port-forward needed)
 - **Messaging bridges** — Telegram, Discord, and Slack (set tokens in `~/.env`)
 - **Brave Search** — optional web search integration (add `BRAVE_API_KEY` to `~/.env`)
 - **Inference** — NVIDIA Nemotron by default, configurable via `NEMOCLAW_MODEL` in `~/.env`
