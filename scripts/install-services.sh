@@ -41,7 +41,7 @@ sudo cp "$COOKBOOK_DIR/config/nginx.conf" /etc/nginx/sites-available/nemoclaw
 sudo ln -sf /etc/nginx/sites-available/nemoclaw /etc/nginx/sites-enabled/nemoclaw
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t 2>/dev/null
-sudo systemctl reload nginx 2>/dev/null || sudo systemctl start nginx
+sudo systemctl restart nginx 2>/dev/null || sudo systemctl start nginx
 echo "  ✓ nginx configured"
 
 # ── 3. Install systemd unit for OpenShell gateway ────────────────────
