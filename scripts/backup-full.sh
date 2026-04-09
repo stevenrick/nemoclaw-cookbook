@@ -25,8 +25,12 @@ usage() {
   cat <<EOF
 Usage:
   $(basename "$0") backup  <sandbox-name>
-  $(basename "$0") restore <sandbox-name> [timestamp]
+  $(basename "$0") restore <sandbox-name> [timestamp] [phase]
   $(basename "$0") list
+
+phase (optional): all (default), workspace, sessions
+  workspace — workspace files + skills (safe while gateway is running)
+  sessions  — sessions.json + JSONL transcripts (run AFTER nemoclaw start)
 
 Backs up workspace files (via upstream script), chat session history, and skills.
 EOF
@@ -99,59 +103,55 @@ do_backup() {
 do_restore() {
   local sandbox="$1"
   local ts="${2:-}"
+  local phase="${3:-all}"
   local upstream
   upstream="$(find_upstream_script)"
 
-  # Run upstream workspace restore
+  # Resolve backup timestamp
   if [ -n "$ts" ]; then
-    "$upstream" restore "$sandbox" "$ts"
+    : # use provided timestamp
   else
-    "$upstream" restore "$sandbox"
     ts="$(latest_backup)"
   fi
+  [ -n "$ts" ] || fail "No backups found"
 
   local src="${BACKUP_BASE}/${ts}"
+  [ -d "$src" ] || fail "Backup not found: $src"
 
-  # Restore chat sessions if they exist in the backup
-  # Note: sessions.json is the registry. OpenClaw's gateway renames transcript .jsonl
-  # files that aren't in the registry with .reset. on startup. Since the gateway is
-  # already running when we restore, we upload sessions, then fix up any .reset.
-  # renames and merge the restored registry into the active one.
-  if [ -d "${src}/sessions" ]; then
-    info "Restoring chat sessions..."
-    if openshell sandbox upload "$sandbox" "${src}/sessions/" "${SESSIONS_PATH}/" 2>/dev/null; then
-      # Fix .reset. renames: rename them back so the gateway can see them
-      ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-        -o "ProxyCommand=$HOME/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name $sandbox" \
-        "sandbox@openshell-$sandbox" '
-          cd /sandbox/.openclaw-data/agents/main/sessions 2>/dev/null || exit 0
-          for f in *.reset.*; do
-            [ -f "$f" ] || continue
-            orig="${f%%.reset.*}"
-            mv "$f" "$orig" 2>/dev/null && echo "  Recovered: $orig"
-          done
-        ' 2>/dev/null || true
-      info "Chat sessions restored."
+  # --- Workspace phase: workspace files (safe to restore while gateway is running) ---
+  if [ "$phase" = "all" ] || [ "$phase" = "workspace" ]; then
+    "$upstream" restore "$sandbox" "$ts"
+
+    if [ -d "${src}/skills" ]; then
+      info "Restoring skills..."
+      if openshell sandbox upload "$sandbox" "${src}/skills/" "${SKILLS_PATH}/" 2>/dev/null; then
+        info "Skills restored."
+      else
+        warn "Failed to restore skills (sandbox may still be starting)"
+      fi
     else
-      warn "Failed to restore chat sessions (sandbox may still be starting)"
+      info "No skills in backup — skipping."
     fi
-  else
-    info "No chat sessions in backup — skipping."
   fi
 
-  # Restore skills if they exist in the backup
-  if [ -d "${src}/skills" ]; then
-    info "Restoring skills..."
-    if openshell sandbox upload "$sandbox" "${src}/skills/" "${SKILLS_PATH}/" 2>/dev/null; then
-      info "Skills restored."
+  # --- Sessions phase: chat history (restore AFTER nemoclaw start so it overwrites
+  #     whatever the gateway/channels created on reconnect). The gateway reads
+  #     sessions.json from disk on each write, so uploading the backup version makes
+  #     the next gateway operation pick up the restored sessions. ---
+  if [ "$phase" = "all" ] || [ "$phase" = "sessions" ]; then
+    if [ -d "${src}/sessions" ]; then
+      info "Restoring chat sessions..."
+      if openshell sandbox upload "$sandbox" "${src}/sessions/" "${SESSIONS_PATH}/" 2>/dev/null; then
+        info "Chat sessions restored."
+      else
+        warn "Failed to restore chat sessions (sandbox may still be starting)"
+      fi
     else
-      warn "Failed to restore skills (sandbox may still be starting)"
+      info "No chat sessions in backup — skipping."
     fi
-  else
-    info "No skills in backup — skipping."
   fi
 
-  info "Full restore complete."
+  info "Full restore complete (phase: $phase)."
 }
 
 # --- Main ---

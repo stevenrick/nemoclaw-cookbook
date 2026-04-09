@@ -237,18 +237,23 @@ Backups are stored locally in `backups/<timestamp>/` (gitignored). Each backup i
 # List available backups
 ~/nemoclaw-cookbook/scripts/backup-full.sh list
 
-# Restore latest backup
+# Restore latest backup (workspace + sessions in one step — use when gateway is not running)
 ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox>
 
 # Restore a specific backup
 ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> 2026-04-05_143022
+
+# Two-phase restore (use after rebuild when gateway is already running)
+~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' workspace   # phase 1: before nemoclaw start
+nemoclaw start                                                             # start services
+~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' sessions    # phase 2: after nemoclaw start
 ```
 
 Replace `<sandbox>` with your sandbox name (default: `my-assistant` — run `nemoclaw list` to check).
 
 Backups on the host are stored at `~/.nemoclaw/backups/<timestamp>/`.
 
-**Session restore note:** OpenClaw's gateway renames session transcript files that aren't in its registry (`.reset.` suffix). The restore script automatically recovers these files after upload. If old sessions don't appear in the web UI after restore, try refreshing the page.
+**Session restore note:** After a rebuild, sessions must be restored **after** `nemoclaw start`. The gateway reads sessions.json from disk on each operation, so restoring after start overwrites whatever the gateway created during channel reconnect. Restoring before start would be overwritten when Telegram/Discord channels reconnect.
 
 ## Updating OpenClaw
 
@@ -279,9 +284,10 @@ nemoclaw stop 2>/dev/null
 nemoclaw <sandbox> destroy --yes
 nemoclaw onboard
 
-# 5. Restore
-~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox>
+# 5. Restore workspace, start services, then restore sessions
+~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' workspace
 nemoclaw start
+~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' sessions
 ```
 
 Replace `<sandbox>` with your sandbox name (run `nemoclaw list` to check).

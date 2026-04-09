@@ -1,12 +1,12 @@
 # Upstream Compatibility
 
-Last validated end-to-end deployment: **2026-04-08**
+Last validated end-to-end deployment: **2026-04-09**
 
 | Component | Commit / Tag | Description | Link |
 |-----------|-------------|-------------|------|
-| NemoClaw | `86f94a2` | `fix(inference): increase timeout for local providers to 180s` | [commit](https://github.com/NVIDIA/NemoClaw/commit/86f94a2) |
-| OpenShell | `c2e52567` | `ci(gpu): add separate GPU test workflows (#773)` | [commit](https://github.com/NVIDIA/OpenShell/commit/c2e52567) |
-| sandbox-base | `latest` | Image tag pulled at deploy time | [package](https://github.com/NVIDIA/NemoClaw/pkgs/container/nemoclaw%2Fsandbox-base) |
+| NemoClaw | `49b9a1d2` | `docs: update ecosystem doc based on the latest codebase (#1681)` | [commit](https://github.com/NVIDIA/NemoClaw/commit/49b9a1d2) |
+| OpenShell | `09581293` | `feat(ci): add release-vm-dev pipeline and install-vm.sh installer (#788)` | [commit](https://github.com/NVIDIA/OpenShell/commit/09581293) |
+| sandbox-base | `045a340` | Image tag pulled at deploy time | [package](https://github.com/NVIDIA/NemoClaw/pkgs/container/nemoclaw%2Fsandbox-base) |
 
 ## What this means
 
