@@ -1,0 +1,18 @@
+# Terminal WebSocket server — bridges xterm.js in the browser to openshell term
+# via node-pty. Optional: controlled by ENABLE_TERMINAL_SERVER in ~/.env.
+
+[Unit]
+Description=NemoClaw Terminal WebSocket Server
+After=network.target openshell-gateway.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/nemoclaw-cookbook/terminal-server
+ExecStart=/bin/bash -c '. $HOME/.nvm/nvm.sh && node server.js --port 3001'
+Restart=on-failure
+RestartSec=3
+Environment=HOME=/home/ubuntu
+
+[Install]
+WantedBy=multi-user.target

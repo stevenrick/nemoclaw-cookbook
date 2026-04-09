@@ -1,0 +1,11 @@
+{
+  "name": "nemoclaw-terminal-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WebSocket-to-PTY bridge for browser-based terminal access to NemoClaw sandbox",
+  "main": "server.js",
+  "dependencies": {
+    "node-pty": "^1.0.0",
+    "ws": "^8.18.0"
+  }
+}

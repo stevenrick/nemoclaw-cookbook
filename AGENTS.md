@@ -12,8 +12,13 @@ scripts/
   apply-patches.sh    # Applies fragments to upstream (replaces git apply)
   merge-policy.py     # YAML-aware policy fragment merger
   validate-patches.sh # Check fragments still work against upstream
-  save-ui-url.sh      # Extract gateway token → ~/openclaw-ui-url.txt
+  install-services.sh # Installs nginx, systemd units, terminal server
+  save-ui-url.sh      # Extract gateway token → ~/openclaw-ui-url.txt + tunnel URL
   backup-full.sh      # Workspace, chat history, and skills backup/restore
+config/
+  nginx.conf          # Reverse proxy — port 80 → OpenClaw dashboard, Origin rewrite
+  systemd/            # systemd units for gateway, terminal server
+terminal-server/      # WebSocket-to-PTY bridge for browser terminal (optional)
 BUILD.md              # Step-by-step setup with explanations
 USE.md                # Day-to-day commands and features
 CONTRIBUTING.md       # Contribution guidelines

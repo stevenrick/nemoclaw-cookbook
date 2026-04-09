@@ -47,10 +47,12 @@ brev exec <instance> "git clone -b main https://github.com/stevenrick/nemoclaw-c
 brev copy .env <instance>:~/.env
 brev exec <instance> "cd ~/nemoclaw-cookbook && ./setup.sh"
 
-# 3. Connect — port-forward the Web UI
+# 3. Connect — open the Web UI
+# If you set TUNNEL_FQDN in .env (Secure Link):
+brev exec <instance> "cat ~/openclaw-tunnel-url.txt"
+# Otherwise, use port-forward:
 brev port-forward <instance> -p 18789:18789
 brev exec <instance> "cat ~/openclaw-ui-url.txt"
-# Open the URL in your browser (use 127.0.0.1, not localhost)
 
 # 4–5. Authenticate coding agents (if installed — see INSTALL_CLAUDE_CODE / INSTALL_CODEX in .env)
 #
