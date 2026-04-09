@@ -226,7 +226,7 @@ Configuration is baked into the sandbox image at build time via `NEMOCLAW_MESSAG
 3. The `ALLOWED_CHAT_IDS` allowlist — group messages are dropped if the sender isn't listed
 
 ### Dashboard unreachable after rebuild
-The internal port forward (18789) can die during sandbox destroy/rebuild. `verify-deployment.sh` detects and auto-restarts it. To fix manually: `openshell forward start 18789 <sandbox>`.
+The internal port forward (18789) can die during sandbox destroy/rebuild. `verify-deployment.sh` detects and auto-restarts it. To fix manually: `openshell forward start 18789 <sandbox> --background`.
 
 ### NemoClaw CLI crash after `git pull`
 `MODULE_NOT_FOUND` errors mean upstream added new TypeScript modules but the CLI wasn't rebuilt. Run `setup.sh` or `cd ~/NemoClaw && bash install.sh --non-interactive`.

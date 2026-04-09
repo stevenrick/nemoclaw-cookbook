@@ -58,7 +58,7 @@ else
   fail "Web UI NOT reachable on port 18789 (HTTP $HTTP_CODE)"
   # Try to restart the forward
   echo "       Attempting to restart port forward..."
-  openshell forward start 18789 "$SANDBOX" 2>/dev/null &
+  openshell forward start 18789 "$SANDBOX" --background 2>/dev/null
   sleep 3
   HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:18789/ 2>/dev/null || echo "000")
   if [ "$HTTP_CODE" = "200" ]; then
