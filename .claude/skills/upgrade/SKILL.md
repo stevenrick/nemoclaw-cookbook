@@ -212,6 +212,12 @@ brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$
 brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && source ~/.env && export NVIDIA_API_KEY TELEGRAM_BOT_TOKEN ALLOWED_CHAT_IDS DISCORD_BOT_TOKEN SLACK_BOT_TOKEN 2>/dev/null; nemoclaw start 2>/dev/null || true"
 ```
 
+Then restart the internal OpenShell port forward (it dies on sandbox rebuild):
+
+```bash
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && SANDBOX=\$(nemoclaw list 2>/dev/null | awk '/\\*/{print \$1}' | head -1) && [ -n \"\$SANDBOX\" ] && openshell forward start 18789 \"\$SANDBOX\" --background 2>/dev/null"
+```
+
 ## Phase 10 — Save tokenized UI URL and write deployment manifest
 
 **If sandbox was rebuilt**, the gateway token has changed. Regenerate the URL file:

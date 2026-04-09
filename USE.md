@@ -50,7 +50,7 @@ Replace the hostname with `127.0.0.1:18789` and open in your browser. **Use `127
 If the internal OpenShell port forward stops (sandbox is running but Web UI is unreachable):
 
 ```bash
-brev exec <instance> "openshell forward start 18789 my-assistant"
+brev exec <instance> "openshell forward start 18789 my-assistant --background"
 ```
 
 ## OpenClaw (inside the sandbox)
@@ -326,7 +326,7 @@ openshell status                      # Gateway connection status
 ### Web UI unreachable after rebuild
 The internal OpenShell port forward (18789) can die during sandbox destroy/rebuild. `verify-deployment.sh` detects and auto-restarts it, but if running manually:
 ```bash
-openshell forward start 18789 my-assistant
+openshell forward start 18789 my-assistant --background
 ```
 
 ### `nemoclaw` crashes with MODULE_NOT_FOUND after `git pull`
