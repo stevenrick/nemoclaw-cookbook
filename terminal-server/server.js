@@ -28,7 +28,10 @@ const PORT = parseInt(
 );
 
 // Hardcoded command — never accept commands from the client.
-const SHELL_CMD = "openshell";
+// Use full path since systemd services don't inherit the user's shell PATH.
+const SHELL_CMD = process.env.HOME
+  ? `${process.env.HOME}/.local/bin/openshell`
+  : "/home/ubuntu/.local/bin/openshell";
 const SHELL_ARGS = ["term"];
 
 // ── Token authentication ──────────────────────────────────────────────
