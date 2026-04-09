@@ -22,6 +22,5 @@ add_endpoints:
       port: 443
       access: full
 
-add_binaries:
-  github:
-    - { path: /usr/local/bin/claude }
+# Note: claude binary access for github_codeload is defined in policy-core.yaml
+# (new_sections must include all binaries since add_binaries runs first)
