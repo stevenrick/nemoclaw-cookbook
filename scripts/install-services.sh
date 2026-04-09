@@ -75,45 +75,22 @@ else
   sudo systemctl stop nemoclaw-terminal 2>/dev/null || true
 fi
 
-# ── 5. Detect cloudflared tunnel FQDN ───────────────────────────────
-echo "  Detecting cloudflared tunnel FQDN..."
+# ── 5. Configure access method (FQDN or port-forward) ───────────────
+# If TUNNEL_FQDN is set in .env, the user has configured Brev Secure Links
+# and wants to access the Web UI via that domain. Otherwise, the system uses
+# brev port-forward (local access only).
 TUNNEL_FQDN="${TUNNEL_FQDN:-}"
-DASHBOARD_PORT=18789
-
-if [ -z "$TUNNEL_FQDN" ] && command -v journalctl >/dev/null 2>&1; then
-  for svc in cloudflared cloudflared-ingress-tunnel; do
-    TUNNEL_FQDN=$(journalctl -u "$svc" --no-pager -o cat 2>/dev/null \
-      | grep -o '"hostname":"[^"]*","service":"http://localhost:'"$DASHBOARD_PORT"'"' \
-      | grep -o '"hostname":"[^"]*"' \
-      | head -1 \
-      | sed 's/"hostname":"//;s/"//') || true
-    [ -n "$TUNNEL_FQDN" ] && break
-  done
-fi
-
-# Fallback: try BREV_ENV_ID pattern
-if [ -z "$TUNNEL_FQDN" ] && [ -n "${BREV_ENV_ID:-}" ]; then
-  TUNNEL_FQDN="openclaw0-${BREV_ENV_ID}.brevlab.com"
-fi
-
-# Fallback: try hostname pattern
-if [ -z "$TUNNEL_FQDN" ]; then
-  HOST=$(hostname)
-  if [[ "$HOST" =~ ^brev-([a-z0-9]+)$ ]]; then
-    TUNNEL_FQDN="openclaw0-${BASH_REMATCH[1]}.brevlab.com"
-  fi
-fi
 
 if [ -n "$TUNNEL_FQDN" ]; then
   export CHAT_UI_URL="https://$TUNNEL_FQDN"
-  echo "  ✓ Tunnel FQDN: $TUNNEL_FQDN"
+  echo "  ✓ Access mode: Secure Link (FQDN)"
   echo "  ✓ CHAT_UI_URL=$CHAT_UI_URL"
-
-  # Write tunnel URL for reference
   echo "https://$TUNNEL_FQDN" > "$HOME/openclaw-tunnel-url.txt"
 else
-  echo "  ⚠ No tunnel FQDN detected — sandbox CORS will use 127.0.0.1 only"
-  echo "    Set TUNNEL_FQDN in ~/.env to override, or use brev port-forward as fallback"
+  echo "  ✓ Access mode: port-forward (local)"
+  echo "    To use a Secure Link instead, set TUNNEL_FQDN in ~/.env"
+  echo "    and configure it in Brev (Settings → Secure Links)."
+  rm -f "$HOME/openclaw-tunnel-url.txt"
 fi
 
 # ── 6. Start services ───────────────────────────────────────────────

@@ -164,11 +164,17 @@ echo "=========================================="
 echo ""
 if [ -f "$HOME/openclaw-tunnel-url.txt" ]; then
   TUNNEL_URL=$(cat "$HOME/openclaw-tunnel-url.txt")
-  echo "Web UI (via tunnel): $TUNNEL_URL"
-  echo "  Open this URL in your browser — no port forwarding needed."
+  echo "Web UI: $TUNNEL_URL"
+  echo "  Open in your browser — no port forwarding needed."
+else
+  echo "Web UI: brev port-forward <instance> -p 18789:18789"
+  echo "  Then open: cat ~/openclaw-ui-url.txt"
   echo ""
+  echo "  To use a Secure Link instead (no port-forward):"
+  echo "    1. Go to Brev Settings → Secure Links → add port 80"
+  echo "    2. Set TUNNEL_FQDN=<your-link> in ~/.env"
+  echo "    3. Re-run setup.sh (or /upgrade)"
 fi
-echo "Web UI (local):      cat ~/openclaw-ui-url.txt"
 echo ""
 echo "Next steps:"
 if [ "$INSTALL_CODEX" = "true" ]; then
