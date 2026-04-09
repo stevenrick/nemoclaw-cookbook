@@ -36,13 +36,7 @@ If exactly one instance is listed, confirm with the user before proceeding:
 
 > Found Brev instance `<name>` (STATUS). Deploy NemoClaw here?
 
-Establish the port forward early — this warms up the SSH connection and all subsequent `brev exec` calls multiplex over it:
-
-```bash
-lsof -i :18789 2>/dev/null && echo "Port 18789 already in use" || brev port-forward <instance> -p 18789:18789
-```
-
-Then verify the remote instance has Docker:
+Verify the remote instance has Docker:
 
 ```bash
 brev exec <instance> "docker info > /dev/null 2>&1 && echo 'Docker: OK' || echo 'Docker: NOT RUNNING'"
@@ -149,7 +143,7 @@ Run the comprehensive health check (setup.sh runs this automatically as Step 9):
 brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/verify-deployment.sh"
 ```
 
-This checks gateway, sandbox, dashboard, OpenClaw, tools, workspace, services, and manifest. If the dashboard port forward is dead, it auto-restarts it.
+This checks gateway, sandbox, dashboard, OpenClaw, tools, workspace, services, infrastructure (nginx, systemd, terminal server), and manifest. If the dashboard port forward is dead, it auto-restarts it.
 
 **If sandbox shows but NemoClaw doesn't recognize it:**
 
@@ -159,9 +153,12 @@ brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$
 
 ## Phase 5 — Connect
 
-The port forward was established in Phase 1. `setup.sh` saves the tokenized URL automatically (Step 6). Retrieve it:
+`setup.sh` saves the tokenized URL automatically (Step 6). Retrieve it:
 
 ```bash
+# If Secure Link is configured (TUNNEL_FQDN in .env):
+brev exec <instance> "cat ~/openclaw-tunnel-url.txt 2>/dev/null"
+# Otherwise (port-forward mode):
 brev exec <instance> "cat ~/openclaw-ui-url.txt 2>/dev/null"
 ```
 
@@ -171,9 +168,9 @@ If the file is missing (manual onboard, or extraction failed), regenerate it:
 brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/save-ui-url.sh"
 ```
 
-The URL from `openclaw-ui-url.txt` will have a hostname like `127.0.0.1:18789` and a `/#token=<hex>` fragment. If the hostname differs, replace only the hostname with `127.0.0.1:18789` — preserve the exact path and `/#token=` fragment. **Always use `127.0.0.1`, not `localhost`** — the sandbox only allows `127.0.0.1` as an origin.
+If `TUNNEL_FQDN` is set, the tunnel URL works directly in any browser (nginx rewrites the Origin header). If using port-forward, use `127.0.0.1` (not `localhost`).
 
-> Web UI is live at: `http://127.0.0.1:18789/#token=<hex>`
+> Web UI is live at: `<URL from the appropriate file>`
 
 ## Phase 6 — Authenticate
 

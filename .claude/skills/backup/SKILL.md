@@ -1,6 +1,6 @@
 ---
 name: backup
-description: Pull all sandbox assets (workspace, sessions, skills) from remote NemoClaw to local backups/ directory. Use when you want to snapshot the sandbox state to your local machine.
+description: Pull all sandbox assets (workspace files, state, sessions, skills) from remote NemoClaw to local backups/ directory. Use when you want to snapshot the sandbox state to your local machine.
 allowed-tools: Bash Read Grep Glob AskUserQuestion
 ---
 
@@ -41,11 +41,13 @@ Capture existing backup timestamps (to identify the new one later):
 brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ls -1t ~/.nemoclaw/backups/ 2>/dev/null | head -5"
 ```
 
-Run the backup (use 5-minute timeout — workspace download can be slow):
+Run the backup (use 5-minute Bash tool timeout — workspace download can be slow):
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh backup <sandbox>" --timeout 300000
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh backup <sandbox>"
 ```
+
+**Important:** Set `timeout: 300000` on the Bash tool call, NOT as a `brev exec` flag (brev doesn't have `--timeout`).
 
 Capture the timestamp of the just-created backup:
 
@@ -105,7 +107,7 @@ Adjust the `includes` array based on what was actually present (check for `sessi
 
 Summarize:
 - Local path: `backups/<timestamp>/`
-- What was backed up: workspace files (list key ones like SOUL.md, USER.md, memory/), session count, skill count
+- What was backed up: workspace files (SOUL.md, USER.md, IDENTITY.md, AGENTS.md, HEARTBEAT.md, TOOLS.md, memory/, .openclaw/), session count, skill count
 - Backup size: `du -sh <cookbook-dir>/backups/<timestamp>/`
 - Note that the remote copy is also kept at `~/.nemoclaw/backups/<timestamp>/`
 

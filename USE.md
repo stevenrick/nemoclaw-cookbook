@@ -27,25 +27,28 @@ The non-interactive method works for both humans and agents. Use it for automati
 
 ## Web UI
 
-Forward the Web UI port to your local machine:
+**If you configured a Secure Link** (`TUNNEL_FQDN` in `.env`):
+
+```bash
+brev exec <instance> "cat ~/openclaw-tunnel-url.txt"
+```
+
+Open that URL — nginx proxies to the dashboard with Origin rewriting, so no port-forward or `127.0.0.1` restrictions.
+
+**If using port-forward** (no `TUNNEL_FQDN`):
 
 ```bash
 brev port-forward <instance> -p 18789:18789
-```
-
-Get the tokenized URL (treat it like a password — changes on every rebuild):
-
-```bash
 brev exec <instance> "cat ~/openclaw-ui-url.txt"
 ```
 
-If the file is missing, regenerate it:
+Open the URL with `127.0.0.1` (not `localhost` — the sandbox CORS config requires it).
+
+**If the URL file is missing**, regenerate it:
 
 ```bash
 brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/save-ui-url.sh"
 ```
-
-Replace the hostname with `127.0.0.1:18789` and open in your browser. **Use `127.0.0.1`, not `localhost`** — the sandbox only allows `127.0.0.1` as an origin.
 
 If the internal OpenShell port forward stops (sandbox is running but Web UI is unreachable):
 
@@ -222,7 +225,7 @@ Default presets: `pypi`, `npm`, `telegram` (plus built-in policies for GitHub, D
 
 ## Backup & Restore
 
-Snapshot your entire sandbox state to your local machine, and restore it later to any NemoClaw instance. Backups include workspace files, chat session history, and installed skills.
+Snapshot your entire sandbox state to your local machine, and restore it later to any NemoClaw instance. Backups include all workspace files (SOUL.md, USER.md, IDENTITY.md, AGENTS.md, HEARTBEAT.md, TOOLS.md, memory/, .openclaw/ state), chat session history, and installed skills.
 
 **Claude Code users:** use `/backup` and `/restore` — they handle the full workflow interactively.
 
@@ -444,10 +447,17 @@ brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$
   && NVIDIA_API_KEY=<key> TELEGRAM_BOT_TOKEN=<token> ALLOWED_CHAT_IDS=<id> nemoclaw start"
 ```
 
-### Port forwarding the Web UI
+### Accessing the Web UI
 
+**Secure Link** (if `TUNNEL_FQDN` is set in `.env`):
+```bash
+brev exec <instance> "cat ~/openclaw-tunnel-url.txt"   # Open this URL directly
+```
+
+**Port forward** (fallback):
 ```bash
 brev port-forward <instance> -p 18789:18789   # Returns immediately (backgrounded SSH tunnel)
+brev exec <instance> "cat ~/openclaw-ui-url.txt"       # Use 127.0.0.1, not localhost
 ```
 
 See also: `/brev` skill in Claude Code for the full reference.

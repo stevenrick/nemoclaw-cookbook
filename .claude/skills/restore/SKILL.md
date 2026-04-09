@@ -1,6 +1,6 @@
 ---
 name: restore
-description: Push a local backup to a remote NemoClaw sandbox — restores workspace, sessions, and skills. Use after deploying a new instance to recover previous state.
+description: Push a local backup to a remote NemoClaw sandbox — restores workspace files, state, sessions, and skills. Use after deploying a new instance to recover previous state.
 allowed-tools: Bash Read Grep Glob AskUserQuestion
 ---
 
@@ -95,8 +95,10 @@ Restore happens in two phases. Workspace files and skills can be restored at any
 ### Phase 4a — Restore workspace + skills
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> <timestamp> workspace" --timeout 300000
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> <timestamp> workspace"
 ```
+
+**Important:** Set `timeout: 300000` on the Bash tool call, NOT as a `brev exec` flag.
 
 ### Phase 4b — Restore sessions (after nemoclaw start)
 
@@ -109,8 +111,10 @@ brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$
 Then restore sessions:
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> <timestamp> sessions" --timeout 300000
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> <timestamp> sessions"
 ```
+
+**Important:** Set `timeout: 300000` on the Bash tool call, NOT as a `brev exec` flag.
 
 This uploads sessions.json and JSONL transcripts, overwriting whatever the gateway created during channel reconnect. The gateway reads sessions.json from disk on each write operation, so the restored sessions take effect on the next message.
 
