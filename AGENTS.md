@@ -12,7 +12,7 @@ scripts/
   apply-patches.sh    # Applies fragments to upstream (replaces git apply)
   merge-policy.py     # YAML-aware policy fragment merger
   validate-patches.sh # Check fragments still work against upstream
-  install-services.sh # Installs nginx, systemd units, terminal server
+  install-services.sh # Installs nginx, systemd units, terminal server (called by setup.sh)
   save-ui-url.sh      # Extract gateway token → ~/openclaw-ui-url.txt + tunnel URL
   backup-full.sh      # Workspace, chat history, and skills backup/restore
 config/

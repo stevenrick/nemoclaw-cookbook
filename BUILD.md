@@ -179,27 +179,32 @@ nemoclaw start
 NVIDIA_API_KEY=<key> TELEGRAM_BOT_TOKEN=<token> ALLOWED_CHAT_IDS=<id> nemoclaw start
 ```
 
-This also starts a Cloudflare quick tunnel for the Telegram webhook URL.
+This starts a Cloudflare quick tunnel for the Telegram webhook URL. Note: `nemoclaw start` only manages the tunnel — the gateway and sandbox run continuously under systemd.
+
+## Step 9b: Infrastructure Services
+
+`setup.sh` automatically calls `scripts/install-services.sh` which deploys:
+
+| Component | Purpose | Managed by |
+|-----------|---------|-----------|
+| **nginx** | Reverse proxy: port 80 → dashboard (18789), Origin header rewriting for Secure Link | systemd |
+| **openshell-gateway.service** | Auto-starts the OpenShell gateway on boot | systemd |
+| **nemoclaw-terminal.service** | Browser terminal server at `/terminal` (optional) | systemd |
+
+All services start on boot and restart on failure. The script is idempotent — safe to re-run after config changes.
+
+To manage manually: `systemctl status|restart|stop <service-name>`. See USE.md § System Services for full commands.
 
 ## Step 10: Tokenized UI URL
 
-`setup.sh` automatically extracts the gateway auth token from the sandbox and writes it to `~/openclaw-ui-url.txt`. Verify it exists:
+`setup.sh` extracts the gateway auth token and writes:
 
-```bash
-cat ~/openclaw-ui-url.txt
-# http://127.0.0.1:18789/#token=<hex>
-```
+- **`~/openclaw-ui-url.txt`** — local access: `http://127.0.0.1:18789/#token=<hex>`
+- **`~/openclaw-tunnel-url.txt`** — Secure Link access (if `TUNNEL_FQDN` set): `https://<fqdn>/#token=<hex>`
 
-If the file is missing (e.g., manual install), extract the token yourself:
+Both use the same token. It changes on every sandbox rebuild.
 
-```bash
-# From sandbox logs:
-nemoclaw my-assistant logs | grep 'Local UI'
-# Or directly from sandbox config:
-nemoclaw my-assistant connect -c "jq -r '.gateway.auth.token' /sandbox/.openclaw/openclaw.json"
-```
-
-Treat these like passwords. They change on every sandbox rebuild.
+If files are missing, regenerate: `~/nemoclaw-cookbook/scripts/save-ui-url.sh`
 
 ## Accessing the Web UI
 
