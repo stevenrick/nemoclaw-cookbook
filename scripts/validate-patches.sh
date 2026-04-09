@@ -39,7 +39,10 @@ fi
 # ── Check 2: Policy section anchors ─────────────────────────────────
 POLICY="nemoclaw-blueprint/policies/openclaw-sandbox.yaml"
 echo "Checking policy section anchors..."
-for section in claude_code nvidia github; do
+# Only check sections that our add_endpoints fragments target.
+# github was moved to a preset in upstream #1583 — our policy-core.yaml
+# now uses new_sections instead of add_endpoints, so no anchor needed.
+for section in claude_code nvidia; do
   if grep -qE "^  ${section}:" "$POLICY" 2>/dev/null; then
     echo "  ✓ Section: $section"
   else

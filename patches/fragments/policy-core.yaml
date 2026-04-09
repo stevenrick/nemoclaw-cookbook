@@ -1,8 +1,23 @@
 # Core policy additions — always applied
-# Adds codeload.github.com for HTTPS git clone support
+# Adds codeload.github.com for HTTPS git clone support (needed by Claude Code and Codex).
+# Upstream moved the github section to a preset in #1583, so we create our own
+# section for codeload (which the preset doesn't cover).
+# All binaries that need GitHub access are listed here since add_binaries
+# runs before new_sections and would fail targeting a section that doesn't exist yet.
 
-add_endpoints:
-  github:
-    - host: codeload.github.com
-      port: 443
-      access: full
+new_sections:
+  github_codeload:
+    name: github_codeload
+    endpoints:
+      - host: codeload.github.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        tls: terminate
+        rules:
+          - allow: { method: GET, path: "/**" }
+    binaries:
+      - { path: /usr/local/bin/claude }
+      - { path: /usr/local/bin/codex }
+      - { path: /usr/local/bin/node }
+      - { path: /usr/local/bin/git }
