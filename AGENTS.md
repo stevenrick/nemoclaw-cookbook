@@ -1,6 +1,6 @@
 # Coding Agent Instructions
 
-This is a thin patch overlay on upstream [NemoClaw](https://github.com/NVIDIA/NemoClaw) + [OpenShell](https://github.com/NVIDIA/OpenShell). It is NOT a fork.
+This is an opinionated patch overlay on upstream [NemoClaw](https://github.com/NVIDIA/NemoClaw) + [OpenShell](https://github.com/NVIDIA/OpenShell). It is NOT a fork.
 
 ## Project structure
 
