@@ -14,7 +14,7 @@ SKILLS_PATH="/sandbox/.openclaw-data/skills"
 # Writable workspace — NOT /sandbox/.openclaw/ which is immutable build-time config.
 WORKSPACE_PATH="/sandbox/.openclaw-data/workspace"
 
-# Files that upstream backup-workspace.sh doesn't cover yet.
+# Additional workspace files not included in upstream backup-workspace.sh.
 # We download/upload these ourselves so backups are complete.
 EXTRA_FILES=(HEARTBEAT.md TOOLS.md)
 
@@ -75,7 +75,7 @@ do_backup() {
   [ -n "$ts" ] || fail "Could not find backup directory after upstream backup"
   local dest="${BACKUP_BASE}/${ts}"
 
-  # Back up extra workspace files that upstream doesn't cover
+  # Back up additional workspace files not in upstream backup-workspace.sh
   info "Backing up extra workspace files..."
   for f in "${EXTRA_FILES[@]}"; do
     if openshell sandbox download "$sandbox" "${WORKSPACE_PATH}/${f}" "${dest}/" 2>/dev/null; then
@@ -138,7 +138,7 @@ do_restore() {
   if [ "$phase" = "all" ] || [ "$phase" = "workspace" ]; then
     "$upstream" restore "$sandbox" "$ts"
 
-    # Restore extra workspace files that upstream doesn't cover
+    # Restore additional workspace files not in upstream backup-workspace.sh
     for f in "${EXTRA_FILES[@]}"; do
       if [ -f "${src}/${f}" ]; then
         if openshell sandbox upload "$sandbox" "${src}/${f}" "${WORKSPACE_PATH}/" 2>/dev/null; then

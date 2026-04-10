@@ -79,6 +79,20 @@ The Dockerfile fragments add git HTTPS config (so plugin/marketplace cloning wor
 
 All changes survive future rebuilds.
 
+### OpenClaw version override (experimental)
+
+The sandbox-base image from GHCR bundles a specific OpenClaw version (pinned by NemoClaw). If you need a different version (e.g. for bug fixes), set `OPENCLAW_VERSION` in `.env`:
+
+```
+OPENCLAW_VERSION=<version-tag>
+```
+
+When set, `apply-patches.sh` rebuilds the sandbox-base image locally with the specified version. This adds ~5-10 minutes to the first build (Docker caches subsequent runs). Everything stays in sync — config, UI, plugins, auth model — because the entire base image is rebuilt, not just the OpenClaw package.
+
+If not set, the upstream GHCR sandbox-base image is used unchanged.
+
+**Important:** Not all OpenClaw versions are compatible with every NemoClaw release. Version coupling between OpenClaw, its `pi-agent-core` dependency, and NemoClaw's plugin system means some combinations will break tool schemas, UI scopes, or plugin loading. You are responsible for validating your chosen version. See the `/dev` skill for diagnostic approaches. Check available versions at [github.com/openclaw/openclaw/releases](https://github.com/openclaw/openclaw/releases).
+
 ## Step 6: Install NemoClaw
 
 ```bash

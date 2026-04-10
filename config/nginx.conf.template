@@ -1,6 +1,9 @@
 # Nginx reverse proxy for NemoClaw on Brev.
 # Binds to 127.0.0.1 only — cloudflared tunnel is the sole external access.
 #
+# This is a TEMPLATE. install-services.sh substitutes __COOKBOOK_DIR__ with
+# the actual cookbook path at deploy time.
+#
 # Routing:
 #   /terminal     → Static xterm.js terminal page
 #   /ws/terminal  → Terminal WebSocket server (port 3001) if enabled
@@ -21,7 +24,7 @@ server {
 
     # Terminal page — static HTML with xterm.js
     location = /terminal {
-        alias /home/ubuntu/nemoclaw-cookbook/terminal-server/terminal.html;
+        alias __COOKBOOK_DIR__/terminal-server/terminal.html;
         default_type text/html;
     }
 

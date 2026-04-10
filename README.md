@@ -156,6 +156,22 @@ USE.md                # Usage reference
 backups/              # Local backups (gitignored)
 ```
 
+## Claude Code Skills
+
+If you use [Claude Code](https://claude.ai/code) in this repo, these slash commands are available:
+
+| Skill | What it does |
+|-------|-------------|
+| `/setup` | End-to-end deployment — env config, prerequisites, deploy, auth |
+| `/upgrade` | Check versions, update, rebuild if needed, backup/restore |
+| `/backup` | Snapshot workspace, sessions, and skills to local `backups/` |
+| `/restore` | Push a local backup to a remote sandbox |
+| `/brev` | Run commands on the remote instance |
+| `/dev` | Debug issues across the NemoClaw/OpenClaw/OpenShell stack |
+| `/refresh-patches` | Update patch fragments when upstream changes break them |
+
+See [USE.md § Claude Code Skills](USE.md#claude-code-skills) for details.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.

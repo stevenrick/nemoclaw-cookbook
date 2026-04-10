@@ -368,6 +368,18 @@ openshell status                      # Gateway connection status
 ~/nemoclaw-cookbook/scripts/verify-deployment.sh   # Cookbook health check (gateway, sandbox, dashboard, tools, manifest)
 ```
 
+## Upgrading OpenClaw (experimental)
+
+The sandbox-base image bundles a specific OpenClaw version (pinned by NemoClaw). To use a different version, set `OPENCLAW_VERSION` in `~/.env`:
+
+```bash
+OPENCLAW_VERSION=<version-tag>
+```
+
+This rebuilds the sandbox-base image locally (~5-10 min first time, cached after). The entire base image is rebuilt so everything stays in sync — config, UI, plugins, auth. Run `setup.sh` or `/upgrade` afterward to apply.
+
+**You are responsible for testing your chosen version.** Not all OpenClaw versions are compatible with the current NemoClaw release — tool schemas, UI scopes, and plugin dependencies can change between versions. See BUILD.md and the `/dev` skill for diagnostic approaches. Remove the variable to revert to the upstream default.
+
 ## Troubleshooting
 
 ### Web UI unreachable after rebuild

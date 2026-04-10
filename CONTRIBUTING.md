@@ -40,6 +40,8 @@ Every PR and push to `main` runs these checks:
 | **Secret scanning** | No credentials or tokens committed (gitleaks) |
 | **Validate patches** | Fragment anchors exist in upstream, `apply-patches.sh` succeeds, overlap audit |
 | **Shellcheck** | All `.sh` scripts pass lint |
+| **Validate JavaScript** | Terminal server syntax check (`node -c`) |
+| **Validate nginx config** | nginx config syntax check (`nginx -t`) |
 | **Docker build** | Full sandbox image builds from patched upstream Dockerfile |
 
 A **daily scheduled workflow** (`upstream-drift`) runs `validate-patches.sh` against latest upstream and opens a GitHub issue (labeled `upstream-drift`) if patches no longer apply. It auto-closes when they apply again.
