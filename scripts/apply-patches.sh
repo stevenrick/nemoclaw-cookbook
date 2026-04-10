@@ -19,6 +19,7 @@ FRAGMENTS_DIR="$COOKBOOK_DIR/patches/fragments"
 
 INSTALL_CLAUDE_CODE="${INSTALL_CLAUDE_CODE:-true}"
 INSTALL_CODEX="${INSTALL_CODEX:-true}"
+OPENCLAW_VERSION="${OPENCLAW_VERSION:-}"
 
 DOCKERFILE="$NEMOCLAW_DIR/Dockerfile"
 POLICY="$NEMOCLAW_DIR/nemoclaw-blueprint/policies/openclaw-sandbox.yaml"
@@ -76,6 +77,23 @@ fi
 # Codex: optional
 if [ "$INSTALL_CODEX" = "true" ]; then
   insert_before "$DOCKERFILE" "$ANCHOR" "$FRAGMENTS_DIR/dockerfile-codex"
+fi
+
+# OpenClaw version override (experimental): rebuild sandbox-base locally
+# instead of using the GHCR image, with the specified OpenClaw version.
+# This rebuilds the ENTIRE base image so everything stays in sync —
+# config, UI, plugins, auth model all match the target version.
+if [ -n "$OPENCLAW_VERSION" ]; then
+  DOCKERFILE_BASE="$NEMOCLAW_DIR/Dockerfile.base"
+  if [ ! -f "$DOCKERFILE_BASE" ]; then
+    echo "  ERROR: Dockerfile.base not found at $DOCKERFILE_BASE"
+    echo "  OPENCLAW_VERSION requires the NemoClaw source checkout."
+    exit 1
+  fi
+  echo "  Building sandbox-base with OpenClaw $OPENCLAW_VERSION (this takes a few minutes)..."
+  sed -i "s|npm install -g openclaw@[^ ]*|npm install -g openclaw@$OPENCLAW_VERSION|" "$DOCKERFILE_BASE"
+  docker build -f "$DOCKERFILE_BASE" -t ghcr.io/nvidia/nemoclaw/sandbox-base:latest "$NEMOCLAW_DIR"
+  echo "    ✓ sandbox-base rebuilt with OpenClaw $OPENCLAW_VERSION"
 fi
 
 # ── Policy modifications ────────────────────────────────────────────

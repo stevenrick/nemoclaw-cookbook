@@ -236,6 +236,40 @@ Check which services failed: `systemctl list-units --type=service --state=failed
 
 Common fixes: `systemctl restart <service>`, or re-run `~/nemoclaw-cookbook/scripts/install-services.sh` to reset all services.
 
+### Investigating OpenClaw version compatibility
+
+When upgrading OpenClaw (`OPENCLAW_VERSION`), tools or UI may break due to version coupling. Use these diagnostic approaches:
+
+**1. Identify the dependency chain.** OpenClaw depends on `pi-agent-core` for tool schemas (edit, write, read). Check which version is bundled:
+```bash
+git show v<openclaw-version>:pnpm-lock.yaml | grep -A2 "pi-agent-core"
+```
+
+**2. Track schema changes across versions.** Tool failures (e.g. "must have required property 'edits'") indicate a schema change in pi-agent-core. Compare the tool param definitions:
+```bash
+git show v<old>:src/agents/pi-tools.params.ts | grep -A15 "CLAUDE_PARAM_GROUPS"
+git show v<new>:src/agents/pi-tools.params.ts | grep -A15 "CLAUDE_PARAM_GROUPS"
+```
+
+**3. Map commits to first release.** When you find the commit that introduced a change or fix:
+```bash
+git tag --contains <commit-sha> | sort -V | head -1
+```
+
+**4. Find the goldilocks version.** When you need fixes from version X but version X breaks something else, search the release history between the stable baseline and the target:
+```bash
+git tag | grep "v2026.3" | sort -V   # List all releases in a line
+git log --oneline v<from>..v<to> -- <path>  # Changes in a specific file range
+```
+
+**5. Check gateway logs inside the sandbox.** Tool validation errors and plugin load failures show up here:
+```bash
+ssh ... sandbox@openshell-<sandbox> 'cat /tmp/gateway.log | tail -20'
+ssh ... sandbox@openshell-<sandbox> 'cat /tmp/openclaw-*/openclaw-*.log | grep -i error | tail -10'
+```
+
+**6. Validate locally before committing.** Use `OPENCLAW_VERSION` to rebuild the sandbox-base with a candidate version and test end-to-end (dashboard, tools, messaging) before relying on it.
+
 ### NemoClaw CLI crash after `git pull`
 `MODULE_NOT_FOUND` errors mean upstream added new TypeScript modules but the CLI wasn't rebuilt. Run `setup.sh` or `cd ~/NemoClaw && bash install.sh --non-interactive`.
 
