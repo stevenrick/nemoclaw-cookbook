@@ -34,6 +34,29 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - run: shellcheck setup.sh scripts/*.sh
 
+  lint-js:
+    name: Validate JavaScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - run: node -c terminal-server/server.js
+
+  nginx-config:
+    name: Validate nginx config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install nginx
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq nginx > /dev/null 2>&1
+      - name: Test config syntax
+        run: |
+          mkdir -p terminal-server && touch terminal-server/terminal.html
+          sed "s|__COOKBOOK_DIR__|$PWD|g" config/nginx.conf.template \
+            | sudo tee /etc/nginx/sites-available/nemoclaw > /dev/null
+          sudo ln -sf /etc/nginx/sites-available/nemoclaw /etc/nginx/sites-enabled/nemoclaw
+          sudo rm -f /etc/nginx/sites-enabled/default
+          sudo nginx -t
+
   docker-build:
     name: Build patched sandbox image
     runs-on: ubuntu-latest

@@ -50,7 +50,7 @@ grep -c 'codeload.github.com' nemoclaw-blueprint/policies/openclaw-sandbox.yaml
 - If the entire fragment is subsumed, delete the fragment file
 - Update `apply-patches.sh` if a fragment was removed entirely
 
-**If upstream doesn't provide it yet:** proceed to Step 2.
+**If upstream does not include it:** proceed to Step 2.
 
 Restore working state:
 
