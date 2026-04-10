@@ -16,7 +16,7 @@ scripts/
   save-ui-url.sh      # Extract gateway token → ~/openclaw-ui-url.txt + tunnel URL
   backup-full.sh      # Workspace, chat history, and skills backup/restore
 config/
-  nginx.conf          # Reverse proxy — port 80 → OpenClaw dashboard, Origin rewrite
+  nginx.conf.template # Reverse proxy template — __COOKBOOK_DIR__ substituted at deploy
   systemd/            # systemd units for gateway, terminal server
 terminal-server/      # WebSocket-to-PTY bridge for browser terminal (optional)
 BUILD.md              # Step-by-step setup with explanations

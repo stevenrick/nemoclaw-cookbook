@@ -35,9 +35,10 @@ else
   echo "  ✓ nginx already installed"
 fi
 
-# ── 2. Deploy nginx config ──────────────────────────────────────────
+# ── 2. Deploy nginx config (from template) ─────────────────────────
 echo "  Deploying nginx config..."
-sudo cp "$COOKBOOK_DIR/config/nginx.conf" /etc/nginx/sites-available/nemoclaw
+sed "s|__COOKBOOK_DIR__|$COOKBOOK_DIR|g" "$COOKBOOK_DIR/config/nginx.conf.template" \
+  | sudo tee /etc/nginx/sites-available/nemoclaw > /dev/null
 sudo ln -sf /etc/nginx/sites-available/nemoclaw /etc/nginx/sites-enabled/nemoclaw
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t 2>/dev/null

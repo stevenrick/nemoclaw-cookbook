@@ -118,6 +118,7 @@ Categorize:
 - Tool flags changed (added/removed Claude Code or Codex)
 - .env changes that affect sandbox creation (new providers, messaging tokens)
 - NemoClaw source changes (affects the built image)
+- `OPENCLAW_VERSION` changed (rebuilds sandbox-base locally with the specified version)
 
 Present a summary:
 
