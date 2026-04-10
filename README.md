@@ -1,6 +1,6 @@
 # NemoClaw Cookbook
 
-Automated setup for [NemoClaw](https://github.com/NVIDIA/NemoClaw) + [OpenShell](https://github.com/NVIDIA/OpenShell) with Claude Code, Codex, and messaging integrations (Telegram, Discord, Slack).
+Deploy and customize [NemoClaw](https://github.com/NVIDIA/NemoClaw) in minutes. Agent skills (or do it yourself scripts) help handle setup, upgrades, and operations. This repo provides an opinionated patch overlay that accelerates how you explore and build with NemoClaw.
 
 > **Note:** This is a community cookbook / reference implementation, not an official NVIDIA project. It is not endorsed by or supported by NVIDIA. For issues with NemoClaw or OpenShell themselves, please file issues in their respective repositories.
 
