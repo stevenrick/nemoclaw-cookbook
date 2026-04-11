@@ -8,6 +8,8 @@ allowed-tools: Bash Read Write Edit Grep Glob AskUserQuestion WebFetch
 
 A workflow for diagnosing issues, testing upstream changes, and contributing fixes to the NemoClaw ecosystem. This skill captures the practices and architecture knowledge needed to work effectively across the NemoClaw → OpenClaw → OpenShell stack.
 
+**Important:** The sandbox name is NOT always `my-assistant`. Always look it up via `nemoclaw list` on the remote instance. Use the discovered name in place of `<sandbox>` in all examples below.
+
 ## When to use this skill
 
 - Something isn't working and the user-facing docs don't explain why
@@ -98,43 +100,43 @@ If the deployed versions are *behind* `UPSTREAM.md`, the instance is running old
 brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && nemoclaw list && openshell sandbox list && openshell status"
 
 # Inside sandbox — gateway health
-brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name my-assistant' sandbox@openshell-my-assistant 'openclaw status 2>&1'"
+brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name <sandbox>' sandbox@openshell-<sandbox> 'openclaw status 2>&1'"
 ```
 
 ### Step 2 — Read the logs
 
 ```bash
 # Gateway startup log
-brev exec <instance> "ssh ... sandbox@openshell-my-assistant 'cat /tmp/gateway.log | tail -30'"
+brev exec <instance> "ssh ... sandbox@openshell-<sandbox> 'cat /tmp/gateway.log | tail -30'"
 
 # OpenClaw runtime log (structured, more detail)
-brev exec <instance> "ssh ... sandbox@openshell-my-assistant 'cat /tmp/openclaw/openclaw-$(date +%Y-%m-%d).log | tail -30'"
+brev exec <instance> "ssh ... sandbox@openshell-<sandbox> 'cat /tmp/openclaw/openclaw-$(date +%Y-%m-%d).log | tail -30'"
 
 # Auto-pair watcher log
-brev exec <instance> "ssh ... sandbox@openshell-my-assistant 'cat /tmp/auto-pair.log'"
+brev exec <instance> "ssh ... sandbox@openshell-<sandbox> 'cat /tmp/auto-pair.log'"
 
 # Filter for errors
-brev exec <instance> "ssh ... sandbox@openshell-my-assistant 'grep ERROR /tmp/openclaw/openclaw-*.log | tail -10'"
+brev exec <instance> "ssh ... sandbox@openshell-<sandbox> 'grep ERROR /tmp/openclaw/openclaw-*.log | tail -10'"
 ```
 
 ### Step 3 — Check the config
 
 ```bash
 # Read the frozen config
-brev exec <instance> "ssh ... sandbox@openshell-my-assistant 'cat /sandbox/.openclaw/openclaw.json'"
+brev exec <instance> "ssh ... sandbox@openshell-<sandbox> 'cat /sandbox/.openclaw/openclaw.json'"
 
 # Check what's writable
-brev exec <instance> "ssh ... sandbox@openshell-my-assistant 'ls -la /sandbox/.openclaw/ && echo === && ls -la /sandbox/.openclaw-data/'"
+brev exec <instance> "ssh ... sandbox@openshell-<sandbox> 'ls -la /sandbox/.openclaw/ && echo === && ls -la /sandbox/.openclaw-data/'"
 
 # Check env vars available to the sandbox
-brev exec <instance> "ssh ... sandbox@openshell-my-assistant 'env | grep -i -E \"TELEGRAM|DISCORD|SLACK|NVIDIA|OPENCLAW\" | sed \"s/=.*/=***/\"'"
+brev exec <instance> "ssh ... sandbox@openshell-<sandbox> 'env | grep -i -E \"TELEGRAM|DISCORD|SLACK|NVIDIA|OPENCLAW\" | sed \"s/=.*/=***/\"'"
 ```
 
 ### Step 4 — Check the process tree
 
 ```bash
 # What's running inside the sandbox
-brev exec <instance> "ssh ... sandbox@openshell-my-assistant 'for p in /proc/[0-9]*/; do pid=\$(basename \$p); cmd=\$(cat \$p/cmdline 2>/dev/null | tr \"\\0\" \" \" | head -c 80); [ -n \"\$cmd\" ] && echo \"PID \$pid: \$cmd\"; done'"
+brev exec <instance> "ssh ... sandbox@openshell-<sandbox> 'for p in /proc/[0-9]*/; do pid=\$(basename \$p); cmd=\$(cat \$p/cmdline 2>/dev/null | tr \"\\0\" \" \" | head -c 80); [ -n \"\$cmd\" ] && echo \"PID \$pid: \$cmd\"; done'"
 ```
 
 ### Step 5 — Check upstream issues
@@ -157,7 +159,7 @@ To test a NemoClaw PR branch on a Brev instance:
 
 ```bash
 # 1. Destroy existing sandbox
-brev exec <instance> "export PATH=... && nemoclaw my-assistant destroy --yes"
+brev exec <instance> "export PATH=... && nemoclaw <sandbox> destroy --yes"
 
 # 2. Switch NemoClaw to the PR branch
 brev exec <instance> "cd ~/NemoClaw && git fetch origin <branch-name> && git checkout <branch-name>"

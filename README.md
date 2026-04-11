@@ -75,6 +75,17 @@ claude                # TUI — follow login prompts, then install Codex plugin 
 
 See [BUILD.md](BUILD.md) for the full step-by-step walkthrough with explanations.
 
+## Access Your Deployment
+
+| Endpoint | URL / Command | Purpose |
+|----------|--------------|---------|
+| **Web UI** | `https://<fqdn>/#token=<hex>` or `http://127.0.0.1:18789/#token=<hex>` | Dashboard — chat, skills, settings |
+| **Browser Terminal** | `https://<fqdn>/terminal#token=<hex>` or `http://127.0.0.1/terminal#token=<hex>` | Network policy approval |
+| **Telegram / Discord / Slack** | Your bot (set tokens in `.env`) | Messaging bridges |
+| **CLI** | `nemoclaw <sandbox> connect` → `openclaw tui` | Terminal UI |
+
+Run `brev exec <instance> "cat ~/openclaw-tunnel-url.txt"` to get your tokenized URL. See [USE.md § Endpoints](USE.md#endpoints) for all access methods and troubleshooting.
+
 ## What This Sets Up
 
 - **OpenShell** — sandboxed runtime with Landlock, seccomp, and network policy enforcement
