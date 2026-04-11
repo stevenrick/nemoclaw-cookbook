@@ -8,6 +8,8 @@ allowed-tools: Bash Read Grep Glob AskUserQuestion
 
 Execute commands, transfer files, and manage the NemoClaw instance on Brev — all non-interactively via `brev exec`, `brev copy`, and lifecycle commands.
 
+**Important:** The sandbox name is NOT always `my-assistant`. Always look it up via `nemoclaw list` on the remote instance. Use the discovered name in place of `<sandbox>` in all examples below.
+
 ## When to use this skill
 
 - Checking remote state (logs, processes, file contents)
@@ -64,7 +66,7 @@ brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$
 The sandbox is an OpenShell-managed container, not a regular Docker container. Reach it via SSH through the OpenShell proxy:
 
 ```bash
-brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name my-assistant' sandbox@openshell-my-assistant '<command>'"
+brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name <sandbox>' sandbox@openshell-<sandbox> '<command>'"
 ```
 
 This is verbose but reliable. Use it to read/write workspace files, check installed tools, etc.
@@ -88,7 +90,7 @@ Three hops: sandbox → host staging → local, then clean up staging. `openshel
 
 ```bash
 # 1. Download from sandbox to host staging dir
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$PATH\" && openshell sandbox download my-assistant /sandbox/path/to/file.md /tmp/sandbox-staging/"
+brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$PATH\" && openshell sandbox download <sandbox> /sandbox/path/to/file.md /tmp/sandbox-staging/"
 
 # 2. Copy from host to local (default: current working directory)
 brev copy <instance>:/tmp/sandbox-staging/file.md ./file.md
@@ -108,7 +110,7 @@ Same pattern in reverse, with cleanup:
 brev copy ./file.txt <instance>:/tmp/sandbox-staging/file.txt
 
 # 2. Upload from host to sandbox
-brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$PATH\" && openshell sandbox upload my-assistant /tmp/sandbox-staging/file.txt /sandbox/path/"
+brev exec <instance> "export PATH=\"\$HOME/.local/bin:\$PATH\" && openshell sandbox upload <sandbox> /tmp/sandbox-staging/file.txt /sandbox/path/"
 
 # 3. Clean up staging on host
 brev exec <instance> "rm -rf /tmp/sandbox-staging"
@@ -155,13 +157,13 @@ brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$
 ### Read sandbox workspace files
 
 ```bash
-brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name my-assistant' sandbox@openshell-my-assistant 'cat /sandbox/.openclaw-data/workspace/SOUL.md'"
+brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name <sandbox>' sandbox@openshell-<sandbox> 'cat /sandbox/.openclaw-data/workspace/SOUL.md'"
 ```
 
 ### Check what's installed inside the sandbox
 
 ```bash
-brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name my-assistant' sandbox@openshell-my-assistant 'ls /usr/local/bin/ && claude --version 2>/dev/null && codex --version 2>/dev/null'"
+brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name <sandbox>' sandbox@openshell-<sandbox> 'ls /usr/local/bin/ && claude --version 2>/dev/null && codex --version 2>/dev/null'"
 ```
 
 ### Pull latest cookbook and redeploy
