@@ -25,6 +25,28 @@ brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev
 
 The non-interactive method works for both humans and agents. Use it for automation, scripting, and relaying auth URLs.
 
+## Endpoints
+
+After deployment, these are the ways to interact with your NemoClaw instance:
+
+| Endpoint | URL / Command | Purpose |
+|----------|--------------|---------|
+| **Web UI** | `https://<fqdn>/#token=<hex>` or `http://127.0.0.1:18789/#token=<hex>` | Dashboard — chat, skills, settings |
+| **Browser Terminal** | `https://<fqdn>/terminal#token=<hex>` or `http://127.0.0.1/terminal#token=<hex>` | Network policy approval (`openshell term`) |
+| **Telegram** | Your bot (set `TELEGRAM_BOT_TOKEN` in `.env`) | Mobile and async messaging |
+| **Discord** | Your bot (set `DISCORD_BOT_TOKEN` in `.env`) | Chat via Discord |
+| **Slack** | Your bot (set `SLACK_BOT_TOKEN` in `.env`) | Chat via Slack |
+| **CLI** | `nemoclaw <sandbox> connect` → `openclaw tui` | Terminal UI inside the sandbox |
+
+To get your tokenized URLs, run:
+
+```bash
+brev exec <instance> "cat ~/openclaw-tunnel-url.txt"   # Secure Link URL
+brev exec <instance> "cat ~/openclaw-ui-url.txt"        # Port-forward URL
+```
+
+See the sections below for detailed setup and troubleshooting for each endpoint.
+
 ## Web UI
 
 **If you configured a Secure Link** (`TUNNEL_FQDN` in `.env`):
@@ -223,7 +245,7 @@ nemoclaw list                         # List all sandboxes
 nemoclaw my-assistant status          # Health, model, policies
 nemoclaw my-assistant logs --follow   # Stream logs
 nemoclaw my-assistant connect         # Shell in (via brev shell)
-nemoclaw my-assistant destroy         # Delete (WARNING: deletes workspace files)
+nemoclaw my-assistant destroy         # Delete (WARNING: deletes workspace files — back up first with /backup or backup-full.sh)
 ```
 
 ## System Services
