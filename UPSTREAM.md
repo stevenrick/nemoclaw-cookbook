@@ -14,16 +14,20 @@ Last validated end-to-end deployment: **2026-04-16**
 - **This is not a pin.** `setup.sh` always clones latest upstream and pulls `sandbox-base:latest`. These versions record what was running when the cookbook last had a successful end-to-end deployment.
 - **sandbox-base tags are NemoClaw commit SHAs.** The image isn't rebuilt on every NemoClaw commit, so the image tag and the NemoClaw repo HEAD can differ.
 
-## Upstream work we're tracking
+## What this cookbook adds over upstream
 
-Open upstream PRs/issues that would let us shrink or delete cookbook patches. When any of these lands, the referenced fragments can be removed (see [CONTRIBUTING.md § Working upstream](CONTRIBUTING.md#working-upstream)).
+Present-state inventory of cookbook patches and scripts, with the condition for removing each. Search upstream (`gh search issues --repo NVIDIA/NemoClaw …`) when touching any of these to see whether the gap has already been closed.
 
-| Upstream | Would obsolete | Notes |
-|----------|----------------|-------|
-| [NemoClaw#1497](https://github.com/NVIDIA/NemoClaw/pull/1497) — `feat(onboard): extend web search onboarding to Gemini and Tavily` | `patches/fragments/policy-tavily.yaml`, `patches/fragments/dockerfile-integrations`, setup.sh Tavily plumbing | Adds `tavily` and `gemini` as first-class web-search providers with policy presets. Also makes `/sandbox/.openclaw/openclaw.json` writable via symlink. Open, awaiting maintainer review. Blockers reported in [#1497#issuecomment-4262976883](https://github.com/NVIDIA/NemoClaw/pull/1497#issuecomment-4262976883): Dockerfile Python `SyntaxError` on compound statements after `;`, and web-search API key written in plaintext to `openclaw.json` (regression vs [#1835](https://github.com/NVIDIA/NemoClaw/pull/1835)). |
-| NemoClaw `max_openshell_version` lag behind OpenShell releases | Blueprint-derived `OPENSHELL_VERSION` pin in `setup.sh` and `/upgrade` (Phase 7) | OpenShell cut v0.0.27 through v0.0.31 in the four days after NemoClaw set `max_openshell_version: "0.0.26"` in `blueprint.yaml`. Without intervention, `sh install.sh` grabs latest and `nemoclaw onboard` preflight rejects it. Cookbook works around this by deriving the install version from NemoClaw's blueprint. When NemoClaw starts cutting releases that bump `max_openshell_version` to match OpenShell's cadence, the pin becomes a no-op and this scaffold can be removed. |
+| Cookbook component | Upstream gap filled | Remove when |
+|--------------------|--------------------|-------------|
+| `patches/fragments/dockerfile-claude-code`, `patches/fragments/policy-claude-code.yaml` | Claude Code binary + SSO/download network policy not provided by upstream NemoClaw | (out of upstream scope — stays permanently) |
+| `patches/fragments/dockerfile-codex`, `patches/fragments/policy-codex.yaml` | Codex CLI binary + OpenAI auth/download network policy not provided by upstream NemoClaw | (out of upstream scope — stays permanently) |
+| `patches/fragments/dockerfile-core` | Git HTTPS + CA-bundle configuration inside the sandbox so plugin/marketplace cloning works | Upstream Dockerfile baseline adopts equivalent git HTTPS config |
+| `patches/fragments/dockerfile-integrations`, `patches/fragments/policy-tavily.yaml`, `build_integrations_config()` in `setup.sh` | Upstream web-search onboarding supports Brave only; Tavily is not a first-class provider | Upstream ships Tavily (and other third-party providers) as a first-class web-search option with matching policy preset |
+| `setup.sh` auto-deriving `NEMOCLAW_POLICY_PRESETS` from configured messaging tokens | Upstream's tier-based policy selector excludes messaging presets from `balanced` by default, with no token-driven inclusion in non-interactive mode | Upstream restores token-driven preset inclusion (or ships an equivalent tier that covers the common case) |
+| `setup.sh` pinning `OPENSHELL_VERSION` to NemoClaw's `max_openshell_version` | OpenShell release cadence runs ahead of NemoClaw's `blueprint.yaml` constraint, so `install.sh` grabs a version NemoClaw's preflight rejects | NemoClaw's release cadence keeps `max_openshell_version` current with published OpenShell releases |
 
-When contributing a cookbook patch for something that *could* be upstream, open a companion upstream issue/PR and add it to this table so we know to delete the patch when it lands.
+When adding a new cookbook patch, add a row here describing the gap and the removal condition. When removing a patch (upstream closed the gap), delete both the patch and the row.
 
 ## Checking for drift
 

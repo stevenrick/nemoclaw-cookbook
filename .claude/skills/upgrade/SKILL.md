@@ -163,7 +163,7 @@ Reset all files that `apply-patches.sh` mutates before pulling — `Dockerfile`,
 brev exec <instance> "cd ~/NemoClaw && git checkout -- Dockerfile Dockerfile.base nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null; git pull --ff-only origin main"
 ```
 
-For OpenShell, the correct version is whatever NemoClaw's blueprint says it supports — OpenShell ships near-daily maintenance releases, and `sh install.sh` defaults to latest which can race past `max_openshell_version` and break onboard preflight. Derive the version from NemoClaw's blueprint after the pull above:
+For OpenShell, the correct install version is whatever NemoClaw's `blueprint.yaml` declares via `max_openshell_version`. `sh install.sh` defaults to latest, which may be above that range and fail the onboard preflight. Derive the version from NemoClaw's blueprint after the pull above:
 
 ```bash
 brev exec <instance> "cd ~/OpenShell && git pull --ff-only origin main && OPENSHELL_VERSION=v\$(awk -F'\"' '/^max_openshell_version:/{print \$2; exit}' ~/NemoClaw/nemoclaw-blueprint/blueprint.yaml) sh install.sh"
