@@ -119,11 +119,10 @@ else
 fi
 
 echo "=== Step 2: Install OpenShell ==="
-# NemoClaw's blueprint pins the supported OpenShell version range. OpenShell
-# ships near-daily maintenance releases, and `sh install.sh` defaults to the
-# latest — which can race ahead of what NemoClaw has validated and trip the
-# `max_openshell_version` preflight. Derive the version from the blueprint
-# unless the user overrode it explicitly.
+# NemoClaw's blueprint declares the supported OpenShell version range.
+# `sh install.sh` defaults to the latest release, which may be above NemoClaw's
+# validated max and fail the onboard preflight. Derive the install version
+# from `max_openshell_version` unless the user overrode it explicitly.
 BLUEPRINT_YAML="$HOME/NemoClaw/nemoclaw-blueprint/blueprint.yaml"
 if [ -z "${OPENSHELL_VERSION:-}" ] && [ -f "$BLUEPRINT_YAML" ]; then
   BLUEPRINT_MAX=$(awk -F'"' '/^max_openshell_version:/{print $2; exit}' "$BLUEPRINT_YAML")
