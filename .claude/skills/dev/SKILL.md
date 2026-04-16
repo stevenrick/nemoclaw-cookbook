@@ -225,7 +225,7 @@ The native channel path is async with no timeout, so long-running coding agent t
 Configuration is baked into the sandbox image at build time via `NEMOCLAW_MESSAGING_CHANNELS_B64`. The `openclaw doctor` output shows channel status: `Telegram: ok (@BotName)`. If Telegram isn't working, check:
 1. `openclaw channels list` inside the sandbox — is it configured and enabled?
 2. `nemoclaw status` on the host — is the cloudflared tunnel running? (Telegram webhooks need it)
-3. The `ALLOWED_CHAT_IDS` allowlist — group messages are dropped if the sender isn't listed
+3. The `TELEGRAM_ALLOWED_IDS` allowlist — group messages are dropped if the sender isn't listed
 
 ### Dashboard unreachable after rebuild
 The internal port forward (18789) can die during sandbox destroy/rebuild. `verify-deployment.sh` detects and auto-restarts it. To fix manually: `openshell forward start 18789 <sandbox> --background`.

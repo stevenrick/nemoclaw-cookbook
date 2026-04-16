@@ -205,6 +205,19 @@ else
   warn "No deployment manifest found (run write-manifest.sh)"
 fi
 
+# ── 10. Integration checks ───────────────────────────────────────────
+# shellcheck source=/dev/null
+[ -f "$HOME/.env" ] && source "$HOME/.env"
+
+echo "Integrations:"
+
+# Web search
+if [ -n "${TAVILY_API_KEY:-}" ]; then
+  pass "Web search configured (tavily)"
+elif [ -n "${BRAVE_API_KEY:-}" ]; then
+  pass "Web search configured (brave)"
+fi
+
 # ── Summary ──────────────────────────────────────────────────────────
 echo ""
 if [ "$FAILED" -eq 0 ]; then

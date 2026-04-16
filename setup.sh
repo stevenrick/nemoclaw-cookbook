@@ -42,12 +42,13 @@ export NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 
 # Messaging integrations
 [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && export TELEGRAM_BOT_TOKEN
-[ -n "${ALLOWED_CHAT_IDS:-}" ] && export ALLOWED_CHAT_IDS
+[ -n "${TELEGRAM_ALLOWED_IDS:-}" ] && export TELEGRAM_ALLOWED_IDS
 [ -n "${DISCORD_BOT_TOKEN:-}" ] && export DISCORD_BOT_TOKEN
 [ -n "${SLACK_BOT_TOKEN:-}" ] && export SLACK_BOT_TOKEN
 
 # Tool integrations
 [ -n "${BRAVE_API_KEY:-}" ] && export BRAVE_API_KEY
+[ -n "${TAVILY_API_KEY:-}" ] && export TAVILY_API_KEY
 
 # Optional sandbox tools (default: true for backward compatibility)
 export INSTALL_CLAUDE_CODE="${INSTALL_CLAUDE_CODE:-true}"
@@ -56,6 +57,32 @@ export INSTALL_CODEX="${INSTALL_CODEX:-true}"
 # Policy configuration
 [ -n "${NEMOCLAW_POLICY_MODE:-}" ] && export NEMOCLAW_POLICY_MODE
 [ -n "${NEMOCLAW_POLICY_PRESETS:-}" ] && export NEMOCLAW_POLICY_PRESETS
+
+# ── Build integration config payload ─────────────────────────────────
+build_integrations_config() {
+  python3 -c "
+import json, base64, os
+
+config = {}
+
+# --- Web search (Tavily) ---
+# Brave search is handled by upstream nemoclaw onboard (NEMOCLAW_WEB_SEARCH_ENABLED).
+# Tavily is not supported upstream, so we configure it here.
+tavily_key = os.environ.get('TAVILY_API_KEY', '')
+if tavily_key:
+    config['plugins'] = {'entries': {'tavily': {'enabled': True}}}
+    config['tools'] = {'web': {'search': {
+        'enabled': True,
+        'provider': 'tavily',
+        'apiKey': 'openshell:resolve:env:TAVILY_API_KEY'
+    }}}
+
+print(base64.b64encode(json.dumps(config).encode()).decode())
+"
+}
+
+NEMOCLAW_INTEGRATIONS_B64="$(build_integrations_config)"
+export NEMOCLAW_INTEGRATIONS_B64
 
 echo "=== Step 1: Clone / update repositories ==="
 cd "$HOME"
@@ -67,7 +94,7 @@ else
 fi
 if [ -d NemoClaw ]; then
   echo "  NemoClaw exists, pulling latest..."
-  git -C NemoClaw checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null || true
+  git -C NemoClaw checkout -- Dockerfile Dockerfile.base nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null || true
   git -C NemoClaw pull --ff-only || echo "  Warning: pull failed, continuing with existing checkout"
 else
   git clone https://github.com/NVIDIA/NemoClaw
@@ -91,7 +118,7 @@ echo "=== Step 4: Apply patches ==="
 # Uses modular fragments (not git apply) for resilience to upstream changes.
 # If patches fail, see BUILD.md or run: claude /refresh-patches
 cd "$HOME/NemoClaw"
-git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null || true
+git checkout -- Dockerfile Dockerfile.base nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null || true
 
 "${SCRIPT_DIR}/scripts/apply-patches.sh" "$HOME/NemoClaw"
 
@@ -113,54 +140,112 @@ bash install.sh --non-interactive
 # shellcheck source=/dev/null
 source "$HOME/.bashrc" 2>/dev/null || true
 
-echo "=== Step 5b: Install services (nginx, systemd, terminal server) ==="
-"${SCRIPT_DIR}/scripts/install-services.sh"
-# CHAT_UI_URL may now be set by install-services.sh (cloudflared FQDN detection)
-[ -n "${CHAT_UI_URL:-}" ] && export CHAT_UI_URL
+# ── Post-deploy ──────────────────────────────────────────────────────
+# Core deploy (Steps 1-5) is complete. The remaining steps are individually
+# fault-tolerant so critical work (URL extraction, port forward) always
+# runs even if an earlier post-deploy step fails.
+set +e
+POST_FAILURES=0
 
-echo "=== Step 6: Save tokenized UI URL ==="
-# Token is available as soon as the sandbox is running (step 5).
-# Extract it now, before any optional steps, so the URL file exists ASAP.
-"${SCRIPT_DIR}/scripts/save-ui-url.sh" || echo "  URL extraction failed — retrieve manually (see BUILD.md)."
+SANDBOX=$(nemoclaw list 2>/dev/null | awk '/\*/{print $1}' | head -1)
+SANDBOX="${SANDBOX:-my-assistant}"
 
-echo "=== Step 7: Add optional integrations ==="
-if [ -n "${BRAVE_API_KEY:-}" ]; then
-  echo "  Adding Brave Search provider..."
-  openshell provider create --name brave-search --type generic --credential BRAVE_API_KEY 2>/dev/null \
-    || openshell provider update brave-search --credential BRAVE_API_KEY 2>/dev/null \
-    || echo "  Warning: could not configure brave-search provider"
-  echo "  ✓ Brave Search provider configured"
+echo "=== Step 6: Install services (nginx, systemd, terminal server) ==="
+if "${SCRIPT_DIR}/scripts/install-services.sh"; then
+  # CHAT_UI_URL may now be set by install-services.sh (cloudflared FQDN detection)
+  [ -n "${CHAT_UI_URL:-}" ] && export CHAT_UI_URL
+else
+  echo "  Warning: service installation had errors (continuing)"
+  POST_FAILURES=$((POST_FAILURES + 1))
 fi
 
-echo "=== Step 8: Start services ==="
+echo "=== Step 7: Save tokenized UI URL ==="
+# Token is available as soon as the sandbox is running (step 5).
+# Extract it now, before optional steps, so the URL file exists ASAP.
+"${SCRIPT_DIR}/scripts/save-ui-url.sh" || {
+  echo "  Warning: URL extraction failed — retrieve manually (see BUILD.md)."
+  POST_FAILURES=$((POST_FAILURES + 1))
+}
+
+echo "=== Step 8: Register integration providers ==="
+
+register_provider() {
+  local name="$1" envkey="$2"
+  openshell provider create --name "$name" --type generic --credential "$envkey" 2>/dev/null \
+    || openshell provider update "$name" --credential "$envkey" 2>/dev/null \
+    || { echo "  Warning: could not configure $name provider"; return 1; }
+  echo "    ✓ $name"
+}
+
+# Web search providers
+if [ -n "${TAVILY_API_KEY:-}" ]; then
+  register_provider "${SANDBOX}-tavily" "TAVILY_API_KEY"
+elif [ -n "${BRAVE_API_KEY:-}" ]; then
+  register_provider "${SANDBOX}-brave-search" "BRAVE_API_KEY"
+fi
+
+# Inject integration API keys into the sandbox workspace .env.
+# OpenClaw loads /sandbox/.env on startup (via dotenv from process.cwd()).
+# This is the only way to get keys to plugins that read process.env (e.g. Tavily).
+SANDBOX_ENV_LINES=""
+[ -n "${TAVILY_API_KEY:-}" ] && SANDBOX_ENV_LINES="${SANDBOX_ENV_LINES}TAVILY_API_KEY=${TAVILY_API_KEY}\n"
+[ -n "${BRAVE_API_KEY:-}" ] && SANDBOX_ENV_LINES="${SANDBOX_ENV_LINES}BRAVE_API_KEY=${BRAVE_API_KEY}\n"
+if [ -n "$SANDBOX_ENV_LINES" ]; then
+  echo "  Injecting integration keys into sandbox workspace..."
+  if printf "%b" "$SANDBOX_ENV_LINES" | openshell sandbox exec --name "$SANDBOX" -- \
+    sh -c 'cat > /sandbox/.env' 2>/dev/null; then
+    echo "  ✓ Sandbox .env written"
+  else
+    echo "  Warning: failed to write sandbox .env"
+    POST_FAILURES=$((POST_FAILURES + 1))
+  fi
+fi
+
+echo "=== Step 9: Start services ==="
 # Reload env to pick up nvm
 export NVM_DIR="$HOME/.nvm"
 # shellcheck source=/dev/null
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 
-# Ensure the internal OpenShell port forward is running (it dies on sandbox rebuild)
-SANDBOX=$(nemoclaw list 2>/dev/null | awk '/\*/{print $1}' | head -1)
+# Bounce the port forward — stale forwards from previous sandbox cause 502s.
+# Stop first (may fail if none exists), then start fresh.
 if [ -n "$SANDBOX" ]; then
+  openshell forward stop 18789 "$SANDBOX" 2>/dev/null || true
+  sleep 1
   openshell forward start 18789 "$SANDBOX" --background 2>/dev/null || true
 fi
 
 # Start messaging bridges if tokens are configured
 if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] || [ -n "${DISCORD_BOT_TOKEN:-}" ] || [ -n "${SLACK_BOT_TOKEN:-}" ]; then
-  nemoclaw start
+  nemoclaw start || {
+    echo "  Warning: failed to start messaging bridges"
+    POST_FAILURES=$((POST_FAILURES + 1))
+  }
 else
-  echo "  No messaging tokens set — skipping bridges. Set TELEGRAM_BOT_TOKEN, DISCORD_BOT_TOKEN, or SLACK_BOT_TOKEN in ~/.env to enable."
+  echo "  No messaging tokens set — skipping bridges."
 fi
 
-echo "=== Step 9: Verify deployment ==="
-"${SCRIPT_DIR}/scripts/verify-deployment.sh" || echo "  Some checks failed — review above and fix before proceeding."
+echo "=== Step 10: Verify deployment ==="
+"${SCRIPT_DIR}/scripts/verify-deployment.sh" || echo "  Some checks failed — review above."
 
-echo "=== Step 10: Write deployment manifest ==="
-"${SCRIPT_DIR}/scripts/write-manifest.sh"
+echo "=== Step 11: Write deployment manifest ==="
+"${SCRIPT_DIR}/scripts/write-manifest.sh" || {
+  echo "  Warning: manifest write failed"
+  POST_FAILURES=$((POST_FAILURES + 1))
+}
+
+set -e
 
 echo ""
-echo "=========================================="
-echo "  NemoClaw is ready!"
-echo "=========================================="
+if [ "$POST_FAILURES" -gt 0 ]; then
+  echo "=========================================="
+  echo "  NemoClaw is running ($POST_FAILURES post-deploy warning(s))"
+  echo "=========================================="
+else
+  echo "=========================================="
+  echo "  NemoClaw is ready!"
+  echo "=========================================="
+fi
 echo ""
 if [ -f "$HOME/openclaw-tunnel-url.txt" ]; then
   TUNNEL_URL=$(cat "$HOME/openclaw-tunnel-url.txt")

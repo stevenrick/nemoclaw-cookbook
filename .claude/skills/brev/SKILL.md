@@ -151,7 +151,7 @@ brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$
 Requires env vars in the process environment (not a file):
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && export TELEGRAM_BOT_TOKEN=<token> ALLOWED_CHAT_IDS=<id> NVIDIA_API_KEY=<key> && nemoclaw start"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && export TELEGRAM_BOT_TOKEN=<token> TELEGRAM_ALLOWED_IDS=<id> NVIDIA_API_KEY=<key> && nemoclaw start"
 ```
 
 ### Read sandbox workspace files
