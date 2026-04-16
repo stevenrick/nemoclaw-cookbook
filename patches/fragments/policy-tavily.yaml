@@ -1,4 +1,8 @@
 # Tavily web search API access
+#
+# Temporary scaffold: upstream NemoClaw PR #1497 adds a first-class `tavily`
+# policy preset. When that merges, delete this fragment and add `tavily` to
+# NEMOCLAW_POLICY_PRESETS instead. See UPSTREAM.md § Upstream work we're tracking.
 new_sections:
   tavily:
     name: tavily

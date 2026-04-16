@@ -4,6 +4,12 @@ Deploy and customize [NemoClaw](https://github.com/NVIDIA/NemoClaw) in minutes. 
 
 > **Note:** This is a community cookbook / reference implementation, not an official NVIDIA project. It is not endorsed by or supported by NVIDIA. For issues with NemoClaw or OpenShell themselves, please file issues in their respective repositories.
 
+## Upstream-first
+
+This cookbook accelerates deployment and customization of upstream [NemoClaw](https://github.com/NVIDIA/NemoClaw) and [OpenShell](https://github.com/NVIDIA/OpenShell) — it does not compete with them. Every fragment in `patches/fragments/` is a temporary scaffold: the goal is for each one to disappear as upstream absorbs the functionality, or as we discover it was never needed.
+
+When we find a missing capability, we surface it upstream (issue, PR, or a cookbook patch that demonstrates the need). When upstream ships something we patched, we delete the patch. **The measure of success is the cookbook shrinking over time, not growing.** See [CONTRIBUTING.md § Working upstream](CONTRIBUTING.md#working-upstream) for the contribution workflow.
+
 ## Prerequisites
 
 - A [Brev](https://brev.nvidia.com) instance with Docker
