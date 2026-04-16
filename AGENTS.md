@@ -1,6 +1,6 @@
 # Coding Agent Instructions
 
-This is an opinionated patch overlay on upstream [NemoClaw](https://github.com/NVIDIA/NemoClaw) + [OpenShell](https://github.com/NVIDIA/OpenShell). It is NOT a fork.
+This cookbook is a temporary scaffold for features upstream [NemoClaw](https://github.com/NVIDIA/NemoClaw) + [OpenShell](https://github.com/NVIDIA/OpenShell) don't yet handle — it is NOT a fork, and NOT a competitor. When upstream absorbs something we patch, delete our version. When a gap appears, surface it upstream (issue, PR, or a cookbook patch that demonstrates the need) rather than solving it only here. The measure of success is the cookbook shrinking over time, not growing.
 
 ## Project structure
 
