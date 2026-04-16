@@ -48,6 +48,7 @@ export NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 
 # Tool integrations
 [ -n "${BRAVE_API_KEY:-}" ] && export BRAVE_API_KEY
+[ -n "${TAVILY_API_KEY:-}" ] && export TAVILY_API_KEY
 
 # Optional sandbox tools (default: true for backward compatibility)
 export INSTALL_CLAUDE_CODE="${INSTALL_CLAUDE_CODE:-true}"
@@ -56,6 +57,31 @@ export INSTALL_CODEX="${INSTALL_CODEX:-true}"
 # Policy configuration
 [ -n "${NEMOCLAW_POLICY_MODE:-}" ] && export NEMOCLAW_POLICY_MODE
 [ -n "${NEMOCLAW_POLICY_PRESETS:-}" ] && export NEMOCLAW_POLICY_PRESETS
+
+# ── Build integration config payload ─────────────────────────────────
+build_integrations_config() {
+  python3 -c "
+import json, base64, os
+
+config = {}
+
+# --- Web search (Tavily) ---
+# Brave search is handled by upstream nemoclaw onboard (NEMOCLAW_WEB_SEARCH_ENABLED).
+# Tavily is not supported upstream, so we configure it here.
+tavily_key = os.environ.get('TAVILY_API_KEY', '')
+if tavily_key:
+    config['plugins'] = {'entries': {'tavily': {'enabled': True}}}
+    config['tools'] = {'web': {'search': {
+        'enabled': True,
+        'provider': 'tavily',
+        'apiKey': 'openshell:resolve:env:TAVILY_API_KEY'
+    }}}
+
+print(base64.b64encode(json.dumps(config).encode()).decode())
+"
+}
+
+export NEMOCLAW_INTEGRATIONS_B64="$(build_integrations_config)"
 
 echo "=== Step 1: Clone / update repositories ==="
 cd "$HOME"
@@ -123,13 +149,38 @@ echo "=== Step 6: Save tokenized UI URL ==="
 # Extract it now, before any optional steps, so the URL file exists ASAP.
 "${SCRIPT_DIR}/scripts/save-ui-url.sh" || echo "  URL extraction failed — retrieve manually (see BUILD.md)."
 
-echo "=== Step 7: Add optional integrations ==="
-if [ -n "${BRAVE_API_KEY:-}" ]; then
-  echo "  Adding Brave Search provider..."
-  openshell provider create --name brave-search --type generic --credential BRAVE_API_KEY 2>/dev/null \
-    || openshell provider update brave-search --credential BRAVE_API_KEY 2>/dev/null \
-    || echo "  Warning: could not configure brave-search provider"
-  echo "  ✓ Brave Search provider configured"
+echo "=== Step 7: Register integration providers ==="
+
+register_provider() {
+  local name="$1" envkey="$2"
+  openshell provider create --name "$name" --type generic --credential "$envkey" 2>/dev/null \
+    || openshell provider update "$name" --credential "$envkey" 2>/dev/null \
+    || { echo "  Warning: could not configure $name provider"; return 1; }
+  echo "    ✓ $name"
+}
+
+SANDBOX=$(nemoclaw list 2>/dev/null | awk '/\*/{print $1}' | head -1)
+SANDBOX="${SANDBOX:-my-assistant}"
+
+# Web search providers
+if [ -n "${TAVILY_API_KEY:-}" ]; then
+  register_provider "${SANDBOX}-tavily" "TAVILY_API_KEY"
+elif [ -n "${BRAVE_API_KEY:-}" ]; then
+  register_provider "${SANDBOX}-brave-search" "BRAVE_API_KEY"
+fi
+
+# Inject integration API keys into the sandbox workspace .env.
+# OpenClaw loads /sandbox/.env on startup (via dotenv from process.cwd()).
+# This is the only way to get keys to plugins that read process.env (e.g. Tavily).
+SANDBOX_ENV_LINES=""
+[ -n "${TAVILY_API_KEY:-}" ] && SANDBOX_ENV_LINES="${SANDBOX_ENV_LINES}TAVILY_API_KEY=${TAVILY_API_KEY}\n"
+[ -n "${BRAVE_API_KEY:-}" ] && SANDBOX_ENV_LINES="${SANDBOX_ENV_LINES}BRAVE_API_KEY=${BRAVE_API_KEY}\n"
+if [ -n "$SANDBOX_ENV_LINES" ]; then
+  echo "  Injecting integration keys into sandbox workspace..."
+  printf "%b" "$SANDBOX_ENV_LINES" | openshell sandbox exec --name "$SANDBOX" -- \
+    sh -c 'cat > /sandbox/.env' 2>/dev/null && \
+    echo "  ✓ Sandbox .env written" || \
+    echo "  Warning: failed to write sandbox .env"
 fi
 
 echo "=== Step 8: Start services ==="

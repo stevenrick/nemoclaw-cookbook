@@ -1,0 +1,23 @@
+# Integration config — merges web search (and future integrations) into openclaw.json.
+# NEMOCLAW_INTEGRATIONS_B64 is a base64-encoded JSON dict of config keys to merge.
+# When empty/unset, this is a no-op.
+ARG NEMOCLAW_INTEGRATIONS_B64=e30=
+ENV NEMOCLAW_INTEGRATIONS_B64=${NEMOCLAW_INTEGRATIONS_B64}
+RUN printf '%s\n' \
+  'import base64, json, os' \
+  'raw = os.environ.get("NEMOCLAW_INTEGRATIONS_B64", "e30=") or "e30="' \
+  'integrations = json.loads(base64.b64decode(raw).decode("utf-8"))' \
+  'if not integrations:' \
+  '    exit(0)' \
+  'path = "/sandbox/.openclaw/openclaw.json"' \
+  'config = json.load(open(path))' \
+  'def deep_merge(base, override):' \
+  '    for k, v in override.items():' \
+  '        if k in base and isinstance(base[k], dict) and isinstance(v, dict):' \
+  '            deep_merge(base[k], v)' \
+  '        else:' \
+  '            base[k] = v' \
+  'deep_merge(config, integrations)' \
+  'json.dump(config, open(path, "w"), indent=2)' \
+  | python3
+
