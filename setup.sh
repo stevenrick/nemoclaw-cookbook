@@ -93,7 +93,7 @@ else
 fi
 if [ -d NemoClaw ]; then
   echo "  NemoClaw exists, pulling latest..."
-  git -C NemoClaw checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null || true
+  git -C NemoClaw checkout -- Dockerfile Dockerfile.base nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null || true
   git -C NemoClaw pull --ff-only || echo "  Warning: pull failed, continuing with existing checkout"
 else
   git clone https://github.com/NVIDIA/NemoClaw
@@ -117,7 +117,7 @@ echo "=== Step 4: Apply patches ==="
 # Uses modular fragments (not git apply) for resilience to upstream changes.
 # If patches fail, see BUILD.md or run: claude /refresh-patches
 cd "$HOME/NemoClaw"
-git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null || true
+git checkout -- Dockerfile Dockerfile.base nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null || true
 
 "${SCRIPT_DIR}/scripts/apply-patches.sh" "$HOME/NemoClaw"
 
