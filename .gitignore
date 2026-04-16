@@ -4,3 +4,5 @@ openclaw-ui-url.txt
 openclaw-tunnel-url.txt
 backups/
 terminal-server/node_modules/
+.worktrees/
+docs/superpowers/

@@ -166,7 +166,7 @@ Telegram messaging runs natively inside OpenClaw via the gateway delivery queue 
 nemoclaw start
 
 # If starting fresh (no ~/.env or vars not exported):
-NVIDIA_API_KEY=<key> TELEGRAM_BOT_TOKEN=<token> ALLOWED_CHAT_IDS=<id> nemoclaw start
+NVIDIA_API_KEY=<key> TELEGRAM_BOT_TOKEN=<token> TELEGRAM_ALLOWED_IDS=<id> nemoclaw start
 ```
 
 ### Manage
@@ -185,7 +185,7 @@ openclaw channels list        # Shows: Telegram main: configured, token=config, 
 
 ### Security
 
-`ALLOWED_CHAT_IDS` in `.env` restricts which Telegram accounts can talk to the bot. Get your chat ID from **@userinfobot**. Comma-separate multiple IDs.
+`TELEGRAM_ALLOWED_IDS` in `.env` restricts which Telegram accounts can talk to the bot. Get your chat ID from **@userinfobot**. Comma-separate multiple IDs.
 
 ### Approve network requests
 
@@ -195,20 +195,23 @@ When the agent wants to make external requests, you approve them via:
 openshell term
 ```
 
-## Brave Search
+## Web Search
 
-If `BRAVE_API_KEY` is set in `.env`, the sandbox can reach `api.search.brave.com` for web search. The API key is injected via OpenShell's provider system — the sandbox never sees the real key.
+The agent can search the web when a search provider is configured. Set one in `~/.env`:
 
-### Adding Brave Search to an existing sandbox
+- **Tavily** (recommended): `TAVILY_API_KEY=tvly-...`
+- **Brave**: `BRAVE_API_KEY=BSA-...`
 
-1. Add `BRAVE_API_KEY` to your `.env` file.
-2. Run `/upgrade` in Claude Code — it detects the new key, creates the provider, and rebuilds the sandbox.
+If both are set, Tavily takes priority.
 
-`/upgrade` backs up your workspace automatically and restores your agent's memory and personality after the rebuild.
+### Adding to an existing sandbox
 
-### Adding Brave Search during fresh setup
+1. Add the API key to `~/.env`.
+2. Run `/upgrade` — it detects the new key, rebuilds the sandbox, and restores your workspace.
 
-Add the key to `.env` before running `./setup.sh` — it's picked up automatically.
+### Adding during fresh setup
+
+Add the key to `~/.env` before running `./setup.sh` — it's picked up automatically.
 
 ## Inference
 
@@ -368,7 +371,7 @@ If you use [Claude Code](https://claude.ai/code) in this repo, these slash comma
 | Skill | What it does |
 |-------|-------------|
 | `/setup` | End-to-end deployment — env config, prerequisites, deploy, auth |
-| `/upgrade` | Check versions, update host tooling, rebuild sandbox if needed. Also handles adding integrations (e.g., Brave Search) — just update `.env` and run `/upgrade` |
+| `/upgrade` | Check versions, update host tooling, rebuild sandbox if needed. Also handles adding integrations (e.g., web search) — just update `~/.env` and run `/upgrade` |
 | `/backup` | Snapshot workspace, sessions, and skills to local `backups/` directory |
 | `/restore` | Push a local backup to a remote sandbox |
 | `/brev` | Run commands on the remote instance — inspect, manage, transfer files |
@@ -516,7 +519,7 @@ brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev
 
 ```bash
 brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" \
-  && NVIDIA_API_KEY=<key> TELEGRAM_BOT_TOKEN=<token> ALLOWED_CHAT_IDS=<id> nemoclaw start"
+  && NVIDIA_API_KEY=<key> TELEGRAM_BOT_TOKEN=<token> TELEGRAM_ALLOWED_IDS=<id> nemoclaw start"
 ```
 
 ### Accessing the Web UI

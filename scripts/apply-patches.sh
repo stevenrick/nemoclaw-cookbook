@@ -21,14 +21,27 @@ INSTALL_CLAUDE_CODE="${INSTALL_CLAUDE_CODE:-true}"
 INSTALL_CODEX="${INSTALL_CODEX:-true}"
 OPENCLAW_VERSION="${OPENCLAW_VERSION:-}"
 
+# Integration flags
+TAVILY_API_KEY="${TAVILY_API_KEY:-}"
+
 DOCKERFILE="$NEMOCLAW_DIR/Dockerfile"
 POLICY="$NEMOCLAW_DIR/nemoclaw-blueprint/policies/openclaw-sandbox.yaml"
 
 # ── Dockerfile modifications ────────────────────────────────────────
+# Pre-config anchor: fragments inserted here run as root, before openclaw.json exists.
 ANCHOR="# Set up blueprint for local resolution"
+# Post-config anchor: fragments inserted here run as sandbox user, after openclaw.json
+# is created but before the DAC lockdown makes it read-only.
+POST_CONFIG_ANCHOR="# Lock openclaw.json via DAC"
 
 if ! grep -qF "$ANCHOR" "$DOCKERFILE"; then
   echo "ERROR: Dockerfile anchor not found: '$ANCHOR'"
+  echo "Upstream may have changed. Check the Dockerfile and update the anchor in apply-patches.sh."
+  exit 1
+fi
+
+if ! grep -qF "$POST_CONFIG_ANCHOR" "$DOCKERFILE"; then
+  echo "ERROR: Post-config Dockerfile anchor not found: '$POST_CONFIG_ANCHOR'"
   echo "Upstream may have changed. Check the Dockerfile and update the anchor in apply-patches.sh."
   exit 1
 fi
@@ -68,6 +81,19 @@ with open(sys.argv[3], 'w') as f:
 
 # Core: always applied
 insert_before "$DOCKERFILE" "$ANCHOR" "$FRAGMENTS_DIR/dockerfile-core"
+
+# Integrations config: must run AFTER openclaw.json creation (post-config anchor).
+# The fragment merges search config into the existing openclaw.json.
+# No-op when NEMOCLAW_INTEGRATIONS_B64 is empty.
+insert_before "$DOCKERFILE" "$POST_CONFIG_ANCHOR" "$FRAGMENTS_DIR/dockerfile-integrations"
+
+# Bake the computed integrations config into the Dockerfile ARG default.
+# nemoclaw onboard doesn't pass our custom ARG as --build-arg, so we set the
+# default to the actual value. The fragment's no-op guard handles empty/e30=.
+if [ -n "${NEMOCLAW_INTEGRATIONS_B64:-}" ] && [ "${NEMOCLAW_INTEGRATIONS_B64:-}" != "e30=" ]; then
+  sed -i "s|ARG NEMOCLAW_INTEGRATIONS_B64=e30=|ARG NEMOCLAW_INTEGRATIONS_B64=${NEMOCLAW_INTEGRATIONS_B64}|" "$DOCKERFILE"
+  echo "    ✓ integrations config baked into Dockerfile"
+fi
 
 # Claude Code: optional
 if [ "$INSTALL_CLAUDE_CODE" = "true" ]; then
@@ -116,9 +142,15 @@ if [ "$INSTALL_CODEX" = "true" ]; then
   POLICY_FRAGMENTS+=("$FRAGMENTS_DIR/policy-codex.yaml")
 fi
 
+# Web search policy
+if [ -n "$TAVILY_API_KEY" ]; then
+  POLICY_FRAGMENTS+=("$FRAGMENTS_DIR/policy-tavily.yaml")
+fi
+
 python3 "$SCRIPT_DIR/merge-policy.py" "$POLICY" "${POLICY_FRAGMENTS[@]}"
 
 TOOLS=""
 [ "$INSTALL_CLAUDE_CODE" = "true" ] && TOOLS="$TOOLS + claude-code"
 [ "$INSTALL_CODEX" = "true" ] && TOOLS="$TOOLS + codex"
+[ -n "$TAVILY_API_KEY" ] && TOOLS="$TOOLS + tavily"
 echo "  Patches applied (core${TOOLS})."

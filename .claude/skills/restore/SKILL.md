@@ -105,7 +105,7 @@ brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$
 If the Cloudflare tunnel (for Telegram webhooks) is not already running, start it. The gateway runs under systemd and should already be active — check with `systemctl status openshell-gateway` if unsure.
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && source ~/.env && export NVIDIA_API_KEY TELEGRAM_BOT_TOKEN ALLOWED_CHAT_IDS DISCORD_BOT_TOKEN SLACK_BOT_TOKEN 2>/dev/null; nemoclaw start 2>/dev/null || true"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && source ~/.env && export NVIDIA_API_KEY TELEGRAM_BOT_TOKEN TELEGRAM_ALLOWED_IDS DISCORD_BOT_TOKEN SLACK_BOT_TOKEN 2>/dev/null; nemoclaw start 2>/dev/null || true"
 ```
 
 Then restore sessions:
