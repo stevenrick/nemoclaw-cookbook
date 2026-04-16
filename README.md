@@ -97,7 +97,7 @@ Run `brev exec <instance> "cat ~/openclaw-tunnel-url.txt"` to get your tokenized
 - **Browser terminal** — `openshell term` in the browser at `/terminal` for network policy management (optional)
 - **Secure Links** — set `TUNNEL_FQDN` in `.env` to access the Web UI via Brev Secure Link (no port-forward needed)
 - **Messaging bridges** — Telegram, Discord, and Slack (set tokens in `~/.env`)
-- **Brave Search** — optional web search integration (add `BRAVE_API_KEY` to `~/.env`)
+- **Web search** — Tavily (recommended) or Brave (add API key to `~/.env`)
 - **Inference** — NVIDIA Nemotron by default, configurable via `NEMOCLAW_MODEL` in `~/.env`
 
 ## What the Patches Do
