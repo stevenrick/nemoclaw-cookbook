@@ -1,6 +1,11 @@
 # Integration config — merges web search (and future integrations) into openclaw.json.
 # NEMOCLAW_INTEGRATIONS_B64 is a base64-encoded JSON dict of config keys to merge.
 # When empty/unset, this is a no-op.
+#
+# Temporary scaffold: upstream NemoClaw PR #1497 makes web-search config
+# provider-aware (Brave / Gemini / Tavily) via src/lib/web-search.ts. When that
+# merges, delete this fragment and the `build_integrations_config()` block in
+# setup.sh. See UPSTREAM.md § Upstream work we're tracking.
 ARG NEMOCLAW_INTEGRATIONS_B64=e30=
 ENV NEMOCLAW_INTEGRATIONS_B64=${NEMOCLAW_INTEGRATIONS_B64}
 RUN printf '%s\n' \

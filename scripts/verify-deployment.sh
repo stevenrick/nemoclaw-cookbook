@@ -126,15 +126,34 @@ fi
 # ── 7. Services ──────────────────────────────────────────────────────
 echo "Services:"
 if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] || [ -n "${DISCORD_BOT_TOKEN:-}" ] || [ -n "${SLACK_BOT_TOKEN:-}" ]; then
-  # Check native channels inside sandbox (upstream moved messaging from host bridge to sandbox)
+  # Two separate things must be true for messaging to actually work:
+  #   1. Gateway provider exists (created during `nemoclaw onboard` when the token
+  #      was in the environment — not just in ~/.env)
+  #   2. Channel is configured in /sandbox/.openclaw/openclaw.json (baked at
+  #      build time; empty means onboard didn't see the token)
+  # "tokens in .env" is NOT sufficient — onboard has to read them at run time.
+  SANDBOX_PROVIDERS=$(openshell provider list 2>/dev/null)
   CHANNEL_STATUS=$(sandbox_ssh 'openclaw channels list 2>/dev/null | grep -i "configured\|enabled\|ok"' 2>/dev/null)
   HOST_STATUS=$(nemoclaw status 2>/dev/null)
-  if [ -n "$CHANNEL_STATUS" ]; then
+
+  expected_providers=""
+  [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && expected_providers="${expected_providers} ${SANDBOX}-telegram-bridge"
+  [ -n "${DISCORD_BOT_TOKEN:-}" ] && expected_providers="${expected_providers} ${SANDBOX}-discord-bridge"
+  [ -n "${SLACK_BOT_TOKEN:-}" ] && expected_providers="${expected_providers} ${SANDBOX}-slack-bridge"
+  missing_providers=""
+  for p in $expected_providers; do
+    echo "$SANDBOX_PROVIDERS" | grep -q "$p" || missing_providers="${missing_providers} ${p}"
+  done
+
+  if [ -n "$missing_providers" ]; then
+    warn "Messaging tokens in .env but gateway provider(s) missing:${missing_providers}"
+    warn "  Sandbox was built without these tokens. Export them and re-onboard (set -a; source ~/.env; set +a)."
+  elif [ -n "$CHANNEL_STATUS" ]; then
     pass "Native messaging channels configured"
   elif echo "$HOST_STATUS" | grep -qi "running\|bridge"; then
     pass "Host messaging services running"
   else
-    warn "Messaging tokens configured but channels may not be active (run 'nemoclaw start')"
+    warn "Messaging providers exist but channels are not reporting configured (check 'openclaw channels list')"
   fi
   # Check cloudflared tunnel (needed for Telegram webhooks)
   if echo "$HOST_STATUS" | grep -qi "cloudflared"; then

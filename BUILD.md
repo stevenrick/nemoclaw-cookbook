@@ -428,10 +428,18 @@ When messaging tokens are set during onboard, NemoClaw auto-detects them and sug
 
 | Variable | Purpose | When |
 |----------|---------|------|
+| `NEMOCLAW_POLICY_TIER` | `restricted`, `balanced` (default), `open` | Install / onboard |
 | `NEMOCLAW_POLICY_MODE` | `suggested` (default), `custom`, or `skip` | Install / onboard |
-| `NEMOCLAW_POLICY_PRESETS` | Comma-separated presets (default: `pypi,npm`) | Install / onboard |
+| `NEMOCLAW_POLICY_PRESETS` | Comma-separated presets (overrides tier defaults) | Install / onboard |
 
 Available presets: `pypi`, `npm`, `telegram`, `discord`, `slack`, `brave`, `brew`, `docker`, `huggingface`, `jira`, `outlook`
+
+Tier defaults (upstream `nemoclaw-blueprint/policies/tiers.yaml`):
+- **restricted** — none (inference + core tooling only)
+- **balanced** — `npm, pypi, huggingface, brew, brave`
+- **open** — balanced + `slack, discord, telegram, jira, outlook`
+
+Upstream NemoClaw PR #1753 replaced credential-based preset auto-detection with this tier selector. The default `balanced` tier excludes messaging presets, so `TELEGRAM_BOT_TOKEN` (or Discord/Slack) no longer opens policy egress on its own. To keep setup seamless, `setup.sh` builds `NEMOCLAW_POLICY_PRESETS` from the credentials configured in `~/.env` (adding `telegram`, `discord`, `slack`, `brave` as applicable). Set `NEMOCLAW_POLICY_TIER` or `NEMOCLAW_POLICY_PRESETS` explicitly to override.
 
 ## What Gets Installed Where
 

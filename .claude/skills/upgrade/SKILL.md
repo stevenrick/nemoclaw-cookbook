@@ -157,8 +157,10 @@ brev copy <cookbook-dir>/.env <instance>:~/.env
 
 ## Phase 7 — Update host tooling
 
+Reset all files that `apply-patches.sh` mutates before pulling — `Dockerfile`, `Dockerfile.base` (touched when `OPENCLAW_VERSION` is set), and the sandbox policy YAML. Pull will otherwise fail with "local changes would be overwritten by merge".
+
 ```bash
-brev exec <instance> "cd ~/NemoClaw && git pull --ff-only origin main"
+brev exec <instance> "cd ~/NemoClaw && git checkout -- Dockerfile Dockerfile.base nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null; git pull --ff-only origin main"
 brev exec <instance> "cd ~/OpenShell && git pull --ff-only origin main && sh install.sh"
 brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && docker pull ghcr.io/nvidia/nemoclaw/sandbox-base:latest"
 ```
@@ -178,7 +180,7 @@ brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$
 **Critical ordering.** Patches must apply before we destroy anything. If they fail, abort — the user keeps a working system.
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && source ~/.env && cd ~/NemoClaw && git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null && ~/nemoclaw-cookbook/scripts/apply-patches.sh ~/NemoClaw"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && set -a && source ~/.env && set +a && cd ~/NemoClaw && git checkout -- Dockerfile Dockerfile.base nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null; ~/nemoclaw-cookbook/scripts/apply-patches.sh ~/NemoClaw"
 ```
 
 If this fails:
@@ -190,13 +192,9 @@ If this fails:
 
 Skip entirely if only host updates needed.
 
-### Stop services
+### Rebuild NemoClaw CLI *first*
 
-```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && nemoclaw stop 2>/dev/null || true"
-```
-
-### Rebuild NemoClaw CLI
+After a `git pull`, NemoClaw may have new TypeScript modules. Run `npm ci` **before** `nemoclaw stop` — otherwise `stop` fails with `MODULE_NOT_FOUND` and prints noise.
 
 `npm ci` triggers the prepare hook which builds the CLI and then strips devDeps. Do NOT run `npm run build:cli` separately after — `tsc` will have been removed.
 
@@ -210,13 +208,29 @@ If `npm ci` fails to build (e.g., prepare hook doesn't find tsc), install typesc
 brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && cd ~/NemoClaw && npm install typescript && npm run build:cli"
 ```
 
-### Destroy and recreate
+### Stop services
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 && nemoclaw <sandbox> destroy --yes && nemoclaw onboard"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && nemoclaw stop 2>/dev/null || true"
+```
+
+### Destroy and recreate
+
+**Critical:** use `set -a; source ~/.env; set +a` so every variable in `.env` (messaging tokens, integration keys, policy overrides) gets exported to the `nemoclaw` child process. Only exporting `NVIDIA_API_KEY` means the rebuilt sandbox won't have Telegram/Discord/Slack providers or correct policy presets — onboard then silently re-destroys on the next run to migrate providers, wiping the just-restored workspace. Don't hand-pick variables; export the whole env.
+
+```bash
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && set -a && source ~/.env && set +a && export NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 && nemoclaw <sandbox> destroy --yes && nemoclaw onboard"
 ```
 
 Use `timeout: 600000` (10 min).
+
+After `nemoclaw onboard` returns, confirm the expected messaging providers exist. If a provider is missing, the *next* `nemoclaw onboard` call (anywhere in this flow, or in a future `/upgrade`) will force a full sandbox recreate to migrate providers — destroying workspace files mid-flow.
+
+```bash
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && openshell provider list 2>&1"
+```
+
+Verify that `<sandbox>-telegram-bridge` / `-discord-bridge` / `-slack-bridge` exist for every token set in `.env`. If any are missing, re-check what was exported to onboard — don't proceed with workspace restore until providers match, or the restore work will be thrown away on the next recreate.
 
 ### Restore workspace (phase 1 — before nemoclaw start)
 
@@ -228,14 +242,16 @@ brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$
 
 ### Restart services
 
+Use the same `set -a; source ~/.env; set +a` pattern so messaging tokens reach `nemoclaw start`:
+
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && source ~/.env && export NVIDIA_API_KEY TELEGRAM_BOT_TOKEN TELEGRAM_ALLOWED_IDS DISCORD_BOT_TOKEN SLACK_BOT_TOKEN 2>/dev/null; nemoclaw start 2>/dev/null || true"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && set -a && source ~/.env && set +a && nemoclaw start 2>/dev/null || true"
 ```
 
-Then restart the internal OpenShell port forward (it dies on sandbox rebuild):
+Make sure the internal OpenShell port forward for 18789 is live (`nemoclaw onboard` typically starts it; this is a belt-and-suspenders step that swallows an "already forwarded" error):
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && SANDBOX=\$(nemoclaw list 2>/dev/null | awk '/\\*/{print \$1}' | head -1) && [ -n \"\$SANDBOX\" ] && openshell forward start 18789 \"\$SANDBOX\" --background 2>/dev/null"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && SANDBOX=\$(nemoclaw list 2>/dev/null | awk '/\\*/{print \$1}' | head -1) && [ -n \"\$SANDBOX\" ] && (openshell forward start 18789 \"\$SANDBOX\" --background 2>&1 | grep -v 'already forwarded' || true)"
 ```
 
 ### Restore sessions (phase 2 — after nemoclaw start)
@@ -305,5 +321,7 @@ Update `UPSTREAM.md` in the local cookbook repo with the new versions and today'
 - **Host-only updates are zero-disruption.** No downtime, no re-auth, no URL change.
 - **Check upstream overlap before applying.** Flag if upstream now handles something we patch.
 - **Update cookbook on remote first.** Latest patches and scripts must be in place before rebuild.
+- **Export the whole `.env` before onboard.** Use `set -a; source ~/.env; set +a`. Hand-picking variables strands messaging tokens and integration keys, which makes the sandbox rebuild without providers — onboard then silently re-destroys on the next run to migrate, wiping workspace mid-flow.
+- **Verify expected providers exist after onboard.** Missing providers = pending silent destroy. Catch this before doing workspace restore work.
 - **Surface the new URL.** After rebuild, the tokenized URL changes.
 - **Never leak secrets.** Only SET / NOT SET.
