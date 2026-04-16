@@ -42,7 +42,7 @@ export NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 
 # Messaging integrations
 [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && export TELEGRAM_BOT_TOKEN
-[ -n "${ALLOWED_CHAT_IDS:-}" ] && export ALLOWED_CHAT_IDS
+[ -n "${TELEGRAM_ALLOWED_IDS:-}" ] && export TELEGRAM_ALLOWED_IDS
 [ -n "${DISCORD_BOT_TOKEN:-}" ] && export DISCORD_BOT_TOKEN
 [ -n "${SLACK_BOT_TOKEN:-}" ] && export SLACK_BOT_TOKEN
 
