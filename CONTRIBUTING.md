@@ -2,6 +2,17 @@
 
 Thanks for your interest in contributing! This project helps you deploy and customize NemoClaw in minutes, with agent skills and scripts that handle setup, upgrades, and operations.
 
+## Working upstream
+
+This cookbook is upstream-first: patches are temporary scaffolds, and contributions *upstream* often accomplish more than additions here. Before opening a cookbook PR for a new integration or fix:
+
+1. **Search upstream first.** `gh search issues --repo NVIDIA/NemoClaw <keywords>` and the same for `NVIDIA/OpenShell`. Check both open PRs and recent closed ones — the work may be in-flight or already landed.
+2. **If in-flight work exists**, the highest-leverage contribution is often *validating it*: check out the branch, test against a real deployment via `/upgrade`, and post concrete findings on the PR. Community PRs stalled waiting for maintainer attention frequently move after a third-party validation comment.
+3. **If no upstream work exists**, consider opening an upstream issue first to confirm appetite. The cookbook patch can then serve as a reference implementation.
+4. **If upstream declines** or the feature is genuinely cookbook-scope (e.g., Claude Code / Codex binary installs), write the fragment as minimally as possible so it's easy to remove when upstream direction shifts. Note the rationale in the fragment's comments.
+
+**When upstream ships something we patch**, delete our version — don't keep it around "just in case." The [UPSTREAM.md](UPSTREAM.md) validation date records when we last confirmed end-to-end compatibility.
+
 ## How to Contribute
 
 1. Fork the repository

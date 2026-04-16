@@ -149,7 +149,7 @@ This checks gateway, sandbox, dashboard, OpenClaw, tools, workspace, services, i
 **If sandbox shows but NemoClaw doesn't recognize it:**
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 && nemoclaw onboard && ~/nemoclaw-cookbook/scripts/save-ui-url.sh"
+brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && set -a && source ~/.env && set +a && export NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 && nemoclaw onboard && ~/nemoclaw-cookbook/scripts/save-ui-url.sh"
 ```
 
 ## Phase 5 — Connect

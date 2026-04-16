@@ -55,8 +55,26 @@ export INSTALL_CLAUDE_CODE="${INSTALL_CLAUDE_CODE:-true}"
 export INSTALL_CODEX="${INSTALL_CODEX:-true}"
 
 # Policy configuration
+[ -n "${NEMOCLAW_POLICY_TIER:-}" ] && export NEMOCLAW_POLICY_TIER
 [ -n "${NEMOCLAW_POLICY_MODE:-}" ] && export NEMOCLAW_POLICY_MODE
 [ -n "${NEMOCLAW_POLICY_PRESETS:-}" ] && export NEMOCLAW_POLICY_PRESETS
+
+# Upstream #1753 replaced credential-based preset auto-detection with a
+# tier-based selector. The default `balanced` tier excludes messaging presets,
+# so TELEGRAM_BOT_TOKEN et al. no longer wire up policy egress automatically.
+# Derive presets from configured tokens unless the user has opted into their
+# own tier/mode/presets choice.
+if [ -z "${NEMOCLAW_POLICY_TIER:-}" ] \
+   && [ -z "${NEMOCLAW_POLICY_MODE:-}" ] \
+   && [ -z "${NEMOCLAW_POLICY_PRESETS:-}" ]; then
+  PRESETS="npm,pypi,huggingface,brew"
+  [ -n "${BRAVE_API_KEY:-}" ] && PRESETS="${PRESETS},brave"
+  [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && PRESETS="${PRESETS},telegram"
+  [ -n "${DISCORD_BOT_TOKEN:-}" ] && PRESETS="${PRESETS},discord"
+  [ -n "${SLACK_BOT_TOKEN:-}" ] && PRESETS="${PRESETS},slack"
+  export NEMOCLAW_POLICY_PRESETS="${PRESETS}"
+  echo "  Derived policy presets from configured credentials: ${PRESETS}"
+fi
 
 # ── Build integration config payload ─────────────────────────────────
 build_integrations_config() {
