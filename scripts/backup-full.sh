@@ -91,6 +91,13 @@ do_backup() {
   mkdir -p "$sessions_dir"
 
   if openshell sandbox download "$sandbox" "${SESSIONS_PATH}/" "${sessions_dir}/" 2>/dev/null; then
+    # Strip .reset. suffixes — the gateway renames orphaned sessions but
+    # the data is still valid. Clean names make restore work without fixup.
+    for f in "${sessions_dir}"/*.reset.*; do
+      [ -f "$f" ] || continue
+      local orig="${f%%.reset.*}"
+      mv "$f" "$orig" 2>/dev/null && info "  Recovered: $(basename "$orig")"
+    done
     local count
     count=$(find "$sessions_dir" -type f 2>/dev/null | wc -l)
     info "Backed up ${count} session file(s) to ${sessions_dir}/"
@@ -170,6 +177,54 @@ do_restore() {
       info "Restoring chat sessions..."
       if openshell sandbox upload "$sandbox" "${src}/sessions/" "${SESSIONS_PATH}/" 2>/dev/null; then
         info "Chat sessions restored."
+
+        # Point the active session to the most content-rich .jsonl file.
+        # After a rebuild the gateway creates a new empty session. The real
+        # conversation is in the restored files but sessions.json doesn't
+        # reference it. Find the session with the most real user messages
+        # (not heartbeat noise) and set it as active.
+        openshell sandbox exec --name "$sandbox" -- \
+          python3 -c "
+import json, os, glob
+
+sessions_dir = '${SESSIONS_PATH}'
+best_file = None
+best_count = 0
+
+for f in glob.glob(os.path.join(sessions_dir, '*.jsonl')):
+    count = 0
+    with open(f) as fh:
+        for line in fh:
+            try:
+                entry = json.loads(line)
+                if entry.get('type') == 'message':
+                    msg = entry.get('message', {})
+                    text = msg.get('text', '') or ''
+                    if msg.get('role') == 'user' and 'HEARTBEAT' not in text:
+                        count += 1
+            except:
+                pass
+    if count > best_count:
+        best_count = count
+        best_file = f
+
+if best_file and best_count > 0:
+    best_id = os.path.splitext(os.path.basename(best_file))[0]
+    path = os.path.join(sessions_dir, 'sessions.json')
+    try:
+        d = json.load(open(path))
+    except:
+        d = {}
+    key = 'agent:main:main'
+    if key in d:
+        d[key]['sessionId'] = best_id
+        d[key]['sessionFile'] = best_file
+        d[key]['origin'] = {'label': 'main'}
+        d[key]['lastTo'] = 'main'
+        d[key]['deliveryContext'] = {}
+        json.dump(d, open(path, 'w'), indent=2)
+        print(f'  Active session: {best_id} ({best_count} user messages)')
+" 2>/dev/null || true
       else
         warn "Failed to restore chat sessions (sandbox may still be starting)"
       fi
