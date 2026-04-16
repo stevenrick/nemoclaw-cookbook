@@ -21,6 +21,11 @@ COOKBOOK_COMMIT=$(git -C "$COOKBOOK_DIR" rev-parse --short HEAD 2>/dev/null || e
 INSTALL_CLAUDE_CODE="${INSTALL_CLAUDE_CODE:-true}"
 INSTALL_CODEX="${INSTALL_CODEX:-true}"
 
+# Build integrations object
+INTEGRATIONS="{}"
+[ -n "${TAVILY_API_KEY:-}" ] && INTEGRATIONS=$(echo "$INTEGRATIONS" | python3 -c "import sys,json; d=json.load(sys.stdin); d['search']='tavily'; print(json.dumps(d))")
+[ -n "${BRAVE_API_KEY:-}" ] && [ -z "${TAVILY_API_KEY:-}" ] && INTEGRATIONS=$(echo "$INTEGRATIONS" | python3 -c "import sys,json; d=json.load(sys.stdin); d['search']='brave'; print(json.dumps(d))")
+
 # Build tools array
 TOOLS="[]"
 if [ "$INSTALL_CLAUDE_CODE" = "true" ]; then
@@ -41,7 +46,8 @@ cat > "$HOME/.nemoclaw/cookbook-deployment.json" <<MANIFEST
   "nemoclaw_commit": "$NEMOCLAW_COMMIT",
   "openshell_commit": "$OPENSHELL_COMMIT",
   "sandbox_name": "$SANDBOX_NAME",
-  "tools": $TOOLS
+  "tools": $TOOLS,
+  "integrations": $INTEGRATIONS
 }
 MANIFEST
 
