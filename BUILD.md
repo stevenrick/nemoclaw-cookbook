@@ -178,7 +178,7 @@ If you didn't add tokens in Step 1:
 3. Add to `.env` in the cookbook repo (and re-copy to instance: `brev copy .env <instance>:~/.env`):
    ```
    TELEGRAM_BOT_TOKEN=your-bot-token
-   ALLOWED_CHAT_IDS=your-chat-id
+   TELEGRAM_ALLOWED_IDS=your-chat-id
    ```
 
 Start the bridge. `nemoclaw start` reads env vars directly from the process environment (no dotenv/file loading):
@@ -186,11 +186,11 @@ Start the bridge. `nemoclaw start` reads env vars directly from the process envi
 ```bash
 # If ~/.env exists and vars are there:
 source ~/.env
-export NVIDIA_API_KEY TELEGRAM_BOT_TOKEN ALLOWED_CHAT_IDS
+export NVIDIA_API_KEY TELEGRAM_BOT_TOKEN TELEGRAM_ALLOWED_IDS
 nemoclaw start
 
 # Or pass inline (works without any .env file):
-NVIDIA_API_KEY=<key> TELEGRAM_BOT_TOKEN=<token> ALLOWED_CHAT_IDS=<id> nemoclaw start
+NVIDIA_API_KEY=<key> TELEGRAM_BOT_TOKEN=<token> TELEGRAM_ALLOWED_IDS=<id> nemoclaw start
 ```
 
 This starts a Cloudflare quick tunnel for the Telegram webhook URL. Note: `nemoclaw start` only manages the tunnel — the gateway and sandbox run continuously under systemd.
@@ -401,7 +401,7 @@ Valid `NEMOCLAW_PROVIDER` values: `build` (NVIDIA cloud, default), `openai`, `an
 | Variable | Purpose | When |
 |----------|---------|------|
 | `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather | `nemoclaw start` / onboard |
-| `ALLOWED_CHAT_IDS` | Comma-separated Telegram chat IDs | `nemoclaw start` |
+| `TELEGRAM_ALLOWED_IDS` | Comma-separated Telegram chat IDs | `nemoclaw start` |
 | `DISCORD_BOT_TOKEN` | Discord bot token | `nemoclaw start` / onboard |
 | `SLACK_BOT_TOKEN` | Slack bot token (`xoxb-...`) | `nemoclaw start` / onboard |
 

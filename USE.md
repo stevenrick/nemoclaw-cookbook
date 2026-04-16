@@ -166,7 +166,7 @@ Telegram messaging runs natively inside OpenClaw via the gateway delivery queue 
 nemoclaw start
 
 # If starting fresh (no ~/.env or vars not exported):
-NVIDIA_API_KEY=<key> TELEGRAM_BOT_TOKEN=<token> ALLOWED_CHAT_IDS=<id> nemoclaw start
+NVIDIA_API_KEY=<key> TELEGRAM_BOT_TOKEN=<token> TELEGRAM_ALLOWED_IDS=<id> nemoclaw start
 ```
 
 ### Manage
@@ -185,7 +185,7 @@ openclaw channels list        # Shows: Telegram main: configured, token=config, 
 
 ### Security
 
-`ALLOWED_CHAT_IDS` in `.env` restricts which Telegram accounts can talk to the bot. Get your chat ID from **@userinfobot**. Comma-separate multiple IDs.
+`TELEGRAM_ALLOWED_IDS` in `.env` restricts which Telegram accounts can talk to the bot. Get your chat ID from **@userinfobot**. Comma-separate multiple IDs.
 
 ### Approve network requests
 
@@ -516,7 +516,7 @@ brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev
 
 ```bash
 brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" \
-  && NVIDIA_API_KEY=<key> TELEGRAM_BOT_TOKEN=<token> ALLOWED_CHAT_IDS=<id> nemoclaw start"
+  && NVIDIA_API_KEY=<key> TELEGRAM_BOT_TOKEN=<token> TELEGRAM_ALLOWED_IDS=<id> nemoclaw start"
 ```
 
 ### Accessing the Web UI
