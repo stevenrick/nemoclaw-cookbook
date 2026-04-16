@@ -2,10 +2,10 @@
 # NEMOCLAW_INTEGRATIONS_B64 is a base64-encoded JSON dict of config keys to merge.
 # When empty/unset, this is a no-op.
 #
-# Temporary scaffold: upstream NemoClaw PR #1497 makes web-search config
-# provider-aware (Brave / Gemini / Tavily) via src/lib/web-search.ts. When that
-# merges, delete this fragment and the `build_integrations_config()` block in
-# setup.sh. See UPSTREAM.md § Upstream work we're tracking.
+# Upstream's Dockerfile bakes web-search config for Brave only. This fragment
+# extends that to Tavily via the same `openshell:resolve:env:` placeholder
+# pattern. Remove when upstream makes web-search configuration provider-aware.
+# See UPSTREAM.md for the full inventory of cookbook scaffolds.
 ARG NEMOCLAW_INTEGRATIONS_B64=e30=
 ENV NEMOCLAW_INTEGRATIONS_B64=${NEMOCLAW_INTEGRATIONS_B64}
 RUN printf '%s\n' \

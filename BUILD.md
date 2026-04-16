@@ -39,12 +39,17 @@ git clone https://github.com/NVIDIA/NemoClaw
 
 ## Step 3: Install OpenShell
 
+NemoClaw's `blueprint.yaml` declares the supported OpenShell version range via `max_openshell_version`. OpenShell's `install.sh` defaults to the latest release, which may be above NemoClaw's validated max and fail the onboard preflight. `setup.sh` derives the install version from the blueprint; manual invocation should do the same:
+
 ```bash
-cd ~/OpenShell && sh install.sh
+cd ~/OpenShell
+OPENSHELL_VERSION=v$(awk -F'"' '/^max_openshell_version:/{print $2; exit}' ~/NemoClaw/nemoclaw-blueprint/blueprint.yaml) sh install.sh
 export PATH="$HOME/.local/bin:$PATH"
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 openshell --version
 ```
+
+To override (e.g., to test a specific OpenShell release): set `OPENSHELL_VERSION` in `.env` before running `setup.sh`.
 
 ## Step 4: Pull latest sandbox base image
 

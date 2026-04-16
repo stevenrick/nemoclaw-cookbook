@@ -1,8 +1,8 @@
-# Tavily web search API access
+# Tavily web search API access.
 #
-# Temporary scaffold: upstream NemoClaw PR #1497 adds a first-class `tavily`
-# policy preset. When that merges, delete this fragment and add `tavily` to
-# NEMOCLAW_POLICY_PRESETS instead. See UPSTREAM.md § Upstream work we're tracking.
+# Upstream only ships Brave as a first-class web-search provider. Remove this
+# fragment when upstream adds a `tavily` policy preset. See UPSTREAM.md for
+# the full inventory of cookbook scaffolds and their removal conditions.
 new_sections:
   tavily:
     name: tavily
