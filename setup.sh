@@ -139,17 +139,34 @@ bash install.sh --non-interactive
 # shellcheck source=/dev/null
 source "$HOME/.bashrc" 2>/dev/null || true
 
-echo "=== Step 5b: Install services (nginx, systemd, terminal server) ==="
-"${SCRIPT_DIR}/scripts/install-services.sh"
-# CHAT_UI_URL may now be set by install-services.sh (cloudflared FQDN detection)
-[ -n "${CHAT_UI_URL:-}" ] && export CHAT_UI_URL
+# ── Post-deploy ──────────────────────────────────────────────────────
+# Core deploy (Steps 1-5) is complete. The remaining steps are individually
+# fault-tolerant so critical work (URL extraction, port forward) always
+# runs even if an earlier post-deploy step fails.
+set +e
+POST_FAILURES=0
 
-echo "=== Step 6: Save tokenized UI URL ==="
+SANDBOX=$(nemoclaw list 2>/dev/null | awk '/\*/{print $1}' | head -1)
+SANDBOX="${SANDBOX:-my-assistant}"
+
+echo "=== Step 6: Install services (nginx, systemd, terminal server) ==="
+if "${SCRIPT_DIR}/scripts/install-services.sh"; then
+  # CHAT_UI_URL may now be set by install-services.sh (cloudflared FQDN detection)
+  [ -n "${CHAT_UI_URL:-}" ] && export CHAT_UI_URL
+else
+  echo "  Warning: service installation had errors (continuing)"
+  POST_FAILURES=$((POST_FAILURES + 1))
+fi
+
+echo "=== Step 7: Save tokenized UI URL ==="
 # Token is available as soon as the sandbox is running (step 5).
-# Extract it now, before any optional steps, so the URL file exists ASAP.
-"${SCRIPT_DIR}/scripts/save-ui-url.sh" || echo "  URL extraction failed — retrieve manually (see BUILD.md)."
+# Extract it now, before optional steps, so the URL file exists ASAP.
+"${SCRIPT_DIR}/scripts/save-ui-url.sh" || {
+  echo "  Warning: URL extraction failed — retrieve manually (see BUILD.md)."
+  POST_FAILURES=$((POST_FAILURES + 1))
+}
 
-echo "=== Step 7: Register integration providers ==="
+echo "=== Step 8: Register integration providers ==="
 
 register_provider() {
   local name="$1" envkey="$2"
@@ -158,9 +175,6 @@ register_provider() {
     || { echo "  Warning: could not configure $name provider"; return 1; }
   echo "    ✓ $name"
 }
-
-SANDBOX=$(nemoclaw list 2>/dev/null | awk '/\*/{print $1}' | head -1)
-SANDBOX="${SANDBOX:-my-assistant}"
 
 # Web search providers
 if [ -n "${TAVILY_API_KEY:-}" ]; then
@@ -179,39 +193,57 @@ if [ -n "$SANDBOX_ENV_LINES" ]; then
   echo "  Injecting integration keys into sandbox workspace..."
   printf "%b" "$SANDBOX_ENV_LINES" | openshell sandbox exec --name "$SANDBOX" -- \
     sh -c 'cat > /sandbox/.env' 2>/dev/null && \
-    echo "  ✓ Sandbox .env written" || \
-    echo "  Warning: failed to write sandbox .env"
+    echo "  ✓ Sandbox .env written" || {
+      echo "  Warning: failed to write sandbox .env"
+      POST_FAILURES=$((POST_FAILURES + 1))
+    }
 fi
 
-echo "=== Step 8: Start services ==="
+echo "=== Step 9: Start services ==="
 # Reload env to pick up nvm
 export NVM_DIR="$HOME/.nvm"
 # shellcheck source=/dev/null
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 
-# Ensure the internal OpenShell port forward is running (it dies on sandbox rebuild)
-SANDBOX=$(nemoclaw list 2>/dev/null | awk '/\*/{print $1}' | head -1)
+# Bounce the port forward — stale forwards from previous sandbox cause 502s.
+# Stop first (may fail if none exists), then start fresh.
 if [ -n "$SANDBOX" ]; then
+  openshell forward stop 18789 "$SANDBOX" 2>/dev/null || true
+  sleep 1
   openshell forward start 18789 "$SANDBOX" --background 2>/dev/null || true
 fi
 
 # Start messaging bridges if tokens are configured
 if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] || [ -n "${DISCORD_BOT_TOKEN:-}" ] || [ -n "${SLACK_BOT_TOKEN:-}" ]; then
-  nemoclaw start
+  nemoclaw start || {
+    echo "  Warning: failed to start messaging bridges"
+    POST_FAILURES=$((POST_FAILURES + 1))
+  }
 else
-  echo "  No messaging tokens set — skipping bridges. Set TELEGRAM_BOT_TOKEN, DISCORD_BOT_TOKEN, or SLACK_BOT_TOKEN in ~/.env to enable."
+  echo "  No messaging tokens set — skipping bridges."
 fi
 
-echo "=== Step 9: Verify deployment ==="
-"${SCRIPT_DIR}/scripts/verify-deployment.sh" || echo "  Some checks failed — review above and fix before proceeding."
+echo "=== Step 10: Verify deployment ==="
+"${SCRIPT_DIR}/scripts/verify-deployment.sh" || echo "  Some checks failed — review above."
 
-echo "=== Step 10: Write deployment manifest ==="
-"${SCRIPT_DIR}/scripts/write-manifest.sh"
+echo "=== Step 11: Write deployment manifest ==="
+"${SCRIPT_DIR}/scripts/write-manifest.sh" || {
+  echo "  Warning: manifest write failed"
+  POST_FAILURES=$((POST_FAILURES + 1))
+}
+
+set -e
 
 echo ""
-echo "=========================================="
-echo "  NemoClaw is ready!"
-echo "=========================================="
+if [ "$POST_FAILURES" -gt 0 ]; then
+  echo "=========================================="
+  echo "  NemoClaw is running ($POST_FAILURES post-deploy warning(s))"
+  echo "=========================================="
+else
+  echo "=========================================="
+  echo "  NemoClaw is ready!"
+  echo "=========================================="
+fi
 echo ""
 if [ -f "$HOME/openclaw-tunnel-url.txt" ]; then
   TUNNEL_URL=$(cat "$HOME/openclaw-tunnel-url.txt")
