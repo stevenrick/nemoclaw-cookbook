@@ -241,33 +241,44 @@ Then open `http://127.0.0.1:18789/#token=<hex>` from `~/openclaw-ui-url.txt`. Us
 
 ## Adding Integrations
 
-The cookbook supports optional integrations driven by API keys in `.env`. When a key is present, `setup.sh` creates an OpenShell provider post-install and the relevant policy preset can be applied.
+The cookbook supports optional integrations driven by `.env` flags. When a key or flag is present, `setup.sh` registers providers, applies policy fragments, and merges config into `openclaw.json` at build time.
 
-### Brave Search
+### Web Search (Tavily or Brave)
 
-Enables web search capabilities via the Brave Search API.
+Gives the agent web search capabilities. Tavily is recommended.
 
-1. Get a Brave Search API key from https://brave.com/search/api/
-2. Add it to `.env` in the cookbook repo:
+1. Get an API key:
+   - **Tavily** (recommended): https://app.tavily.com/sign-in
+   - **Brave**: https://brave.com/search/api/
+2. Add to `~/.env`:
    ```bash
-   echo 'BRAVE_API_KEY=BSA-your-key-here' >> .env
+   TAVILY_API_KEY=tvly-your-key-here
+   # OR
+   BRAVE_API_KEY=BSA-your-key-here
    ```
-3. If this is a fresh install, run `./setup.sh` — it handles everything.
-4. If you already have a running sandbox, run `/upgrade` from Claude Code.
-   This backs up your workspace, recreates the sandbox with updated config, and restores.
+3. Fresh install: `./setup.sh` handles everything.
+4. Existing sandbox: run `/upgrade` — it backs up, rebuilds, and restores.
+
+If both keys are set, Tavily takes priority.
 
 ### Adding other services
 
 To add a new API integration:
 
-1. Add the API key to `.env` in the cookbook repo
+1. Add the API key to `~/.env`
 2. Add a policy fragment to `patches/fragments/` for the service's endpoints
-3. Update `.env.example` with the new key
-4. Run `/upgrade` to apply to a running sandbox
+3. If the integration needs openclaw.json config, add it to `build_integrations_config()` in `setup.sh`
+4. Update `.env.example` with the new key
+5. Run `/upgrade` to apply to a running sandbox
+
+### Known limitations
+
+- **Image attachments require a vision-capable model.** OpenClaw strips image attachments when the model declares `input: ["text"]` only (e.g., Nemotron). To use images, configure a multimodal model as your primary inference model.
+- **Brave Search is handled by upstream.** NemoClaw onboard detects `BRAVE_API_KEY` automatically — the cookbook only adds Tavily support.
 
 ### Why recreation is needed
 
-OpenShell providers (credential bundles injected into the sandbox) can only be attached at sandbox creation time. Adding a new provider to an existing sandbox requires destroying and recreating it. The `/upgrade` skill automates the backup/restore around this constraint.
+The sandbox image is built with integration config baked into `openclaw.json` (which is DAC-protected and integrity-hashed at runtime). Changing integrations requires rebuilding the image. The `/upgrade` skill automates the backup/rebuild/restore cycle.
 
 ## Rebuilding the sandbox
 

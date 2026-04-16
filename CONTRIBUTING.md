@@ -31,6 +31,26 @@ Thanks for your interest in contributing! This project helps you deploy and cust
 - For nginx config changes: test with `sudo nginx -t`
 - `scripts/install-services.sh` must remain idempotent — safe to run multiple times without side effects
 
+## Adding Integrations
+
+When adding a new integration, check upstream first. NemoClaw onboard already handles some integrations (e.g., Brave Search via `NEMOCLAW_WEB_SEARCH_ENABLED`). Only add cookbook-level support for features upstream doesn't provide.
+
+### Integration architecture
+
+The cookbook extends the sandbox image at build time:
+
+1. **Policy fragments** (`patches/fragments/policy-*.yaml`) — network egress rules merged into the sandbox policy by `merge-policy.py`
+2. **Dockerfile integration fragment** (`patches/fragments/dockerfile-integrations`) — deep-merges config into `openclaw.json` via a base64-encoded JSON payload
+3. **Config builder** (`build_integrations_config()` in `setup.sh`) — generates the JSON payload from `.env` flags
+4. **Sandbox .env injection** — writes API keys to `/sandbox/.env` for plugins that read `process.env` (OpenClaw loads this via dotenv from `process.cwd()`)
+
+### Patterns to follow
+
+- **Dockerfile fragments with compound Python** must use `printf '%s\n' 'line1' 'line2' | python3`. The `python3 -c "..."` pattern with `\` continuations collapses to a single line, breaking `def`/`for`/`if`/`else`.
+- **The post-config Dockerfile anchor** (`# Lock openclaw.json via DAC`) is for fragments that read/modify `openclaw.json`. The pre-config anchor (`# Set up blueprint for local resolution`) runs before the config file exists.
+- **API keys for plugins** need sandbox `.env` injection. The `openshell:resolve:env:` prefix works for channel tokens (gateway-level resolution) but NOT for plugin config values or `process.env` reads.
+- **Custom build args** are not passed by `nemoclaw onboard`. Bake computed values into Dockerfile ARG defaults via sed in `apply-patches.sh`.
+
 ## CI Pipeline
 
 Every PR and push to `main` runs these checks:
