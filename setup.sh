@@ -81,7 +81,8 @@ print(base64.b64encode(json.dumps(config).encode()).decode())
 "
 }
 
-export NEMOCLAW_INTEGRATIONS_B64="$(build_integrations_config)"
+NEMOCLAW_INTEGRATIONS_B64="$(build_integrations_config)"
+export NEMOCLAW_INTEGRATIONS_B64
 
 echo "=== Step 1: Clone / update repositories ==="
 cd "$HOME"
@@ -191,12 +192,13 @@ SANDBOX_ENV_LINES=""
 [ -n "${BRAVE_API_KEY:-}" ] && SANDBOX_ENV_LINES="${SANDBOX_ENV_LINES}BRAVE_API_KEY=${BRAVE_API_KEY}\n"
 if [ -n "$SANDBOX_ENV_LINES" ]; then
   echo "  Injecting integration keys into sandbox workspace..."
-  printf "%b" "$SANDBOX_ENV_LINES" | openshell sandbox exec --name "$SANDBOX" -- \
-    sh -c 'cat > /sandbox/.env' 2>/dev/null && \
-    echo "  ✓ Sandbox .env written" || {
-      echo "  Warning: failed to write sandbox .env"
-      POST_FAILURES=$((POST_FAILURES + 1))
-    }
+  if printf "%b" "$SANDBOX_ENV_LINES" | openshell sandbox exec --name "$SANDBOX" -- \
+    sh -c 'cat > /sandbox/.env' 2>/dev/null; then
+    echo "  ✓ Sandbox .env written"
+  else
+    echo "  Warning: failed to write sandbox .env"
+    POST_FAILURES=$((POST_FAILURES + 1))
+  fi
 fi
 
 echo "=== Step 9: Start services ==="
