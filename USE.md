@@ -159,22 +159,22 @@ Examples you can send via Telegram:
 
 Telegram messaging runs natively inside OpenClaw via the gateway delivery queue — no host-side bridge. Messages are async with no timeout, so long-running coding agent tasks work reliably. The Telegram token is injected at sandbox build time and the bot connects automatically.
 
-`nemoclaw start` starts the Cloudflare quick tunnel needed for the Telegram webhook callback URL:
+`nemoclaw tunnel start` starts the Cloudflare quick tunnel needed for the Telegram webhook callback URL:
 
 ```bash
 # If vars are already exported in your shell:
-nemoclaw start
+nemoclaw tunnel start
 
 # If starting fresh (no ~/.env or vars not exported):
-NVIDIA_API_KEY=<key> TELEGRAM_BOT_TOKEN=<token> TELEGRAM_ALLOWED_IDS=<id> nemoclaw start
+NVIDIA_API_KEY=<key> TELEGRAM_BOT_TOKEN=<token> TELEGRAM_ALLOWED_IDS=<id> nemoclaw tunnel start
 ```
 
 ### Manage
 
 ```bash
 nemoclaw status    # Tunnel health
-nemoclaw stop      # Stop tunnel
-nemoclaw start     # Restart tunnel
+nemoclaw tunnel stop      # Stop tunnel
+nemoclaw tunnel start     # Restart tunnel
 ```
 
 To check channel status inside the sandbox:
@@ -271,7 +271,7 @@ systemctl restart openshell-gateway    # Restart gateway
 sudo systemctl restart nginx           # Restart proxy
 ```
 
-**`nemoclaw start/stop` vs `systemctl`:** `nemoclaw start` only starts the Cloudflare tunnel (needed for Telegram webhooks). The gateway and sandbox run continuously under systemd, independent of `nemoclaw start/stop`.
+**`nemoclaw tunnel start/stop` vs `systemctl`:** `nemoclaw tunnel start` only starts the Cloudflare tunnel (needed for Telegram webhooks). The gateway and sandbox run continuously under systemd, independent of `nemoclaw tunnel start/stop`.
 
 ## Network Policies
 
@@ -310,16 +310,16 @@ Backups are stored locally in `backups/<timestamp>/` (gitignored). Each backup i
 ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> 2026-04-05_143022
 
 # Two-phase restore (use after rebuild when gateway is already running)
-~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' workspace   # phase 1: before nemoclaw start
-nemoclaw start                                                             # start services
-~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' sessions    # phase 2: after nemoclaw start
+~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' workspace   # phase 1: before nemoclaw tunnel start
+nemoclaw tunnel start                                                             # start services
+~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' sessions    # phase 2: after nemoclaw tunnel start
 ```
 
 Replace `<sandbox>` with your sandbox name (default: `my-assistant` — run `nemoclaw list` to check).
 
 Backups on the host are stored at `~/.nemoclaw/backups/<timestamp>/`.
 
-**Session restore note:** After a rebuild, sessions must be restored **after** `nemoclaw start`. The gateway reads sessions.json from disk on each operation, so restoring after start overwrites whatever the gateway created during channel reconnect. Restoring before start would be overwritten when Telegram/Discord channels reconnect.
+**Session restore note:** After a rebuild, sessions must be restored **after** `nemoclaw tunnel start`. The gateway reads sessions.json from disk on each operation, so restoring after start overwrites whatever the gateway created during channel reconnect. Restoring before start would be overwritten when Telegram/Discord channels reconnect.
 
 ## Updating OpenClaw
 
@@ -346,13 +346,13 @@ cd ~/NemoClaw && git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw
 ~/nemoclaw-cookbook/scripts/apply-patches.sh ~/NemoClaw
 
 # 4. Destroy and rebuild
-nemoclaw stop 2>/dev/null
+nemoclaw tunnel stop 2>/dev/null
 nemoclaw <sandbox> destroy --yes
 nemoclaw onboard
 
 # 5. Restore workspace, start services, then restore sessions
 ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' workspace
-nemoclaw start
+nemoclaw tunnel start
 ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' sessions
 ```
 
@@ -362,7 +362,7 @@ After rebuild:
 - Update the deployment manifest: `~/nemoclaw-cookbook/scripts/write-manifest.sh`
 - Re-authenticate: `codex login --device-auth` then launch `claude` (login forced on first launch)
 - Reinstall the Codex plugin inside Claude Code
-- Restart messaging: `nemoclaw start` (with tokens exported)
+- Restart messaging: `nemoclaw tunnel start` (with tokens exported)
 
 ## Claude Code Skills
 
@@ -519,7 +519,7 @@ brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev
 
 ```bash
 brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" \
-  && NVIDIA_API_KEY=<key> TELEGRAM_BOT_TOKEN=<token> TELEGRAM_ALLOWED_IDS=<id> nemoclaw start"
+  && NVIDIA_API_KEY=<key> TELEGRAM_BOT_TOKEN=<token> TELEGRAM_ALLOWED_IDS=<id> nemoclaw tunnel start"
 ```
 
 ### Accessing the Web UI

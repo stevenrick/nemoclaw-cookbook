@@ -24,7 +24,7 @@ Read the deployment manifest and discover sandbox name:
 
 ```bash
 brev exec <instance> "cat ~/.nemoclaw/cookbook-deployment.json 2>/dev/null"
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && nemoclaw list 2>/dev/null"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && nemoclaw list 2>/dev/null"
 ```
 
 Use the sandbox name from `nemoclaw list` (the one marked with `*`). Store it for all subsequent commands.
@@ -61,10 +61,10 @@ brev exec <instance> "git -C ~/NemoClaw fetch origin && git -C ~/NemoClaw log --
 brev exec <instance> "git -C ~/OpenShell fetch origin && git -C ~/OpenShell log --oneline origin/main -1"
 ```
 
-For sandbox-base image tag:
+For sandbox-base image tag (commit SHA is embedded as an OCI label on the pulled image):
 
-```
-WebFetch https://github.com/NVIDIA/NemoClaw/pkgs/container/nemoclaw%2Fsandbox-base — get the most recent commit SHA tag
+```bash
+brev exec <instance> "docker inspect ghcr.io/nvidia/nemoclaw/sandbox-base:latest --format '{{index .Config.Labels \"org.opencontainers.image.revision\"}}'"
 ```
 
 Also check if the cookbook on the remote is current:
@@ -143,7 +143,7 @@ If nothing changed: "Everything is up to date. No changes needed."
 Always backup before any changes that touch the sandbox:
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh backup <sandbox>"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh backup <sandbox>"
 ```
 
 Use `timeout: 300000`. For host-only updates, skip — no sandbox disruption.
@@ -167,7 +167,7 @@ For OpenShell, the correct install version is whatever NemoClaw's `blueprint.yam
 
 ```bash
 brev exec <instance> "cd ~/OpenShell && git pull --ff-only origin main && OPENSHELL_VERSION=v\$(awk -F'\"' '/^max_openshell_version:/{print \$2; exit}' ~/NemoClaw/nemoclaw-blueprint/blueprint.yaml) sh install.sh"
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && docker pull ghcr.io/nvidia/nemoclaw/sandbox-base:latest"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && docker pull ghcr.io/nvidia/nemoclaw/sandbox-base:latest"
 ```
 
 Use `timeout: 300000` for docker pull.
@@ -177,7 +177,7 @@ Use `timeout: 300000` for docker pull.
 Always run this — it's idempotent. For pre-systemd deployments this installs nginx, systemd units, and the terminal server. For existing deployments it updates configs and restarts services.
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/install-services.sh"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/install-services.sh"
 ```
 
 ## Phase 8 — Apply patches (validate BEFORE destroying)
@@ -185,7 +185,7 @@ brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$
 **Critical ordering.** Patches must apply before we destroy anything. If they fail, abort — the user keeps a working system.
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && set -a && source ~/.env && set +a && cd ~/NemoClaw && git checkout -- Dockerfile Dockerfile.base nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null; ~/nemoclaw-cookbook/scripts/apply-patches.sh ~/NemoClaw"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && set -a && source ~/.env && set +a && cd ~/NemoClaw && git checkout -- Dockerfile Dockerfile.base nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null; ~/nemoclaw-cookbook/scripts/apply-patches.sh ~/NemoClaw"
 ```
 
 If this fails:
@@ -199,24 +199,24 @@ Skip entirely if only host updates needed.
 
 ### Rebuild NemoClaw CLI *first*
 
-After a `git pull`, NemoClaw may have new TypeScript modules. Run `npm ci` **before** `nemoclaw stop` — otherwise `stop` fails with `MODULE_NOT_FOUND` and prints noise.
+After a `git pull`, NemoClaw may have new TypeScript modules. Run `npm ci` **before** `nemoclaw tunnel stop` — otherwise `stop` fails with `MODULE_NOT_FOUND` and prints noise.
 
 `npm ci` triggers the prepare hook which builds the CLI and then strips devDeps. Do NOT run `npm run build:cli` separately after — `tsc` will have been removed.
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && cd ~/NemoClaw && npm ci"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && cd ~/NemoClaw && npm ci"
 ```
 
 If `npm ci` fails to build (e.g., prepare hook doesn't find tsc), install typescript explicitly:
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && cd ~/NemoClaw && npm install typescript && npm run build:cli"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && cd ~/NemoClaw && npm install typescript && npm run build:cli"
 ```
 
 ### Stop services
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && nemoclaw stop 2>/dev/null || true"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && nemoclaw tunnel stop 2>/dev/null || true"
 ```
 
 ### Destroy and recreate
@@ -224,7 +224,7 @@ brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$
 **Critical:** use `set -a; source ~/.env; set +a` so every variable in `.env` (messaging tokens, integration keys, policy overrides) gets exported to the `nemoclaw` child process. Only exporting `NVIDIA_API_KEY` means the rebuilt sandbox won't have Telegram/Discord/Slack providers or correct policy presets — onboard then silently re-destroys on the next run to migrate providers, wiping the just-restored workspace. Don't hand-pick variables; export the whole env.
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && set -a && source ~/.env && set +a && export NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 && nemoclaw <sandbox> destroy --yes && nemoclaw onboard"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && set -a && source ~/.env && set +a && export NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 && nemoclaw <sandbox> destroy --yes && nemoclaw onboard"
 ```
 
 Use `timeout: 600000` (10 min).
@@ -232,39 +232,39 @@ Use `timeout: 600000` (10 min).
 After `nemoclaw onboard` returns, confirm the expected messaging providers exist. If a provider is missing, the *next* `nemoclaw onboard` call (anywhere in this flow, or in a future `/upgrade`) will force a full sandbox recreate to migrate providers — destroying workspace files mid-flow.
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && openshell provider list 2>&1"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && openshell provider list 2>&1"
 ```
 
 Verify that `<sandbox>-telegram-bridge` / `-discord-bridge` / `-slack-bridge` exist for every token set in `.env`. If any are missing, re-check what was exported to onboard — don't proceed with workspace restore until providers match, or the restore work will be thrown away on the next recreate.
 
-### Restore workspace (phase 1 — before nemoclaw start)
+### Restore workspace (phase 1 — before nemoclaw tunnel start)
 
 Workspace files (SOUL.md, USER.md, memory/, skills) are read from disk on each request, so restoring them while the gateway is running is safe.
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' workspace"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' workspace"
 ```
 
 ### Restart services
 
-Use the same `set -a; source ~/.env; set +a` pattern so messaging tokens reach `nemoclaw start`:
+Use the same `set -a; source ~/.env; set +a` pattern so messaging tokens reach `nemoclaw tunnel start`:
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && set -a && source ~/.env && set +a && nemoclaw start 2>/dev/null || true"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && set -a && source ~/.env && set +a && nemoclaw tunnel start 2>/dev/null || true"
 ```
 
 Make sure the internal OpenShell port forward for 18789 is live (`nemoclaw onboard` typically starts it; this is a belt-and-suspenders step that swallows an "already forwarded" error):
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && SANDBOX=\$(nemoclaw list 2>/dev/null | awk '/\\*/{print \$1}' | head -1) && [ -n \"\$SANDBOX\" ] && (openshell forward start 18789 \"\$SANDBOX\" --background 2>&1 | grep -v 'already forwarded' || true)"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && SANDBOX=\$(nemoclaw list 2>/dev/null | awk '/\\*/{print \$1}' | head -1) && [ -n \"\$SANDBOX\" ] && (openshell forward start 18789 \"\$SANDBOX\" --background 2>&1 | grep -v 'already forwarded' || true)"
 ```
 
-### Restore sessions (phase 2 — after nemoclaw start)
+### Restore sessions (phase 2 — after nemoclaw tunnel start)
 
-Session files (sessions.json + JSONL transcripts) must be restored AFTER `nemoclaw start`. The gateway reads sessions.json from disk on each write, so uploading the backup version makes the next gateway operation pick up the restored sessions. Restoring before start would be overwritten when channels reconnect.
+Session files (sessions.json + JSONL transcripts) must be restored AFTER `nemoclaw tunnel start`. The gateway reads sessions.json from disk on each write, so uploading the backup version makes the next gateway operation pick up the restored sessions. Restoring before start would be overwritten when channels reconnect.
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' sessions"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' sessions"
 ```
 
 ## Phase 10 — Save tokenized UI URL and write deployment manifest
@@ -272,13 +272,13 @@ brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$
 **If sandbox was rebuilt**, the gateway token has changed. Regenerate the URL file:
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/save-ui-url.sh"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/save-ui-url.sh"
 ```
 
 Then write the deployment manifest:
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/write-manifest.sh"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/write-manifest.sh"
 ```
 
 ## Phase 11 — Verify and report
@@ -286,7 +286,7 @@ brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$
 Run the comprehensive health check:
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/verify-deployment.sh"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/verify-deployment.sh"
 ```
 
 This checks: gateway health, sandbox status, dashboard reachability (auto-restarts the internal forward if dead), OpenClaw running, tools installed, workspace files, services, and manifest accuracy. If any check fails, diagnose before reporting success.
@@ -297,7 +297,7 @@ Get the new tokenized URL (changes on rebuild):
 brev exec <instance> "cat ~/openclaw-ui-url.txt 2>/dev/null"
 ```
 
-Update `UPSTREAM.md` in the local cookbook repo with the new versions and today's date. Use WebFetch to look up the sandbox-base tag from GitHub packages (not `docker images`).
+Update `UPSTREAM.md` in the local cookbook repo with the new versions and today's date. For the sandbox-base tag, read the OCI label from the pulled image: `docker inspect ghcr.io/nvidia/nemoclaw/sandbox-base:latest --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'`.
 
 **If sandbox was rebuilt:**
 
