@@ -248,7 +248,7 @@ fi
 
 # Start messaging bridges if tokens are configured
 if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] || [ -n "${DISCORD_BOT_TOKEN:-}" ] || [ -n "${SLACK_BOT_TOKEN:-}" ]; then
-  nemoclaw start || {
+  nemoclaw tunnel start || {
     echo "  Warning: failed to start messaging bridges"
     POST_FAILURES=$((POST_FAILURES + 1))
   }
@@ -256,14 +256,14 @@ else
   echo "  No messaging tokens set — skipping bridges."
 fi
 
-echo "=== Step 10: Verify deployment ==="
-"${SCRIPT_DIR}/scripts/verify-deployment.sh" || echo "  Some checks failed — review above."
-
-echo "=== Step 11: Write deployment manifest ==="
+echo "=== Step 10: Write deployment manifest ==="
 "${SCRIPT_DIR}/scripts/write-manifest.sh" || {
   echo "  Warning: manifest write failed"
   POST_FAILURES=$((POST_FAILURES + 1))
 }
+
+echo "=== Step 11: Verify deployment ==="
+"${SCRIPT_DIR}/scripts/verify-deployment.sh" || echo "  Some checks failed — review above."
 
 set -e
 
