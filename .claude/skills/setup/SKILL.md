@@ -88,7 +88,8 @@ echo "=== Messaging ==="
 echo "TELEGRAM_BOT_TOKEN: $([ -n "${TELEGRAM_BOT_TOKEN:-}" ] && echo SET || echo 'not set')"
 echo "DISCORD_BOT_TOKEN: $([ -n "${DISCORD_BOT_TOKEN:-}" ] && echo SET || echo 'not set')"
 echo "SLACK_BOT_TOKEN: $([ -n "${SLACK_BOT_TOKEN:-}" ] && echo SET || echo 'not set')"
-echo "=== Integrations ==="
+echo "=== Web Search ==="
+echo "TAVILY_API_KEY: $([ -n "${TAVILY_API_KEY:-}" ] && echo SET || echo 'not set')"
 echo "BRAVE_API_KEY: $([ -n "${BRAVE_API_KEY:-}" ] && echo SET || echo 'not set')"
 echo "=== Sandbox Tools ==="
 echo "INSTALL_CLAUDE_CODE: ${INSTALL_CLAUDE_CODE:-true}"
@@ -103,7 +104,7 @@ Confirm what's configured:
 > - NVIDIA API key: configured
 > - Inference: [provider/model or defaults]
 > - Messaging: [which are configured / none — add later]
-> - Search: [Brave configured / not configured]
+> - Search: [Tavily configured / Brave configured / not configured — Tavily preferred when both are set]
 > - Sandbox tools: [Claude Code, Codex / none]
 >
 > Want me to proceed?
