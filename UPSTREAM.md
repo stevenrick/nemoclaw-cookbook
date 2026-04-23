@@ -1,12 +1,12 @@
 # Upstream Compatibility
 
-Last validated end-to-end deployment: **2026-04-16**
+Last validated end-to-end deployment: **2026-04-23**
 
 | Component | Commit / Tag | Description | Link |
 |-----------|-------------|-------------|------|
-| NemoClaw | `4f30b9dc` | `fix(security): add authenticated reverse proxy for local Ollama (#1922)` | [commit](https://github.com/NVIDIA/NemoClaw/commit/4f30b9dc) |
-| OpenShell | `25d2530b` | `fix(inference): allowlist routed request headers (#826)` | [commit](https://github.com/NVIDIA/OpenShell/commit/25d2530b) |
-| sandbox-base | `75c08a1a` | `feat(compat): bump openclaw from 2026.3.11 to 2026.4.2 (#1522)` — OpenClaw 2026.4.2 | [package](https://github.com/NVIDIA/NemoClaw/pkgs/container/nemoclaw%2Fsandbox-base) |
+| NemoClaw | `b90b4d33` | `Revert "fix(dockerfile): drop invalid channels.defaults.configWrites (#2337)"` | [commit](https://github.com/NVIDIA/NemoClaw/commit/b90b4d33) |
+| OpenShell | `4483c860` | `feat(server,driver-vm,e2e): gateway-owned readiness + VM compute driver e2e (#901)` | [commit](https://github.com/NVIDIA/OpenShell/commit/4483c860) |
+| sandbox-base | `fafbaecd` | `chore(install): bump OpenShell version to 0.0.32 (#2307)` — OpenClaw 2026.4.2 | [package](https://github.com/NVIDIA/NemoClaw/pkgs/container/nemoclaw%2Fsandbox-base) |
 
 ## What this means
 
@@ -47,9 +47,9 @@ After a successful end-to-end deployment against newer upstream:
 # On the Brev instance:
 git -C ~/NemoClaw log --oneline -1
 git -C ~/OpenShell log --oneline -1
-# sandbox-base tag: look up the most recent commit SHA tag at
-# https://github.com/NVIDIA/NemoClaw/pkgs/container/nemoclaw%2Fsandbox-base
-# (docker images only shows "latest" locally)
+# sandbox-base commit SHA is embedded as an OCI label on the pulled image:
+docker inspect ghcr.io/nvidia/nemoclaw/sandbox-base:latest \
+  --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'
 ```
 
 Update the table above with the new values and today's date.

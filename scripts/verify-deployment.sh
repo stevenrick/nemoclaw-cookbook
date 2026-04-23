@@ -159,7 +159,7 @@ if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] || [ -n "${DISCORD_BOT_TOKEN:-}" ] || [ -n "
   if echo "$HOST_STATUS" | grep -qi "cloudflared"; then
     pass "Cloudflare tunnel running"
   else
-    warn "Cloudflare tunnel not detected (Telegram webhooks need it — run 'nemoclaw start')"
+    warn "Cloudflare tunnel not detected (Telegram webhooks need it — run 'nemoclaw tunnel start')"
   fi
 else
   pass "No messaging tokens configured (services not needed)"

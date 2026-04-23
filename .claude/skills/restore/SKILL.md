@@ -55,7 +55,7 @@ If exactly one instance is listed, confirm with the user before proceeding.
 If the instance is STOPPED, start it. Get the sandbox name:
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && nemoclaw list 2>/dev/null"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && nemoclaw list 2>/dev/null"
 ```
 
 If no sandbox exists, abort: "No sandbox found on the remote. Run /setup first to create one, then /restore."
@@ -90,28 +90,28 @@ rm /tmp/nemoclaw-restore-<timestamp>.tar.gz
 
 ## Phase 4 — Run restore on remote
 
-Restore happens in two phases. Workspace files and skills can be restored at any time (they're read from disk on each request). Session files must be restored **after** `nemoclaw start` so they overwrite whatever the gateway/channels created on reconnect.
+Restore happens in two phases. Workspace files and skills can be restored at any time (they're read from disk on each request). Session files must be restored **after** `nemoclaw tunnel start` so they overwrite whatever the gateway/channels created on reconnect.
 
 ### Phase 4a — Restore workspace + skills
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> <timestamp> workspace"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> <timestamp> workspace"
 ```
 
 **Important:** Set `timeout: 300000` on the Bash tool call, NOT as a `brev exec` flag.
 
-### Phase 4b — Restore sessions (after nemoclaw start)
+### Phase 4b — Restore sessions (after nemoclaw tunnel start)
 
 If the Cloudflare tunnel (for Telegram webhooks) is not already running, start it. The gateway runs under systemd and should already be active — check with `systemctl status openshell-gateway` if unsure.
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && source ~/.env && export NVIDIA_API_KEY TELEGRAM_BOT_TOKEN TELEGRAM_ALLOWED_IDS DISCORD_BOT_TOKEN SLACK_BOT_TOKEN 2>/dev/null; nemoclaw start 2>/dev/null || true"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && source ~/.env && export NVIDIA_API_KEY TELEGRAM_BOT_TOKEN TELEGRAM_ALLOWED_IDS DISCORD_BOT_TOKEN SLACK_BOT_TOKEN 2>/dev/null; nemoclaw tunnel start 2>/dev/null || true"
 ```
 
 Then restore sessions:
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> <timestamp> sessions"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> <timestamp> sessions"
 ```
 
 **Important:** Set `timeout: 300000` on the Bash tool call, NOT as a `brev exec` flag.
@@ -123,13 +123,13 @@ This uploads sessions.json and JSONL transcripts, overwriting whatever the gatew
 Ensure the tokenized UI URL file exists (rebuild changes the token):
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/save-ui-url.sh"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/save-ui-url.sh"
 ```
 
 Run the comprehensive health check:
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/verify-deployment.sh"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/verify-deployment.sh"
 ```
 
 This checks gateway, sandbox, dashboard reachability, OpenClaw, tools, workspace files (confirms SOUL.md exists after restore), services, and manifest accuracy. If the dashboard port forward died, it auto-restarts it.

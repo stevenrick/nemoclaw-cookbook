@@ -28,7 +28,7 @@ If multiple instances exist, ask the user which one. If the instance is STOPPED,
 Get the sandbox name:
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && nemoclaw list 2>/dev/null"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && nemoclaw list 2>/dev/null"
 ```
 
 The default sandbox name is `my-assistant`, but the user may have set a custom name via `NEMOCLAW_SANDBOX_NAME`. Always use the name returned by `nemoclaw list`. If no sandbox is found, abort: "No sandbox found. Run /setup first."
@@ -38,13 +38,13 @@ The default sandbox name is `my-assistant`, but the user may have set a custom n
 Capture existing backup timestamps (to identify the new one later):
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ls -1t ~/.nemoclaw/backups/ 2>/dev/null | head -5"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && ls -1t ~/.nemoclaw/backups/ 2>/dev/null | head -5"
 ```
 
 Run the backup (use 5-minute Bash tool timeout — workspace download can be slow):
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh backup <sandbox>"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/backup-full.sh backup <sandbox>"
 ```
 
 **Important:** Set `timeout: 300000` on the Bash tool call, NOT as a `brev exec` flag (brev doesn't have `--timeout`).
