@@ -123,7 +123,7 @@ The `.env` lives in the repo locally (gitignored) but gets copied to `~/.env` on
 Then run setup:
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && cd ~/nemoclaw-cookbook && ./setup.sh"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && cd ~/nemoclaw-cookbook && ./setup.sh"
 ```
 
 This takes ~5-10 minutes. The script handles: cloning repos, installing OpenShell, pulling the Docker image, applying patches, installing NemoClaw, deploying infrastructure services (nginx, systemd, terminal server via `install-services.sh`), configuring integrations, and starting services.
@@ -142,7 +142,7 @@ Use `timeout: 600000` for the brev exec call (10 min max).
 Run the comprehensive health check (setup.sh runs this automatically as Step 9):
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/verify-deployment.sh"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/verify-deployment.sh"
 ```
 
 This checks gateway, sandbox, dashboard, OpenClaw, tools, workspace, services, infrastructure (nginx, systemd, terminal server), and manifest. If the dashboard port forward is dead, it auto-restarts it.
@@ -150,7 +150,7 @@ This checks gateway, sandbox, dashboard, OpenClaw, tools, workspace, services, i
 **If sandbox shows but NemoClaw doesn't recognize it:**
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && set -a && source ~/.env && set +a && export NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 && nemoclaw onboard && ~/nemoclaw-cookbook/scripts/save-ui-url.sh"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && set -a && source ~/.env && set +a && export NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 && nemoclaw onboard && ~/nemoclaw-cookbook/scripts/save-ui-url.sh"
 ```
 
 ## Phase 5 — Connect
@@ -167,7 +167,7 @@ brev exec <instance> "cat ~/openclaw-ui-url.txt 2>/dev/null"
 If the file is missing (manual onboard, or extraction failed), regenerate it:
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/save-ui-url.sh"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/save-ui-url.sh"
 ```
 
 If `TUNNEL_FQDN` is set, the tunnel URL works directly in any browser (nginx rewrites the Origin header). If using port-forward, use `127.0.0.1` (not `localhost`).
@@ -240,10 +240,10 @@ After a successful deployment, capture the exact versions that were deployed and
 # On the Brev instance — capture deployed versions
 brev exec <instance> "git -C ~/NemoClaw log --oneline -1"
 brev exec <instance> "git -C ~/OpenShell log --oneline -1"
-WebFetch https://github.com/NVIDIA/NemoClaw/pkgs/container/nemoclaw%2Fsandbox-base — get the most recent commit SHA tag
+brev exec <instance> "docker inspect ghcr.io/nvidia/nemoclaw/sandbox-base:latest --format '{{index .Config.Labels \"org.opencontainers.image.revision\"}}'"
 ```
 
-Update `UPSTREAM.md` in the cookbook repo with the commit SHAs, descriptions, and today's date. The sandbox-base tag is a NemoClaw commit SHA — look it up from the GitHub packages page, not from `docker images` (which only shows `latest` locally).
+Update `UPSTREAM.md` in the cookbook repo with the commit SHAs, descriptions, and today's date. The sandbox-base tag is a NemoClaw commit SHA, embedded as an OCI label on the pulled image — read it via `docker inspect`, not the GitHub packages page.
 
 If the deployed versions differ from what's currently in `UPSTREAM.md`, note what changed in the commit message when the user commits (e.g., "docs: update UPSTREAM.md — validated against NemoClaw c99e3e8").
 

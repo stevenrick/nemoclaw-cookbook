@@ -97,7 +97,7 @@ If the deployed versions are *behind* `UPSTREAM.md`, the instance is running old
 
 ```bash
 # Host-side status
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && nemoclaw list && openshell sandbox list && openshell status"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && nemoclaw list && openshell sandbox list && openshell status"
 
 # Inside sandbox — gateway health
 brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name <sandbox>' sandbox@openshell-<sandbox> 'openclaw status 2>&1'"

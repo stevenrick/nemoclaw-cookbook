@@ -58,7 +58,7 @@ Use `127.0.0.1` (not `localhost`) — the sandbox CORS config requires it.
 Commands run via `brev exec` land on the Brev VM (the host). NemoClaw management commands (`nemoclaw`, `openshell`) run here. Source nvm and set PATH explicitly since `.bashrc` isn't sourced in non-interactive mode:
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && <command>"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && <command>"
 ```
 
 ### Running commands inside the sandbox
@@ -143,7 +143,7 @@ The backup script (`scripts/backup-full.sh`) backs up both `workspace/` and `age
 ### Check NemoClaw status
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && nemoclaw list && openshell sandbox list && openshell status"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && nemoclaw list && openshell sandbox list && openshell status"
 ```
 
 ### Start Telegram bridge
@@ -151,7 +151,7 @@ brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$
 Requires env vars in the process environment (not a file):
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && export TELEGRAM_BOT_TOKEN=<token> TELEGRAM_ALLOWED_IDS=<id> NVIDIA_API_KEY=<key> && nemoclaw start"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && export TELEGRAM_BOT_TOKEN=<token> TELEGRAM_ALLOWED_IDS=<id> NVIDIA_API_KEY=<key> && nemoclaw tunnel start"
 ```
 
 ### Read sandbox workspace files

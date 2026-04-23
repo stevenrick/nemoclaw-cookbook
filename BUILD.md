@@ -186,19 +186,19 @@ If you didn't add tokens in Step 1:
    TELEGRAM_ALLOWED_IDS=your-chat-id
    ```
 
-Start the bridge. `nemoclaw start` reads env vars directly from the process environment (no dotenv/file loading):
+Start the bridge. `nemoclaw tunnel start` reads env vars directly from the process environment (no dotenv/file loading):
 
 ```bash
 # If ~/.env exists and vars are there:
 source ~/.env
 export NVIDIA_API_KEY TELEGRAM_BOT_TOKEN TELEGRAM_ALLOWED_IDS
-nemoclaw start
+nemoclaw tunnel start
 
 # Or pass inline (works without any .env file):
-NVIDIA_API_KEY=<key> TELEGRAM_BOT_TOKEN=<token> TELEGRAM_ALLOWED_IDS=<id> nemoclaw start
+NVIDIA_API_KEY=<key> TELEGRAM_BOT_TOKEN=<token> TELEGRAM_ALLOWED_IDS=<id> nemoclaw tunnel start
 ```
 
-This starts a Cloudflare quick tunnel for the Telegram webhook URL. Note: `nemoclaw start` only manages the tunnel — the gateway and sandbox run continuously under systemd.
+This starts a Cloudflare quick tunnel for the Telegram webhook URL. Note: `nemoclaw tunnel start` only manages the tunnel — the gateway and sandbox run continuously under systemd.
 
 ## Step 9b: Infrastructure Services
 
@@ -296,7 +296,7 @@ source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEP
 ~/nemoclaw-cookbook/scripts/backup-full.sh backup my-assistant
 
 # 2. Stop services and destroy
-nemoclaw stop 2>/dev/null
+nemoclaw tunnel stop 2>/dev/null
 docker pull ghcr.io/nvidia/nemoclaw/sandbox-base:latest
 nemoclaw my-assistant destroy --yes
 
@@ -305,7 +305,7 @@ nemoclaw onboard
 
 # 4. Restore workspace + skills, start services, then restore sessions
 ~/nemoclaw-cookbook/scripts/backup-full.sh restore my-assistant '' workspace
-nemoclaw start
+nemoclaw tunnel start
 ~/nemoclaw-cookbook/scripts/backup-full.sh restore my-assistant '' sessions
 ```
 
@@ -416,12 +416,12 @@ Valid `NEMOCLAW_PROVIDER` values: `build` (NVIDIA cloud, default), `openai`, `an
 
 | Variable | Purpose | When |
 |----------|---------|------|
-| `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather | `nemoclaw start` / onboard |
-| `TELEGRAM_ALLOWED_IDS` | Comma-separated Telegram chat IDs | `nemoclaw start` |
-| `DISCORD_BOT_TOKEN` | Discord bot token | `nemoclaw start` / onboard |
-| `SLACK_BOT_TOKEN` | Slack bot token (`xoxb-...`) | `nemoclaw start` / onboard |
+| `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather | `nemoclaw tunnel start` / onboard |
+| `TELEGRAM_ALLOWED_IDS` | Comma-separated Telegram chat IDs | `nemoclaw tunnel start` |
+| `DISCORD_BOT_TOKEN` | Discord bot token | `nemoclaw tunnel start` / onboard |
+| `SLACK_BOT_TOKEN` | Slack bot token (`xoxb-...`) | `nemoclaw tunnel start` / onboard |
 
-When messaging tokens are set during onboard, NemoClaw auto-detects them and suggests the corresponding policy presets (telegram, discord, slack). During `nemoclaw start`, the tokens are passed into the bridge processes.
+When messaging tokens are set during onboard, NemoClaw auto-detects them and suggests the corresponding policy presets (telegram, discord, slack). During `nemoclaw tunnel start`, the tokens are passed into the bridge processes.
 
 ### Tool integrations
 

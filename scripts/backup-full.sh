@@ -36,7 +36,7 @@ Usage:
 
 phase (optional): all (default), workspace, sessions
   workspace — workspace files + skills (safe while gateway is running)
-  sessions  — sessions.json + JSONL transcripts (run AFTER nemoclaw start)
+  sessions  — sessions.json + JSONL transcripts (run AFTER nemoclaw tunnel start)
 
 Backs up workspace files (via upstream script), chat session history, and skills.
 EOF
@@ -168,7 +168,7 @@ do_restore() {
     fi
   fi
 
-  # --- Sessions phase: chat history (restore AFTER nemoclaw start so it overwrites
+  # --- Sessions phase: chat history (restore AFTER nemoclaw tunnel start so it overwrites
   #     whatever the gateway/channels created on reconnect). The gateway reads
   #     sessions.json from disk on each write, so uploading the backup version makes
   #     the next gateway operation pick up the restored sessions. ---
