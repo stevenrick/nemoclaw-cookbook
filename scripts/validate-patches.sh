@@ -39,10 +39,13 @@ fi
 # ── Check 2: Policy section anchors ─────────────────────────────────
 POLICY="nemoclaw-blueprint/policies/openclaw-sandbox.yaml"
 echo "Checking policy section anchors..."
-# Only check sections that our add_endpoints fragments target.
-# github was moved to a preset in upstream #1583 — our policy-core.yaml
-# now uses new_sections instead of add_endpoints, so no anchor needed.
-for section in claude_code nvidia; do
+# Only check sections that our add_endpoints/add_binaries fragments target.
+# - github was moved to a preset in upstream #1583 (policy-core uses new_sections).
+# - claude_code was moved to permissive-only in the base/permissive split — our
+#   policy-claude-code fragment now uses new_sections instead of add_endpoints.
+# nvidia stays as the only base-policy anchor we still need, as a basic schema
+# sanity check (if it disappeared, the policy structure has changed dramatically).
+for section in nvidia; do
   if grep -qE "^  ${section}:" "$POLICY" 2>/dev/null; then
     echo "  ✓ Section: $section"
   else

@@ -30,9 +30,11 @@ POLICY="$NEMOCLAW_DIR/nemoclaw-blueprint/policies/openclaw-sandbox.yaml"
 # ── Dockerfile modifications ────────────────────────────────────────
 # Pre-config anchor: fragments inserted here run as root, before openclaw.json exists.
 ANCHOR="# Set up blueprint for local resolution"
-# Post-config anchor: fragments inserted here run as sandbox user, after openclaw.json
-# is created but before the DAC lockdown makes it read-only.
-POST_CONFIG_ANCHOR="# Lock openclaw.json via DAC"
+# Post-config anchor: fragments inserted here run as root, AFTER all upstream
+# openclaw.json writes (generate-openclaw-config.py, openclaw doctor, gateway
+# token clear, chown to sandbox:sandbox) and BEFORE the integrity hash pin, so
+# our changes are covered by the build-time sha256.
+POST_CONFIG_ANCHOR="# Pin config hash at build time so the entrypoint can verify integrity."
 
 if ! grep -qF "$ANCHOR" "$DOCKERFILE"; then
   echo "ERROR: Dockerfile anchor not found: '$ANCHOR'"
@@ -91,7 +93,18 @@ insert_before "$DOCKERFILE" "$POST_CONFIG_ANCHOR" "$FRAGMENTS_DIR/dockerfile-int
 # nemoclaw onboard doesn't pass our custom ARG as --build-arg, so we set the
 # default to the actual value. The fragment's no-op guard handles empty/e30=.
 if [ -n "${NEMOCLAW_INTEGRATIONS_B64:-}" ] && [ "${NEMOCLAW_INTEGRATIONS_B64:-}" != "e30=" ]; then
-  sed -i "s|ARG NEMOCLAW_INTEGRATIONS_B64=e30=|ARG NEMOCLAW_INTEGRATIONS_B64=${NEMOCLAW_INTEGRATIONS_B64}|" "$DOCKERFILE"
+  NEMOCLAW_INTEGRATIONS_B64="$NEMOCLAW_INTEGRATIONS_B64" python3 -c "
+import os, sys
+path = sys.argv[1]
+new = os.environ['NEMOCLAW_INTEGRATIONS_B64']
+with open(path) as f: data = f.read()
+old = 'ARG NEMOCLAW_INTEGRATIONS_B64=e30='
+if old not in data:
+    print(f'WARNING: ARG default not found in {path} — fragment may not have inserted', file=sys.stderr)
+    sys.exit(0)
+data = data.replace(old, f'ARG NEMOCLAW_INTEGRATIONS_B64={new}', 1)
+with open(path, 'w') as f: f.write(data)
+" "$DOCKERFILE"
   echo "    ✓ integrations config baked into Dockerfile"
 fi
 
@@ -117,7 +130,14 @@ if [ -n "$OPENCLAW_VERSION" ]; then
     exit 1
   fi
   echo "  Building sandbox-base with OpenClaw $OPENCLAW_VERSION (this takes a few minutes)..."
-  sed -i "s|npm install -g openclaw@[^ ]*|npm install -g openclaw@$OPENCLAW_VERSION|" "$DOCKERFILE_BASE"
+  OPENCLAW_VERSION="$OPENCLAW_VERSION" python3 -c "
+import os, re, sys
+path = sys.argv[1]
+ver = os.environ['OPENCLAW_VERSION']
+with open(path) as f: data = f.read()
+data = re.sub(r'npm install -g openclaw@[^ ]*', f'npm install -g openclaw@{ver}', data)
+with open(path, 'w') as f: f.write(data)
+" "$DOCKERFILE_BASE"
   docker build -f "$DOCKERFILE_BASE" -t ghcr.io/nvidia/nemoclaw/sandbox-base:latest "$NEMOCLAW_DIR"
   echo "    ✓ sandbox-base rebuilt with OpenClaw $OPENCLAW_VERSION"
 fi
