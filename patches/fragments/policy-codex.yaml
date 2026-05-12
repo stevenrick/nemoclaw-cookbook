@@ -1,9 +1,7 @@
-# Codex policy additions — OpenAI auth, API access, and binary permissions
-# Creates the entire openai section and adds codex/node binaries where needed
-
-add_binaries:
-  claude_code:
-    - { path: /usr/local/bin/codex }
+# Codex policy additions — OpenAI auth, API access, and binary permissions.
+# Creates the openai section as a standalone new section so it stands
+# independently of whether claude_code is installed.
+# Codex binary's GitHub access is granted via policy-core.yaml (github_codeload).
 
 new_sections:
   openai:
