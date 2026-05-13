@@ -29,14 +29,16 @@ brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export 
 
 Use the sandbox name from `nemoclaw list` (the one marked with `*`). Store it for all subsequent commands.
 
-Check infrastructure state (detects pre-systemd deployments that need migration):
+Check infrastructure state (detects deployments missing cookbook scaffolding):
 
 ```bash
-brev exec <instance> "[ -f /etc/systemd/system/openshell-gateway.service ] && echo SYSTEMD_OK || echo SYSTEMD_MISSING"
 brev exec <instance> "command -v nginx >/dev/null 2>&1 && echo NGINX_OK || echo NGINX_MISSING"
+brev exec <instance> "[ -f /etc/systemd/system/nemoclaw-terminal.service ] && echo TERMINAL_OK || echo TERMINAL_MISSING"
 ```
 
 If either is `MISSING`, the upgrade will include installing infrastructure services (Phase 7b).
+
+`install-services.sh` removes any `openshell-gateway.service` unit it finds — the cookbook does not manage gateway lifecycle. If the gateway is down (e.g., after a host reboot), run `nemoclaw <sandbox> recover`.
 
 If no manifest exists (pre-manifest deployment), bootstrap by inspecting:
 

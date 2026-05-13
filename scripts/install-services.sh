@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
-# Install systemd services, nginx reverse proxy, and optional terminal server.
-# Called by setup.sh after NemoClaw is installed. Also called by /upgrade for
-# migrations from pre-systemd deployments.
+# Install the cookbook's host-side services: nginx reverse proxy and the
+# optional terminal WebSocket server. Removes any `openshell-gateway.service`
+# unit it finds — the cookbook does not manage the OpenShell gateway
+# lifecycle (upstream `nemoclaw` does; run `nemoclaw <sandbox> recover` if
+# the gateway is down).
 #
-# Requires: sudo (for nginx, systemd unit installation)
-# Idempotent: safe to run multiple times.
+# Called by setup.sh after NemoClaw is installed. Also called by /upgrade.
+#
+# Requires: sudo (for nginx and systemd unit installation).
+# Idempotent: safe to re-run.
 #
 # Usage: ./scripts/install-services.sh
 set -euo pipefail
@@ -24,6 +28,20 @@ export NVM_DIR="$HOME/.nvm"
 export PATH="$HOME/.local/bin:$PATH"
 
 echo "=== Installing services ==="
+
+# ── 0. Remove openshell-gateway.service if present ──────────────────
+# The cookbook does not manage the OpenShell gateway lifecycle — that
+# belongs to upstream `nemoclaw`. Any `openshell-gateway.service` unit on
+# the host is from a prior cookbook install and is removed so deployments
+# converge on a single model.
+if [ -f /etc/systemd/system/openshell-gateway.service ]; then
+  echo "  Removing openshell-gateway.service (cookbook does not manage the gateway)..."
+  sudo systemctl disable openshell-gateway 2>/dev/null || true
+  sudo systemctl stop openshell-gateway 2>/dev/null || true
+  sudo rm -f /etc/systemd/system/openshell-gateway.service
+  sudo systemctl daemon-reload
+  echo "  ✓ Unit removed"
+fi
 
 # ── 1. Install nginx if not present ──────────────────────────────────
 if ! command -v nginx >/dev/null 2>&1; then
@@ -45,14 +63,7 @@ sudo nginx -t 2>/dev/null
 sudo systemctl restart nginx 2>/dev/null || sudo systemctl start nginx
 echo "  ✓ nginx configured"
 
-# ── 3. Install systemd unit for OpenShell gateway ────────────────────
-echo "  Installing OpenShell gateway systemd unit..."
-sudo cp "$COOKBOOK_DIR/config/systemd/openshell-gateway.service" /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable openshell-gateway 2>/dev/null
-echo "  ✓ openshell-gateway.service installed"
-
-# ── 4. Terminal WebSocket server (optional) ──────────────────────────
+# ── 3. Terminal WebSocket server (optional) ──────────────────────────
 if [ "$ENABLE_TERMINAL_SERVER" = "true" ]; then
   echo "  Installing terminal WebSocket server..."
 
@@ -76,7 +87,7 @@ else
   sudo systemctl stop nemoclaw-terminal 2>/dev/null || true
 fi
 
-# ── 5. Configure access method (FQDN or port-forward) ───────────────
+# ── 4. Configure access method (FQDN or port-forward) ───────────────
 # If TUNNEL_FQDN is set in .env, the user has configured Brev Secure Links
 # and wants to access the Web UI via that domain. Otherwise, the system uses
 # brev port-forward (local access only).
@@ -96,21 +107,11 @@ else
   echo "    and configure it in Brev (Settings → Secure Links)."
 fi
 
-# ── 6. Start services ───────────────────────────────────────────────
+# ── 5. Start services ───────────────────────────────────────────────
+# Gateway is started by `nemoclaw onboard` upstream; cookbook does not
+# manage it (see header note). If the gateway is down after a host
+# reboot or crash, run `nemoclaw <sandbox> recover`.
 echo "  Starting services..."
-
-# Gateway should already be running from nemoclaw onboard, but ensure systemd tracks it
-if systemctl is-active --quiet openshell-gateway 2>/dev/null; then
-  echo "  ✓ openshell-gateway already running"
-else
-  # If gateway container exists (from nemoclaw onboard), adopt it
-  if docker ps -q -f "name=openshell-cluster-nemoclaw" 2>/dev/null | grep -q .; then
-    echo "  ✓ openshell-gateway container running (adopting into systemd)"
-  else
-    sudo systemctl start openshell-gateway
-    echo "  ✓ openshell-gateway started"
-  fi
-fi
 
 sudo systemctl start nginx
 echo "  ✓ nginx started"
