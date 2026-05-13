@@ -267,6 +267,30 @@ Gives the agent web search capabilities. Tavily is recommended.
 
 If both keys are set, Tavily takes priority.
 
+### OpenAI-compatible HTTP API
+
+Set `NEMOCLAW_OPENAI_HTTP_ENABLED=1` in `~/.env` to enable an OpenAI-compatible inference endpoint on the gateway. After rebuild, four paths become available:
+
+- `POST /v1/chat/completions`
+- `POST /v1/responses`
+- `GET /v1/models`
+- `POST /v1/embeddings`
+
+By default the endpoint is reachable only from `127.0.0.1` on the Brev host (use SSH port-forward for laptop access). Set `NEMOCLAW_OPENAI_HTTP_TUNNEL=1` to also expose it through the cloudflared tunnel.
+
+After deploy, the gateway token and base URL are written to `~/openclaw-openai.env`:
+
+```bash
+source ~/openclaw-openai.env
+python -c "from openai import OpenAI; print([m.id for m in OpenAI().models.list().data])"
+```
+
+**Security:** This endpoint grants operator-level access to the sandbox. The gateway token is the only thing standing between a remote caller and full sandbox control. Treat it like an owner credential. Rotate by bouncing the sandbox.
+
+**Browser clients:** Nginx terminates CORS for `/v1/*` because OpenClaw doesn't emit `Access-Control-Allow-*` headers natively. Tools like Open WebUI work without further configuration.
+
+**Upstream gaps:** When NemoClaw exposes the equivalent of `NEMOCLAW_OPENAI_HTTP_ENABLED` natively (parallel to `NEMOCLAW_WEB_SEARCH_ENABLED`), the cookbook's `setup.sh` merge block retires. When OpenClaw ships native CORS for `/v1/*`, the nginx CORS termination collapses to a plain `proxy_pass`. Both are tracked as follow-ups, not blockers.
+
 ### Adding other services
 
 To add a new API integration:
