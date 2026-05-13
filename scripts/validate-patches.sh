@@ -44,16 +44,14 @@ echo "Checking policy section anchors..."
 # - claude_code was moved to permissive-only in the base/permissive split — our
 #   policy-claude-code fragment now uses new_sections instead of add_endpoints.
 # nvidia stays as the only base-policy anchor we still need, as a basic schema
-# sanity check (if it disappeared, the policy structure has changed dramatically).
-for section in nvidia; do
-  if grep -qE "^  ${section}:" "$POLICY" 2>/dev/null; then
-    echo "  ✓ Section: $section"
-  else
-    echo "  ✗ Section NOT found: $section"
-    echo "    Upstream may have renamed or removed this section."
-    FAILED=1
-  fi
-done
+# sanity check — if it disappeared, the policy structure has changed dramatically.
+if grep -qE "^  nvidia:" "$POLICY" 2>/dev/null; then
+  echo "  ✓ Section: nvidia"
+else
+  echo "  ✗ Section NOT found: nvidia"
+  echo "    Upstream may have renamed or removed this section."
+  FAILED=1
+fi
 
 # ── Check 3: Full apply test ────────────────────────────────────────
 echo "Running full apply-patches.sh (all tools enabled)..."
