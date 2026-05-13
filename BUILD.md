@@ -269,27 +269,41 @@ If both keys are set, Tavily takes priority.
 
 ### OpenAI-compatible HTTP API
 
-Set `NEMOCLAW_OPENAI_HTTP_ENABLED=1` in `~/.env` to enable an OpenAI-compatible inference endpoint on the gateway. After rebuild, four paths become available:
+Set `NEMOCLAW_OPENAI_HTTP_ENABLED=1` in `~/.env` and redeploy to enable an OpenAI-compatible inference endpoint on the gateway. After rebuild, four paths become available:
 
 - `POST /v1/chat/completions`
 - `POST /v1/responses`
 - `GET /v1/models`
 - `POST /v1/embeddings`
 
-By default the endpoint is reachable only from `127.0.0.1` on the Brev host (use SSH port-forward for laptop access). Set `NEMOCLAW_OPENAI_HTTP_TUNNEL=1` to also expose it through the cloudflared tunnel.
-
-After deploy, the gateway token and base URL are written to `~/openclaw-openai.env`:
+The gateway token and base URL are written to `~/openclaw-openai.env` at the end of deploy. From the Brev host:
 
 ```bash
 source ~/openclaw-openai.env
 python -c "from openai import OpenAI; print([m.id for m in OpenAI().models.list().data])"
 ```
 
-**Security:** This endpoint grants operator-level access to the sandbox. The gateway token is the only thing standing between a remote caller and full sandbox control. Treat it like an owner credential. Rotate by bouncing the sandbox.
+**Laptop access.** Brev's cloudflared tunnel is gated by Cloudflare Access — programmatic clients (Python `openai`, curl) hitting the FQDN directly get bounced to an SSO login page, so the tunnel URL doesn't work out of the box for non-browser callers. Three options for laptop access, simplest first:
 
-**Browser clients:** Nginx terminates CORS for `/v1/*` because OpenClaw doesn't emit `Access-Control-Allow-*` headers natively. Tools like Open WebUI work without further configuration.
+1. **SSH port-forward (recommended):**
+   ```bash
+   ssh -L 8080:127.0.0.1:80 <brev-host>
+   # Then on the laptop:
+   OPENAI_BASE_URL=http://127.0.0.1:8080/v1 OPENAI_API_KEY=<gateway-token> python …
+   ```
+   No CF Access friction, no extra Cloudflare config. The gateway token still gates the endpoint.
 
-**Upstream gaps:** When NemoClaw exposes the equivalent of `NEMOCLAW_OPENAI_HTTP_ENABLED` natively (parallel to `NEMOCLAW_WEB_SEARCH_ENABLED`), the cookbook's `setup.sh` merge block retires. When OpenClaw ships native CORS for `/v1/*`, the nginx CORS termination collapses to a plain `proxy_pass`. Both are tracked as follow-ups, not blockers.
+2. **Cloudflare Access service token:** create one in the Brev/Cloudflare Access dashboard, then send `CF-Access-Client-Id` + `CF-Access-Client-Secret` headers alongside `Authorization`. Lets you use the tunnel URL directly.
+
+3. **Cloudflare Access bypass for `/v1/*`:** add a bypass rule for the API paths in the Access dashboard. Reduces the auth surface to just the gateway token — only do this if you understand the trade-off.
+
+`NEMOCLAW_OPENAI_HTTP_TUNNEL=1` controls the *nginx* layer (lifts the `deny all` rule on non-loopback IPs). Useful only when you've configured CF Access service tokens or a bypass rule — without one of those, CF Access blocks remote calls regardless of nginx.
+
+**Security.** This endpoint grants operator-level access to the sandbox. The gateway token is treated like an owner credential — rotate it by bouncing the sandbox. With CF Access in front of the tunnel (Brev's default), external programmatic access requires *both* a valid Access identity and the gateway token, which is a meaningful defense-in-depth posture.
+
+**Browser clients.** Nginx terminates CORS for `/v1/*` because OpenClaw emits no `Access-Control-Allow-*` headers and returns 405 to `OPTIONS`. Tools like Open WebUI work via local nginx without further configuration.
+
+**Upstream gaps.** When NemoClaw exposes the equivalent of `NEMOCLAW_OPENAI_HTTP_ENABLED` natively (parallel to `NEMOCLAW_WEB_SEARCH_ENABLED`), the cookbook's `setup.sh` merge block retires. When OpenClaw ships native CORS for `/v1/*`, the nginx CORS termination collapses to a plain `proxy_pass`. Both are tracked as follow-ups, not blockers.
 
 ### Adding other services
 
