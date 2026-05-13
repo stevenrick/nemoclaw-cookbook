@@ -12,11 +12,12 @@ new_sections:
         protocol: rest
         enforcement: enforce
         tls: terminate
-        # Tavily takes the api_key in the JSON request body. After OpenShell
-        # #1286, REST body credential rewrite is opt-in per endpoint — without
-        # this the openshell:resolve:env:TAVILY_API_KEY placeholder fails
-        # closed at the relay. Drop when upstream Tavily preset adds this.
-        request_body_credential_rewrite: true
+        # NOTE: OpenShell #1286 (in v0.0.39+) makes REST body credential rewrite
+        # opt-in via `request_body_credential_rewrite: true`. Older versions
+        # (v0.0.36-v0.0.38) reject that field as unknown but rewrite bodies by
+        # default, so we omit it for cross-version compatibility. When NemoClaw
+        # blueprints start pinning OpenShell >= v0.0.39, apply-patches.sh needs
+        # to detect the version and inject the field. Tracking task #7-ish.
         rules:
           - allow: { method: POST, path: "/**" }
     binaries:

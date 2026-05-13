@@ -1,12 +1,12 @@
 # Upstream Compatibility
 
-Last validated end-to-end deployment: **2026-04-23**
+Last validated end-to-end deployment: **2026-05-12**
 
 | Component | Commit / Tag | Description | Link |
 |-----------|-------------|-------------|------|
-| NemoClaw | `b90b4d33` | `Revert "fix(dockerfile): drop invalid channels.defaults.configWrites (#2337)"` | [commit](https://github.com/NVIDIA/NemoClaw/commit/b90b4d33) |
-| OpenShell | `4483c860` | `feat(server,driver-vm,e2e): gateway-owned readiness + VM compute driver e2e (#901)` | [commit](https://github.com/NVIDIA/OpenShell/commit/4483c860) |
-| sandbox-base | `fafbaecd` | `chore(install): bump OpenShell version to 0.0.32 (#2307)` — OpenClaw 2026.4.2 | [package](https://github.com/NVIDIA/NemoClaw/pkgs/container/nemoclaw%2Fsandbox-base) |
+| NemoClaw | `c4aaec3bb` (v0.0.38) | `fix(runtime): repair stale inference DNS routes (#3267)` | [commit](https://github.com/NVIDIA/NemoClaw/commit/c4aaec3bb) |
+| OpenShell | `4483c860` (v0.0.36) | `feat(server,driver-vm,e2e): gateway-owned readiness + VM compute driver e2e (#901)` | [commit](https://github.com/NVIDIA/OpenShell/commit/4483c860) |
+| sandbox-base | `47a54a53` | OpenClaw 2026.4.24 (npm openclaw@2026.4.24) | [package](https://github.com/NVIDIA/NemoClaw/pkgs/container/nemoclaw%2Fsandbox-base) |
 
 ## What this means
 

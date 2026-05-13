@@ -132,6 +132,18 @@ if [ -z "${OPENSHELL_VERSION:-}" ] && [ -f "$BLUEPRINT_YAML" ]; then
     echo "  Pinned OpenShell to ${OPENSHELL_VERSION} (from blueprint max_openshell_version)"
   fi
 fi
+# Also check out the OpenShell repo at the same tag. The install.sh format
+# expectations (e.g. .deb vs .tar.gz) evolve over time, so HEAD's install.sh
+# can fail against an older release's artifacts.
+if [ -n "${OPENSHELL_VERSION:-}" ] && [ -d "$HOME/OpenShell/.git" ]; then
+  CURRENT_REF=$(git -C "$HOME/OpenShell" describe --tags --exact-match 2>/dev/null || echo "")
+  if [ "$CURRENT_REF" != "$OPENSHELL_VERSION" ]; then
+    git -C "$HOME/OpenShell" fetch --tags --depth 1 origin "$OPENSHELL_VERSION" 2>/dev/null \
+      && git -C "$HOME/OpenShell" checkout "$OPENSHELL_VERSION" 2>/dev/null \
+      && echo "  Checked out OpenShell repo at ${OPENSHELL_VERSION}" \
+      || echo "  Warning: could not pin OpenShell repo to ${OPENSHELL_VERSION} — using current HEAD"
+  fi
+fi
 cd "$HOME/OpenShell"
 sh install.sh
 export PATH="$HOME/.local/bin:$PATH"
@@ -166,6 +178,16 @@ if [ -f "$HOME/.nemoclaw/cookbook-deployment.json" ]; then
 fi
 
 echo "=== Step 5: Install NemoClaw ==="
+# If a prior run died mid-onboard, install.sh refuses to start a new session.
+# Detect a failed-status session and auto-recover by passing NEMOCLAW_FRESH=1.
+# Users can still set NEMOCLAW_FRESH=1 explicitly to force a clean start.
+ONBOARD_SESSION="$HOME/.nemoclaw/onboard-session.json"
+if [ -z "${NEMOCLAW_FRESH:-}" ] && [ -f "$ONBOARD_SESSION" ]; then
+  if python3 -c "import json,sys; sys.exit(0 if json.load(open('$ONBOARD_SESSION')).get('status')=='failed' else 1)" 2>/dev/null; then
+    echo "  Detected failed prior onboard session — auto-setting NEMOCLAW_FRESH=1."
+    export NEMOCLAW_FRESH=1
+  fi
+fi
 cd "$HOME/NemoClaw"
 bash install.sh --non-interactive
 # shellcheck source=/dev/null
