@@ -49,6 +49,8 @@ export NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 # Tool integrations
 [ -n "${BRAVE_API_KEY:-}" ] && export BRAVE_API_KEY
 [ -n "${TAVILY_API_KEY:-}" ] && export TAVILY_API_KEY
+[ -n "${NEMOCLAW_OPENAI_HTTP_ENABLED:-}" ] && export NEMOCLAW_OPENAI_HTTP_ENABLED
+[ -n "${NEMOCLAW_OPENAI_HTTP_TUNNEL:-}" ] && export NEMOCLAW_OPENAI_HTTP_TUNNEL
 
 # Optional sandbox tools (default: true for backward compatibility)
 export INSTALL_CLAUDE_CODE="${INSTALL_CLAUDE_CODE:-true}"
@@ -76,57 +78,11 @@ if [ -z "${NEMOCLAW_POLICY_TIER:-}" ] \
   echo "  Derived policy presets from configured credentials: ${PRESETS}"
 fi
 
-# ── Build integration config payload ─────────────────────────────────
-build_integrations_config() {
-  python3 -c "
-import json, base64, os
-
-config = {}
-
-# --- Web search (Tavily) ---
-# Brave is handled by upstream nemoclaw onboard (NEMOCLAW_WEB_SEARCH_ENABLED);
-# Tavily isn't onboarded upstream, so we bake the bare-minimum config: the
-# plugin enabled flag and tools.web.search pointing at the tavily provider.
-#
-# Intentionally NOT writing plugins.entries.tavily.config.webSearch.apiKey:
-# - Placing the openshell:resolve:env: placeholder string here doesn't help
-#   on OpenShell <v0.0.39, where REST body credential rewrite isn't available.
-#   The plugin would send the literal placeholder to Tavily and get 401.
-# - The bundled Tavily plugin falls back to process.env.TAVILY_API_KEY when
-#   the config field is absent/empty. The cookbook's entrypoint patch
-#   (apply-patches.sh) sources /sandbox/.env so that env is populated, and
-#   setup.sh post-deploy bounces the sandbox so it takes effect.
-# When upstream OpenShell pins move to v0.0.39+ we can switch back to the
-# placeholder pattern (with request_body_credential_rewrite: true on the
-# policy endpoint).
-tavily_key = os.environ.get('TAVILY_API_KEY', '')
-if tavily_key:
-    config['plugins'] = {'entries': {'tavily': {'enabled': True}}}
-    config['tools'] = {'web': {'search': {
-        'enabled': True,
-        'provider': 'tavily',
-    }}}
-
-# --- OpenAI-compatible HTTP API ---
-# Enables /v1/chat/completions, /v1/responses, /v1/models, /v1/embeddings on
-# the gateway. Both chatCompletions and responses are flipped because
-# OpenClaw derives openAiCompatEnabled from EITHER, and /v1/models +
-# /v1/embeddings are gated by that derived flag. Enabling both maximizes
-# SDK compatibility — older SDKs use chat completions, newer use responses.
-# Retire when NemoClaw upstream adds NEMOCLAW_OPENAI_HTTP_ENABLED to
-# generate-openclaw-config.py natively (parallel to NEMOCLAW_WEB_SEARCH_ENABLED).
-openai_http = os.environ.get('NEMOCLAW_OPENAI_HTTP_ENABLED', '').lower()
-if openai_http in ('1', 'true', 'yes'):
-    gw_http = config.setdefault('gateway', {}).setdefault('http', {}).setdefault('endpoints', {})
-    gw_http['chatCompletions'] = {'enabled': True}
-    gw_http['responses'] = {'enabled': True}
-
-print(base64.b64encode(json.dumps(config).encode()).decode())
-"
-}
-
-NEMOCLAW_INTEGRATIONS_B64="$(build_integrations_config)"
-export NEMOCLAW_INTEGRATIONS_B64
+# Integration config payload (NEMOCLAW_INTEGRATIONS_B64) is computed by
+# apply-patches.sh from .env-driven flags (TAVILY_API_KEY,
+# NEMOCLAW_OPENAI_HTTP_ENABLED, etc.) via scripts/build-integrations-config.py.
+# Every caller that runs apply-patches.sh after sourcing .env gets the right
+# payload without remembering — including /upgrade and /refresh-patches.
 
 echo "=== Step 1: Clone / update repositories ==="
 cd "$HOME"
