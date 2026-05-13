@@ -99,12 +99,13 @@ Run `brev exec <instance> "cat ~/openclaw-tunnel-url.txt"` to get your tokenized
 - **Claude Code** — installed via native installer (Codex plugin for Claude Code installed post-deploy)
 - **Codex CLI** — OpenAI's coding agent
 - **nginx reverse proxy** — port 80 → dashboard with Origin rewriting (no more `127.0.0.1 vs localhost` issues)
-- **systemd services** — gateway and terminal server auto-start on boot with crash recovery
+- **systemd services** — nginx and terminal server auto-start on boot with crash recovery (the OpenShell gateway runs under upstream `nemoclaw`'s own lifecycle, not as a cookbook systemd unit)
 - **Browser terminal** — `openshell term` in the browser at `/terminal` for network policy management (optional)
 - **Secure Links** — set `TUNNEL_FQDN` in `.env` to access the Web UI via Brev Secure Link (no port-forward needed)
 - **Messaging bridges** — Telegram, Discord, and Slack (set tokens in `~/.env`)
 - **Web search** — Tavily (recommended) or Brave (add API key to `~/.env`)
 - **Inference** — NVIDIA Nemotron by default, configurable via `NEMOCLAW_MODEL` in `~/.env`
+- **OpenAI-compatible HTTP API** — opt-in (`NEMOCLAW_OPENAI_HTTP_ENABLED=1`); exposes `/v1/chat/completions`, `/v1/responses`, `/v1/models`, `/v1/embeddings` on the gateway with nginx CORS for browser clients
 
 ## What the Patches Do
 
