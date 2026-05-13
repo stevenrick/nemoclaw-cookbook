@@ -17,7 +17,7 @@ scripts/
   backup-full.sh      # Workspace, chat history, and skills backup/restore
 config/
   nginx.conf.template # Reverse proxy template — __COOKBOOK_DIR__ substituted at deploy
-  systemd/            # systemd units for gateway, terminal server
+  systemd/            # nemoclaw-terminal.service — browser-terminal WebSocket bridge (the gateway is managed by upstream `nemoclaw`, not as a cookbook systemd unit)
 terminal-server/      # WebSocket-to-PTY bridge for browser terminal (optional)
 BUILD.md              # Step-by-step setup with explanations
 USE.md                # Day-to-day commands and features

@@ -6,7 +6,7 @@ Thanks for your interest in contributing! This project helps you deploy and cust
 
 This cookbook is upstream-first: patches are temporary scaffolds, and contributions *upstream* often accomplish more than additions here. Before opening a cookbook PR for a new integration or fix:
 
-1. **Search upstream first.** `gh search issues --repo NVIDIA/NemoClaw <keywords>` and the same for `NVIDIA/OpenShell`. Check both open PRs and recent closed ones — the work may be in-flight or already landed.
+1. **Search upstream first.** `gh search issues --repo NVIDIA/NemoClaw <keywords>` and the same for `NVIDIA/OpenShell`. Check both open PRs and recent closed ones — the work may be in-flight or already landed. If you're using Claude Code, the `/contribute-upstream` skill automates this: it scans the live upstream repos for current practice docs, contributor skills, and ratchets so you're grounded in whatever upstream expects *now*, not whatever was true when the cookbook last updated.
 2. **If in-flight work exists**, the highest-leverage contribution is often *validating it*: check out the branch, test against a real deployment via `/upgrade`, and post concrete findings on the PR. Community PRs stalled waiting for maintainer attention frequently move after a third-party validation comment.
 3. **If no upstream work exists**, consider opening an upstream issue first to confirm appetite. The cookbook patch can then serve as a reference implementation.
 4. **If upstream declines** or the feature is genuinely cookbook-scope (e.g., Claude Code / Codex binary installs), write the fragment as minimally as possible so it's easy to remove when upstream direction shifts. Note the rationale in the fragment's comments.
