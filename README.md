@@ -105,6 +105,7 @@ Run `brev exec <instance> "cat ~/openclaw-tunnel-url.txt"` to get your tokenized
 - **Messaging bridges** — Telegram, Discord, and Slack (set tokens in `~/.env`)
 - **Web search** — Tavily (recommended) or Brave (add API key to `~/.env`)
 - **Inference** — NVIDIA Nemotron by default, configurable via `NEMOCLAW_MODEL` in `~/.env`
+- **OpenAI-compatible HTTP API** — opt-in (`NEMOCLAW_OPENAI_HTTP_ENABLED=1`); exposes `/v1/chat/completions`, `/v1/responses`, `/v1/models`, `/v1/embeddings` on the gateway with nginx CORS for browser clients
 
 ## What the Patches Do
 

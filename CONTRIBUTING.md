@@ -52,13 +52,13 @@ The cookbook extends the sandbox image at build time:
 
 1. **Policy fragments** (`patches/fragments/policy-*.yaml`) — network egress rules merged into the sandbox policy by `merge-policy.py`
 2. **Dockerfile integration fragment** (`patches/fragments/dockerfile-integrations`) — deep-merges config into `openclaw.json` via a base64-encoded JSON payload
-3. **Config builder** (`build_integrations_config()` in `setup.sh`) — generates the JSON payload from `.env` flags
+3. **Config builder** (`scripts/build-integrations-config.py`) — reads `.env` flags from the environment and emits a base64-encoded JSON payload to stdout. `apply-patches.sh` invokes it automatically when `NEMOCLAW_INTEGRATIONS_B64` is unset, then bakes the result into the Dockerfile ARG default. Every caller (`setup.sh`, `/upgrade`, `/refresh-patches`) gets the right payload by just sourcing `~/.env`.
 4. **Sandbox .env injection** — writes API keys to `/sandbox/.env` for plugins that read `process.env` (OpenClaw loads this via dotenv from `process.cwd()`)
 
 ### Patterns to follow
 
 - **Dockerfile fragments with compound Python** must use `printf '%s\n' 'line1' 'line2' | python3`. The `python3 -c "..."` pattern with `\` continuations collapses to a single line, breaking `def`/`for`/`if`/`else`.
-- **The post-config Dockerfile anchor** (`# Lock openclaw.json via DAC`) is for fragments that read/modify `openclaw.json`. The pre-config anchor (`# Set up blueprint for local resolution`) runs before the config file exists.
+- **The post-config Dockerfile anchor** (`# Pin config hash at build time so the entrypoint can verify integrity.`) is for fragments that read/modify `openclaw.json` — they need to run after all upstream config writes but before the integrity hash is computed. The pre-config anchor (`# Set up blueprint for local resolution`) runs before the config file exists.
 - **API keys for plugins** need sandbox `.env` injection. The `openshell:resolve:env:` prefix works for channel tokens (gateway-level resolution) but NOT for plugin config values or `process.env` reads.
 - **Custom build args** are not passed by `nemoclaw onboard`. Bake computed values into Dockerfile ARG defaults via sed in `apply-patches.sh`.
 
