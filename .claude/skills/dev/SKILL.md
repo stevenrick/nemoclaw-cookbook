@@ -179,40 +179,9 @@ brev exec <instance> "cd ~/NemoClaw && git fetch origin <branch-1> <branch-2> &&
 
 ## Contributing upstream
 
-### Fork and branch
+For any change that will land in NVIDIA/NemoClaw or NVIDIA/OpenShell, invoke `/contribute-upstream` first. It scans the upstream repo for current contributor skills and practice docs (these evolve), checks for related in-flight work, and walks the design discipline before you write code. **Don't freelance the PR template, the gate commands, or the sign-off rules** — upstream's own contributor skills are authoritative for those mechanics, and this cookbook does not duplicate their content.
 
-```bash
-# Clone your fork
-git clone git@github.com:<your-user>/NemoClaw.git /tmp/nemoclaw-pr
-cd /tmp/nemoclaw-pr
-git checkout -b fix/<descriptive-name>
-```
-
-### Make the change and commit
-
-NemoClaw uses Conventional Commits and requires DCO sign-off:
-
-```bash
-git commit -m "$(cat <<'EOF'
-fix(scripts): short description of the change
-
-Longer explanation if needed.
-
-Related: #<issue-number>
-
-Signed-off-by: Your Name <your-email@example.com>
-EOF
-)"
-```
-
-### Push and open PR
-
-```bash
-git push -u origin fix/<descriptive-name>
-# Then open PR at https://github.com/<your-user>/NemoClaw/pull/new/fix/<branch>
-```
-
-PR template requires: Summary, Related Issue, Changes, Type of Change, Testing, Checklist. See CONTRIBUTING.md in NemoClaw repo.
+Anchor your habit here: every upstream change starts with `/contribute-upstream`, ends with a 48-hour watch (`merged ≠ done`), and never reinvents what upstream already specifies.
 
 ## Known issues
 
