@@ -120,22 +120,32 @@ brev copy <cookbook-dir>/.env <instance>:~/.env
 
 The `.env` lives in the repo locally (gitignored) but gets copied to `~/.env` on the remote where `setup.sh` and `nemoclaw` expect it. The cookbook itself is cloned from GitHub — more reliable than `brev copy` for directories.
 
-Then run setup:
+Then run setup. The script takes 10-20 minutes (Dockerfile build dominates), so launch it as a background task and arm a Monitor on `scripts/watch-setup.sh` so progress streams back instead of you sitting in a wait loop:
 
 ```bash
-brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && cd ~/nemoclaw-cookbook && ./setup.sh"
+# Launch in background — tee to ~/setup.log on the remote AND let the local
+# Bash task-output file capture stdout for the Monitor to tail.
+brev exec <instance> "cd ~/nemoclaw-cookbook && ./setup.sh 2>&1 | tee ~/setup.log"
+# (run_in_background: true)
 ```
 
-This takes ~5-10 minutes. The script handles: cloning repos, installing OpenShell, pulling the Docker image, applying patches, installing NemoClaw, deploying infrastructure services (nginx, systemd, terminal server via `install-services.sh`), configuring integrations, and starting services.
+The Bash tool result gives you a local output-file path (the `/private/tmp/.../tasks/<id>.output` form). Arm a Monitor on it via the cookbook's helper:
 
-If setup fails, diagnose the error:
+```
+Monitor: bash <cookbook-dir>/scripts/watch-setup.sh <local-task-output-file>
+```
+
+The helper emits a curated progress feed — every setup.sh phase (`=== Step N`), every Dockerfile build step (`Step N/68`), every `✓` checkpoint, every warning/error, and the final `Web UI:` / `NemoClaw is ready` lines. Single source of truth for "what counts as progress" — keep the filter there, not in this skill.
+
+Keep working while it runs; notifications arrive at each milestone. The build phase (Step 5) has long silent stretches inside `apt`/`npm`/plugin install — those are normal even when no event fires for a minute or two.
+
+If setup fails, diagnose from the events you saw:
 - Patch failure → suggest `claude /refresh-patches`
 - Docker error → check if Docker is running and has enough disk
 - Network error → check connectivity
 - NemoClaw install error → check the install.sh output for specifics
 - Service install error → re-run just: `~/nemoclaw-cookbook/scripts/install-services.sh`
-
-Use `timeout: 600000` for the brev exec call (10 min max).
+- "Previous onboarding session failed" → setup.sh auto-recovers via `NEMOCLAW_FRESH=1`; if it didn't, `rm ~/.nemoclaw/onboard-session.json` and re-run.
 
 ## Phase 4 — Post-install verification
 

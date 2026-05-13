@@ -12,6 +12,12 @@ new_sections:
         protocol: rest
         enforcement: enforce
         tls: terminate
+        # NOTE: OpenShell #1286 (in v0.0.39+) makes REST body credential rewrite
+        # opt-in via `request_body_credential_rewrite: true`. Older versions
+        # (v0.0.36-v0.0.38) reject that field as unknown but rewrite bodies by
+        # default, so we omit it for cross-version compatibility. When NemoClaw
+        # blueprints start pinning OpenShell >= v0.0.39, apply-patches.sh needs
+        # to detect the version and inject the field. Tracking task #7-ish.
         rules:
           - allow: { method: POST, path: "/**" }
     binaries:

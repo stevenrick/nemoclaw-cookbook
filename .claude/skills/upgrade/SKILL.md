@@ -223,11 +223,20 @@ brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export 
 
 **Critical:** use `set -a; source ~/.env; set +a` so every variable in `.env` (messaging tokens, integration keys, policy overrides) gets exported to the `nemoclaw` child process. Only exporting `NVIDIA_API_KEY` means the rebuilt sandbox won't have Telegram/Discord/Slack providers or correct policy presets — onboard then silently re-destroys on the next run to migrate providers, wiping the just-restored workspace. Don't hand-pick variables; export the whole env.
 
+Launch this as a background task and arm a Monitor on the cookbook's progress helper so you see Dockerfile build steps, gateway-healthy, provider-created, and ready signals instead of staring at a wait loop:
+
 ```bash
-brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && set -a && source ~/.env && set +a && export NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 && nemoclaw <sandbox> destroy --yes && nemoclaw onboard"
+brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && set -a && source ~/.env && set +a && export NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 && nemoclaw <sandbox> destroy --yes && nemoclaw onboard 2>&1 | tee ~/upgrade-onboard.log"
+# (run_in_background: true)
 ```
 
-Use `timeout: 600000` (10 min).
+Take the local task-output file path from the Bash tool result and arm:
+
+```
+Monitor: bash <cookbook-dir>/scripts/watch-setup.sh <local-task-output-file>
+```
+
+The watcher's filter is shared with `/setup` — single source of truth lives in `scripts/watch-setup.sh`. Update the pattern there, not here.
 
 After `nemoclaw onboard` returns, confirm the expected messaging providers exist. If a provider is missing, the *next* `nemoclaw onboard` call (anywhere in this flow, or in a future `/upgrade`) will force a full sandbox recreate to migrate providers — destroying workspace files mid-flow.
 

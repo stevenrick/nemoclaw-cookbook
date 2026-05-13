@@ -84,15 +84,27 @@ import json, base64, os
 config = {}
 
 # --- Web search (Tavily) ---
-# Brave search is handled by upstream nemoclaw onboard (NEMOCLAW_WEB_SEARCH_ENABLED).
-# Tavily is not supported upstream, so we configure it here.
+# Brave is handled by upstream nemoclaw onboard (NEMOCLAW_WEB_SEARCH_ENABLED);
+# Tavily isn't onboarded upstream, so we bake the bare-minimum config: the
+# plugin enabled flag and tools.web.search pointing at the tavily provider.
+#
+# Intentionally NOT writing plugins.entries.tavily.config.webSearch.apiKey:
+# - Placing the openshell:resolve:env: placeholder string here doesn't help
+#   on OpenShell <v0.0.39, where REST body credential rewrite isn't available.
+#   The plugin would send the literal placeholder to Tavily and get 401.
+# - The bundled Tavily plugin falls back to process.env.TAVILY_API_KEY when
+#   the config field is absent/empty. The cookbook's entrypoint patch
+#   (apply-patches.sh) sources /sandbox/.env so that env is populated, and
+#   setup.sh post-deploy bounces the sandbox so it takes effect.
+# When upstream OpenShell pins move to v0.0.39+ we can switch back to the
+# placeholder pattern (with request_body_credential_rewrite: true on the
+# policy endpoint).
 tavily_key = os.environ.get('TAVILY_API_KEY', '')
 if tavily_key:
     config['plugins'] = {'entries': {'tavily': {'enabled': True}}}
     config['tools'] = {'web': {'search': {
         'enabled': True,
         'provider': 'tavily',
-        'apiKey': 'openshell:resolve:env:TAVILY_API_KEY'
     }}}
 
 print(base64.b64encode(json.dumps(config).encode()).decode())
@@ -112,7 +124,7 @@ else
 fi
 if [ -d NemoClaw ]; then
   echo "  NemoClaw exists, pulling latest..."
-  git -C NemoClaw checkout -- Dockerfile Dockerfile.base nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null || true
+  git -C NemoClaw checkout -- Dockerfile Dockerfile.base nemoclaw-blueprint/policies/openclaw-sandbox.yaml scripts/nemoclaw-start.sh 2>/dev/null || true
   git -C NemoClaw pull --ff-only || echo "  Warning: pull failed, continuing with existing checkout"
 else
   git clone https://github.com/NVIDIA/NemoClaw
@@ -130,6 +142,18 @@ if [ -z "${OPENSHELL_VERSION:-}" ] && [ -f "$BLUEPRINT_YAML" ]; then
     OPENSHELL_VERSION="v${BLUEPRINT_MAX}"
     export OPENSHELL_VERSION
     echo "  Pinned OpenShell to ${OPENSHELL_VERSION} (from blueprint max_openshell_version)"
+  fi
+fi
+# Also check out the OpenShell repo at the same tag. The install.sh format
+# expectations (e.g. .deb vs .tar.gz) evolve over time, so HEAD's install.sh
+# can fail against an older release's artifacts.
+if [ -n "${OPENSHELL_VERSION:-}" ] && [ -d "$HOME/OpenShell/.git" ]; then
+  CURRENT_REF=$(git -C "$HOME/OpenShell" describe --tags --exact-match 2>/dev/null || echo "")
+  if [ "$CURRENT_REF" != "$OPENSHELL_VERSION" ]; then
+    git -C "$HOME/OpenShell" fetch --tags --depth 1 origin "$OPENSHELL_VERSION" 2>/dev/null \
+      && git -C "$HOME/OpenShell" checkout "$OPENSHELL_VERSION" 2>/dev/null \
+      && echo "  Checked out OpenShell repo at ${OPENSHELL_VERSION}" \
+      || echo "  Warning: could not pin OpenShell repo to ${OPENSHELL_VERSION} — using current HEAD"
   fi
 fi
 cd "$HOME/OpenShell"
@@ -166,6 +190,16 @@ if [ -f "$HOME/.nemoclaw/cookbook-deployment.json" ]; then
 fi
 
 echo "=== Step 5: Install NemoClaw ==="
+# If a prior run died mid-onboard, install.sh refuses to start a new session.
+# Detect a failed-status session and auto-recover by passing NEMOCLAW_FRESH=1.
+# Users can still set NEMOCLAW_FRESH=1 explicitly to force a clean start.
+ONBOARD_SESSION="$HOME/.nemoclaw/onboard-session.json"
+if [ -z "${NEMOCLAW_FRESH:-}" ] && [ -f "$ONBOARD_SESSION" ]; then
+  if python3 -c "import json,sys; sys.exit(0 if json.load(open('$ONBOARD_SESSION')).get('status')=='failed' else 1)" 2>/dev/null; then
+    echo "  Detected failed prior onboard session — auto-setting NEMOCLAW_FRESH=1."
+    export NEMOCLAW_FRESH=1
+  fi
+fi
 cd "$HOME/NemoClaw"
 bash install.sh --non-interactive
 # shellcheck source=/dev/null
@@ -216,19 +250,54 @@ elif [ -n "${BRAVE_API_KEY:-}" ]; then
 fi
 
 # Inject integration API keys into the sandbox workspace .env.
-# OpenClaw loads /sandbox/.env on startup (via dotenv from process.cwd()).
-# This is the only way to get keys to plugins that read process.env (e.g. Tavily).
+# The patched entrypoint (see apply-patches.sh nemoclaw-start.sh patch)
+# sources /sandbox/.env into the gateway process env so plugins that read
+# process.env (Tavily etc.) see their secrets. We then bounce the sandbox
+# pod below so the gateway re-launches with the new env. Bounce only when
+# we actually wrote .env.
 SANDBOX_ENV_LINES=""
 [ -n "${TAVILY_API_KEY:-}" ] && SANDBOX_ENV_LINES="${SANDBOX_ENV_LINES}TAVILY_API_KEY=${TAVILY_API_KEY}\n"
 [ -n "${BRAVE_API_KEY:-}" ] && SANDBOX_ENV_LINES="${SANDBOX_ENV_LINES}BRAVE_API_KEY=${BRAVE_API_KEY}\n"
+SANDBOX_ENV_WRITTEN=0
 if [ -n "$SANDBOX_ENV_LINES" ]; then
   echo "  Injecting integration keys into sandbox workspace..."
   if printf "%b" "$SANDBOX_ENV_LINES" | openshell sandbox exec --name "$SANDBOX" -- \
     sh -c 'cat > /sandbox/.env' 2>/dev/null; then
     echo "  ✓ Sandbox .env written"
+    SANDBOX_ENV_WRITTEN=1
   else
     echo "  Warning: failed to write sandbox .env"
     POST_FAILURES=$((POST_FAILURES + 1))
+  fi
+fi
+
+# Bounce the sandbox pod so the gateway re-launches with /sandbox/.env loaded
+# into its env (entrypoint patch handles the sourcing). The first boot
+# happened before .env existed, so its gateway process is uncredentialed for
+# plugins that read process.env (Tavily, etc.). Skip when nothing was written.
+# OpenShell CLI doesn't expose stop/start, so we delete the pod via the
+# gateway's embedded k3s and let the controller respawn it.
+if [ "$SANDBOX_ENV_WRITTEN" = "1" ] && [ -n "$SANDBOX" ]; then
+  GATEWAY_CONTAINER=$(docker ps --format '{{.Names}}' --filter "name=openshell-cluster" | head -1)
+  if [ -n "$GATEWAY_CONTAINER" ]; then
+    echo "  Bouncing sandbox pod so gateway reloads with new env..."
+    if docker exec "$GATEWAY_CONTAINER" kubectl delete pod "$SANDBOX" -n openshell --wait=false >/dev/null 2>&1; then
+      # Wait for pod to come back Ready (typically 10-30s)
+      for _ in $(seq 1 30); do
+        STATUS=$(docker exec "$GATEWAY_CONTAINER" kubectl get pod "$SANDBOX" -n openshell --no-headers 2>/dev/null | awk '{print $2,$3}')
+        case "$STATUS" in
+          "1/1 Running") echo "  ✓ Sandbox restarted ($STATUS)"; break ;;
+        esac
+        sleep 2
+      done
+      [ "$STATUS" != "1/1 Running" ] && {
+        echo "  Warning: sandbox pod did not return Ready in 60s (last: $STATUS)"
+        POST_FAILURES=$((POST_FAILURES + 1))
+      }
+    else
+      echo "  Warning: failed to delete pod for restart — Tavily/Brave may not pick up new env"
+      POST_FAILURES=$((POST_FAILURES + 1))
+    fi
   fi
 fi
 
@@ -238,12 +307,25 @@ export NVM_DIR="$HOME/.nvm"
 # shellcheck source=/dev/null
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 
-# Bounce the port forward — stale forwards from previous sandbox cause 502s.
-# Stop first (may fail if none exists), then start fresh.
+# Bounce the port forward. When the sandbox got bounced in Step 8 the pod
+# IP changed, so the existing forward points at a dead endpoint and nginx
+# returns 502. `nemoclaw <name> recover` rebuilds the forward in a single
+# step that knows how to wait for the new pod's gateway — more reliable than
+# raw `forward stop/start`, which races the gateway readiness.
 if [ -n "$SANDBOX" ]; then
   openshell forward stop 18789 "$SANDBOX" 2>/dev/null || true
-  sleep 1
-  openshell forward start 18789 "$SANDBOX" --background 2>/dev/null || true
+  if nemoclaw "$SANDBOX" recover 2>/dev/null; then
+    # Probe the forward — recover returns before the gateway is fully
+    # accepting connections in some races. Up to 20s of polling.
+    for _ in $(seq 1 10); do
+      curl -sf --max-time 2 -o /dev/null http://127.0.0.1:18789/ 2>/dev/null && break
+      sleep 2
+    done
+  else
+    # Fallback to the older path if recover isn't available.
+    sleep 1
+    openshell forward start 18789 "$SANDBOX" --background 2>/dev/null || true
+  fi
 fi
 
 # Start messaging bridges if tokens are configured
