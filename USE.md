@@ -253,25 +253,25 @@ nemoclaw my-assistant destroy         # Delete (WARNING: deletes workspace files
 
 ## System Services
 
-The deployment uses systemd for infrastructure. All services auto-start on boot.
+The cookbook manages two systemd services for infrastructure: nginx (reverse proxy) and nemoclaw-terminal (browser terminal). The OpenShell gateway is managed by upstream `nemoclaw` itself — there is no cookbook systemd unit for it.
 
 ```bash
-# Check status
-systemctl status openshell-gateway     # OpenShell gateway (sandbox runtime)
+# Cookbook services
 systemctl status nemoclaw-terminal     # Browser terminal server (if enabled)
 sudo systemctl status nginx            # Reverse proxy
 
-# View logs
-journalctl -u openshell-gateway -f     # Follow gateway logs
 journalctl -u nemoclaw-terminal -n 50  # Last 50 terminal server lines
 sudo tail -f /var/log/nginx/error.log  # nginx errors
 
-# Restart (brief interruption)
-systemctl restart openshell-gateway    # Restart gateway
 sudo systemctl restart nginx           # Restart proxy
+
+# OpenShell gateway (host process, not systemd-managed)
+ps auxf | grep openshell-gateway       # Is the gateway process running?
+nemoclaw <sandbox> recover             # Bring it back up after a reboot or crash
+tail -f ~/.local/state/nemoclaw/openshell-docker-gateway/openshell-gateway.log
 ```
 
-**`nemoclaw tunnel start/stop` vs `systemctl`:** `nemoclaw tunnel start` only starts the Cloudflare tunnel (needed for Telegram webhooks). The gateway and sandbox run continuously under systemd, independent of `nemoclaw tunnel start/stop`.
+**`nemoclaw tunnel start/stop` vs `nemoclaw <sandbox> recover`:** `nemoclaw tunnel start` starts the Cloudflare tunnel (needed for Telegram webhooks). `nemoclaw <sandbox> recover` re-establishes the gateway and dashboard port-forward after the gateway process goes down (e.g., host reboot).
 
 ## Network Policies
 
