@@ -55,7 +55,16 @@ fi
 
 # ── 2. Deploy nginx config (from template) ─────────────────────────
 echo "  Deploying nginx config..."
-sed "s|__COOKBOOK_DIR__|$COOKBOOK_DIR|g" "$COOKBOOK_DIR/config/nginx.conf.template" \
+# OpenAI HTTP API exposure: empty deny rule when TUNNEL=1, else "deny all;".
+# The /v1/ location block is always present; this controls who can reach it.
+if [ "${NEMOCLAW_OPENAI_HTTP_TUNNEL:-}" = "1" ] || [ "${NEMOCLAW_OPENAI_HTTP_TUNNEL:-}" = "true" ]; then
+  OPENAI_HTTP_DENY=""
+else
+  OPENAI_HTTP_DENY="deny all;"
+fi
+sed -e "s|__COOKBOOK_DIR__|$COOKBOOK_DIR|g" \
+    -e "s|__OPENAI_HTTP_DENY__|$OPENAI_HTTP_DENY|g" \
+    "$COOKBOOK_DIR/config/nginx.conf.template" \
   | sudo tee /etc/nginx/sites-available/nemoclaw > /dev/null
 sudo ln -sf /etc/nginx/sites-available/nemoclaw /etc/nginx/sites-enabled/nemoclaw
 sudo rm -f /etc/nginx/sites-enabled/default

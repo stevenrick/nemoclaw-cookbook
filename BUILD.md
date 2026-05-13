@@ -267,6 +267,50 @@ Gives the agent web search capabilities. Tavily is recommended.
 
 If both keys are set, Tavily takes priority.
 
+### OpenAI-compatible HTTP API
+
+Set `NEMOCLAW_OPENAI_HTTP_ENABLED=1` in `~/.env` and redeploy to enable an OpenAI-compatible inference endpoint on the gateway. After rebuild, four paths become available:
+
+- `POST /v1/chat/completions`
+- `POST /v1/responses`
+- `GET /v1/models`
+- `POST /v1/embeddings`
+
+The gateway token and base URL are written to `~/openclaw-openai.env` at the end of deploy. From the Brev host:
+
+```bash
+source ~/openclaw-openai.env
+python -c "from openai import OpenAI; print([m.id for m in OpenAI().models.list().data])"
+```
+
+**Exposing the API beyond the host — the FQDN shortcoming.**
+
+Brev's "Secure Link" (the cloudflared tunnel that gives you the `*.brevlab.com` FQDN) is gated by Cloudflare Access with SSO by default. Hitting the FQDN works fine for *browser* clients — Cloudflare Access authenticates the SSO session, sets a cookie, and subsequent navigation passes through. But **for programmatic clients (Python `openai`, curl, anything not in a logged-in browser), the FQDN does not work out of the box**: requests get a `302` to a Cloudflare Access login page before the gateway token is even evaluated. The endpoint isn't really "public" in that deployment — it's SSO-gated.
+
+This is a property of the *deployment* (Brev shared link → CF Access in front), not of the cookbook. Any tunnel that fronts an identity gate (Cloudflare Access, Zero Trust, Tailscale Funnel with auth, etc.) has the same shape. A tunnel *without* an identity gate would let the FQDN work for programmatic clients, with only the gateway token as auth — which is also the situation if you configure a CF Access bypass on `/v1/*`.
+
+Three options for non-browser callers, simplest first:
+
+1. **SSH port-forward (recommended):**
+   ```bash
+   ssh -L 8080:127.0.0.1:80 <brev-host>
+   # Then on the laptop:
+   OPENAI_BASE_URL=http://127.0.0.1:8080/v1 OPENAI_API_KEY=<gateway-token> python …
+   ```
+   Bypasses the public tunnel entirely. No CF Access friction, no Cloudflare dashboard config. The gateway token still gates the endpoint, and SSH key auth gates the tunnel — strong defense in depth, nothing extra to configure.
+
+2. **Cloudflare Access service token:** create one in the Brev/Cloudflare Access dashboard, then send `CF-Access-Client-Id` + `CF-Access-Client-Secret` headers alongside `Authorization`. Lets you use the FQDN directly. Best when you have a fixed set of machines that need access and you want to manage them as identities.
+
+3. **Cloudflare Access bypass for `/v1/*`:** add a bypass rule for the API paths in the Access dashboard. The FQDN becomes effectively public, gated only by the gateway token. Reduces the auth surface from two factors to one — only do this if you understand the trade-off and have rotation hygiene in place.
+
+`NEMOCLAW_OPENAI_HTTP_TUNNEL=1` controls only the *nginx* layer (lifts the `deny all` rule on non-loopback IPs). It's a no-op when CF Access is still in front — even with nginx open, CF Access blocks the request before it reaches nginx. The flag is useful in option (2) and option (3), and in deployments without an SSO gate.
+
+**Security.** This endpoint grants operator-level access to the sandbox. The gateway token is treated like an owner credential — rotate it by bouncing the sandbox. With CF Access in front of the tunnel (Brev's default), external programmatic access requires *both* a valid Access identity and the gateway token, which is a meaningful defense-in-depth posture.
+
+**Browser clients.** Nginx terminates CORS for `/v1/*` because OpenClaw emits no `Access-Control-Allow-*` headers and returns 405 to `OPTIONS`. Tools like Open WebUI work via local nginx without further configuration.
+
+**Upstream gaps.** When NemoClaw exposes the equivalent of `NEMOCLAW_OPENAI_HTTP_ENABLED` natively (parallel to `NEMOCLAW_WEB_SEARCH_ENABLED`), the cookbook's `setup.sh` merge block retires. When OpenClaw ships native CORS for `/v1/*`, the nginx CORS termination collapses to a plain `proxy_pass`. Both are tracked as follow-ups, not blockers.
+
 ### Adding other services
 
 To add a new API integration:

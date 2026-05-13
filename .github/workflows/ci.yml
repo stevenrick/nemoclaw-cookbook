@@ -51,11 +51,20 @@ jobs:
       - name: Test config syntax
         run: |
           mkdir -p terminal-server && touch terminal-server/terminal.html
-          sed "s|__COOKBOOK_DIR__|$PWD|g" config/nginx.conf.template \
-            | sudo tee /etc/nginx/sites-available/nemoclaw > /dev/null
-          sudo ln -sf /etc/nginx/sites-available/nemoclaw /etc/nginx/sites-enabled/nemoclaw
           sudo rm -f /etc/nginx/sites-enabled/default
-          sudo nginx -t
+          # Validate both __OPENAI_HTTP_DENY__ substitution states: the
+          # default (local-only, deny all on non-loopback) and the tunneled
+          # state (empty, nginx permits the tunnel through). The same
+          # mapping lives in scripts/install-services.sh, keyed off
+          # NEMOCLAW_OPENAI_HTTP_TUNNEL — CI checks both shapes parse.
+          for deny in "deny all;" ""; do
+            sed -e "s|__COOKBOOK_DIR__|$PWD|g" \
+                -e "s|__OPENAI_HTTP_DENY__|${deny}|g" \
+                config/nginx.conf.template \
+              | sudo tee /etc/nginx/sites-available/nemoclaw > /dev/null
+            sudo ln -sf /etc/nginx/sites-available/nemoclaw /etc/nginx/sites-enabled/nemoclaw
+            sudo nginx -t
+          done
 
   docker-build:
     name: Build patched sandbox image
