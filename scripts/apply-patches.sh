@@ -89,6 +89,14 @@ insert_before "$DOCKERFILE" "$ANCHOR" "$FRAGMENTS_DIR/dockerfile-core"
 # No-op when NEMOCLAW_INTEGRATIONS_B64 is empty.
 insert_before "$DOCKERFILE" "$POST_CONFIG_ANCHOR" "$FRAGMENTS_DIR/dockerfile-integrations"
 
+# Compute the integrations payload from env if not pre-set. This lets every
+# caller (setup.sh, /upgrade skill, /refresh-patches) just `source ~/.env`
+# and let apply-patches.sh handle the payload. The helper reads
+# TAVILY_API_KEY, NEMOCLAW_OPENAI_HTTP_ENABLED, etc. and emits base64 JSON.
+if [ -z "${NEMOCLAW_INTEGRATIONS_B64:-}" ]; then
+  NEMOCLAW_INTEGRATIONS_B64="$(python3 "$SCRIPT_DIR/build-integrations-config.py" 2>/dev/null || echo 'e30=')"
+fi
+
 # Bake the computed integrations config into the Dockerfile ARG default.
 # nemoclaw onboard doesn't pass our custom ARG as --build-arg, so we set the
 # default to the actual value. The fragment's no-op guard handles empty/e30=.

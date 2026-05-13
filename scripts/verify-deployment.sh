@@ -203,6 +203,28 @@ else
   pass "Access mode: port-forward (no TUNNEL_FQDN set)"
 fi
 
+# OpenAI HTTP API (if enabled)
+OPENAI_FLAG="${NEMOCLAW_OPENAI_HTTP_ENABLED:-}"
+if [ "$OPENAI_FLAG" = "1" ] || [ "$OPENAI_FLAG" = "true" ]; then
+  if [ -f "$HOME/openclaw-openai.env" ]; then
+    # shellcheck source=/dev/null
+    . "$HOME/openclaw-openai.env"
+    OPENAI_VERIFY_TMP=$(mktemp)
+    HTTP_CODE=$(curl -s -o "$OPENAI_VERIFY_TMP" -w '%{http_code}' --max-time 5 \
+      -H "Authorization: Bearer ${OPENAI_API_KEY}" \
+      "${OPENAI_BASE_URL}/models" 2>/dev/null || echo "000")
+    if [ "$HTTP_CODE" = "200" ] && grep -q '"data"' "$OPENAI_VERIFY_TMP" 2>/dev/null; then
+      pass "OpenAI HTTP API reachable ($OPENAI_BASE_URL/models → 200)"
+    else
+      fail "OpenAI HTTP API check failed ($OPENAI_BASE_URL/models → HTTP $HTTP_CODE)"
+      echo "       Response: $(head -c 200 "$OPENAI_VERIFY_TMP")"
+    fi
+    rm -f "$OPENAI_VERIFY_TMP"
+  else
+    fail "NEMOCLAW_OPENAI_HTTP_ENABLED=1 but ~/openclaw-openai.env missing (save-ui-url.sh skipped?)"
+  fi
+fi
+
 # ── 9. Deployment manifest ──────────────────────────────────────────
 echo "Manifest:"
 if [ -f "$HOME/.nemoclaw/cookbook-deployment.json" ]; then

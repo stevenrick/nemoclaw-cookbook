@@ -36,6 +36,34 @@ write_urls() {
     echo "https://${TUNNEL_FQDN}/#token=${token}" > "$HOME/openclaw-tunnel-url.txt"
     echo "  ✓ Tunnel UI URL saved to ~/openclaw-tunnel-url.txt"
   fi
+
+  # OpenAI-compatible HTTP API env file (when integration is enabled).
+  # Defaults to http://127.0.0.1/v1 because Brev's cloudflared tunnel sits
+  # behind Cloudflare Access — programmatic clients (Python openai SDK,
+  # curl) get redirected to an SSO login page unless they have a CF Access
+  # service token. Local URL works from the Brev host and from a laptop
+  # via SSH port-forward. The tunnel URL is written as a commented
+  # alternative for users who configure CF Access service tokens.
+  local openai_flag="${NEMOCLAW_OPENAI_HTTP_ENABLED:-}"
+  if [ "$openai_flag" = "1" ] || [ "$openai_flag" = "true" ]; then
+    {
+      echo "# OpenAI-compatible HTTP API on the NemoClaw gateway."
+      echo "# Default base URL: works from this Brev host directly, and from a"
+      echo "# laptop via 'ssh -L 8080:127.0.0.1:80 <brev-host>' (then use"
+      echo "# OPENAI_BASE_URL=http://127.0.0.1:8080/v1)."
+      echo "OPENAI_BASE_URL=http://127.0.0.1/v1"
+      echo "OPENAI_API_KEY=${token}"
+      if [ -n "$TUNNEL_FQDN" ]; then
+        echo ""
+        echo "# Alternative: tunnel URL. Requires a Cloudflare Access service"
+        echo "# token (CF-Access-Client-Id + CF-Access-Client-Secret headers)"
+        echo "# OR a /v1/* bypass rule in the Brev/Cloudflare Access dashboard."
+        echo "# OPENAI_BASE_URL=https://${TUNNEL_FQDN}/v1"
+      fi
+    } > "$HOME/openclaw-openai.env"
+    chmod 600 "$HOME/openclaw-openai.env"
+    echo "  ✓ OpenAI HTTP API env saved to ~/openclaw-openai.env"
+  fi
 }
 
 TMPDIR_TOKEN=$(mktemp -d)
