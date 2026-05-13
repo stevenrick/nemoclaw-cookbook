@@ -307,12 +307,25 @@ export NVM_DIR="$HOME/.nvm"
 # shellcheck source=/dev/null
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 
-# Bounce the port forward — stale forwards from previous sandbox cause 502s.
-# Stop first (may fail if none exists), then start fresh.
+# Bounce the port forward. When the sandbox got bounced in Step 8 the pod
+# IP changed, so the existing forward points at a dead endpoint and nginx
+# returns 502. `nemoclaw <name> recover` rebuilds the forward in a single
+# step that knows how to wait for the new pod's gateway — more reliable than
+# raw `forward stop/start`, which races the gateway readiness.
 if [ -n "$SANDBOX" ]; then
   openshell forward stop 18789 "$SANDBOX" 2>/dev/null || true
-  sleep 1
-  openshell forward start 18789 "$SANDBOX" --background 2>/dev/null || true
+  if nemoclaw "$SANDBOX" recover 2>/dev/null; then
+    # Probe the forward — recover returns before the gateway is fully
+    # accepting connections in some races. Up to 20s of polling.
+    for _ in $(seq 1 10); do
+      curl -sf --max-time 2 -o /dev/null http://127.0.0.1:18789/ 2>/dev/null && break
+      sleep 2
+    done
+  else
+    # Fallback to the older path if recover isn't available.
+    sleep 1
+    openshell forward start 18789 "$SANDBOX" --background 2>/dev/null || true
+  fi
 fi
 
 # Start messaging bridges if tokens are configured
