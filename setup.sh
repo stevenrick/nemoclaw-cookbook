@@ -271,23 +271,28 @@ if [ -n "$SANDBOX_ENV_LINES" ]; then
   fi
 fi
 
-# Bounce the sandbox pod so the gateway re-launches with /sandbox/.env loaded
-# into its env (entrypoint patch handles the sourcing). The first boot
-# happened before .env existed, so its gateway process is uncredentialed for
-# plugins that read process.env (Tavily, etc.). Skip when nothing was written.
-# OpenShell CLI doesn't expose stop/start, so we delete the pod via the
-# gateway's embedded k3s and let the controller respawn it.
+# Bounce the sandbox so the gateway re-launches with /sandbox/.env loaded
+# into its env (entrypoint patch handles the sourcing). First boot happened
+# before .env existed, so the gateway is uncredentialed for plugins that
+# read process.env (Tavily, etc.). Stopgap until upstream supports
+# third-party credential passthrough at onboard time
+# (NVIDIA/NemoClaw#1720) — remove this whole block when that lands.
+#
+# Driver-aware: v0.0.38 and earlier run a k3s cluster container
+# (`openshell-cluster-*`) and bounce via `kubectl delete pod`; v0.0.39+
+# uses docker-driver with a direct sandbox container
+# (`openshell-<sandbox>-*`) and bounces via `docker restart`. Either
+# path triggers the patched entrypoint which re-sources /sandbox/.env.
 if [ "$SANDBOX_ENV_WRITTEN" = "1" ] && [ -n "$SANDBOX" ]; then
   GATEWAY_CONTAINER=$(docker ps --format '{{.Names}}' --filter "name=openshell-cluster" | head -1)
+  SANDBOX_CONTAINER=$(docker ps --format '{{.Names}}' --filter "name=openshell-${SANDBOX}-" | head -1)
+
   if [ -n "$GATEWAY_CONTAINER" ]; then
-    echo "  Bouncing sandbox pod so gateway reloads with new env..."
+    echo "  Bouncing sandbox pod (k3s driver) so gateway reloads with new env..."
     if docker exec "$GATEWAY_CONTAINER" kubectl delete pod "$SANDBOX" -n openshell --wait=false >/dev/null 2>&1; then
-      # Wait for pod to come back Ready (typically 10-30s)
       for _ in $(seq 1 30); do
         STATUS=$(docker exec "$GATEWAY_CONTAINER" kubectl get pod "$SANDBOX" -n openshell --no-headers 2>/dev/null | awk '{print $2,$3}')
-        case "$STATUS" in
-          "1/1 Running") echo "  ✓ Sandbox restarted ($STATUS)"; break ;;
-        esac
+        [ "$STATUS" = "1/1 Running" ] && { echo "  ✓ Sandbox restarted ($STATUS)"; break; }
         sleep 2
       done
       [ "$STATUS" != "1/1 Running" ] && {
@@ -298,6 +303,26 @@ if [ "$SANDBOX_ENV_WRITTEN" = "1" ] && [ -n "$SANDBOX" ]; then
       echo "  Warning: failed to delete pod for restart — Tavily/Brave may not pick up new env"
       POST_FAILURES=$((POST_FAILURES + 1))
     fi
+  elif [ -n "$SANDBOX_CONTAINER" ]; then
+    echo "  Bouncing sandbox container (docker driver) so gateway reloads with new env..."
+    if docker restart "$SANDBOX_CONTAINER" >/dev/null 2>&1; then
+      for _ in $(seq 1 30); do
+        RUNNING=$(docker inspect -f '{{.State.Running}}' "$SANDBOX_CONTAINER" 2>/dev/null)
+        [ "$RUNNING" = "true" ] && { echo "  ✓ Sandbox container restarted"; break; }
+        sleep 2
+      done
+      [ "$RUNNING" != "true" ] && {
+        echo "  Warning: sandbox container did not return to running in 60s"
+        POST_FAILURES=$((POST_FAILURES + 1))
+      }
+    else
+      echo "  Warning: failed to restart sandbox container — Tavily/Brave may not pick up new env"
+      POST_FAILURES=$((POST_FAILURES + 1))
+    fi
+  else
+    echo "  Warning: no openshell-cluster or openshell-${SANDBOX}-* container found — skipping bounce."
+    echo "    Tavily/Brave may not pick up new env until the next sandbox restart."
+    POST_FAILURES=$((POST_FAILURES + 1))
   fi
 fi
 

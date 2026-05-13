@@ -102,7 +102,7 @@ brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export 
 
 ### Phase 4b — Restore sessions (after nemoclaw tunnel start)
 
-If the Cloudflare tunnel (for Telegram webhooks) is not already running, start it. The gateway runs under systemd and should already be active — check with `systemctl status openshell-gateway` if unsure.
+If the Cloudflare tunnel (for Telegram webhooks) is not already running, start it. The gateway should already be active from the prior `nemoclaw onboard`; if it's down, run `nemoclaw <sandbox> recover`.
 
 ```bash
 brev exec <instance> "[ -s \$HOME/.nvm/nvm.sh ] && . \$HOME/.nvm/nvm.sh; export PATH=\"\$HOME/.local/bin:\$PATH\" && source ~/.env && export NVIDIA_API_KEY TELEGRAM_BOT_TOKEN TELEGRAM_ALLOWED_IDS DISCORD_BOT_TOKEN SLACK_BOT_TOKEN 2>/dev/null; nemoclaw tunnel start 2>/dev/null || true"

@@ -199,13 +199,16 @@ Configuration is baked into the sandbox image at build time via `NEMOCLAW_MESSAG
 ### Dashboard unreachable after rebuild
 The internal port forward (18789) can die during sandbox destroy/rebuild. `verify-deployment.sh` detects and auto-restarts it. To fix manually: `openshell forward start 18789 <sandbox> --background`.
 
-### Systemd service failures
+### Service failures
+
+Cookbook-managed services: `nemoclaw-terminal` and `nginx`. The OpenShell gateway is upstream's responsibility — it's a host process started by `nemoclaw onboard`; bring it back with `nemoclaw <sandbox> recover` if it's down.
+
 Check which services failed: `systemctl list-units --type=service --state=failed`. Then inspect logs:
-- Gateway: `journalctl -u openshell-gateway -n 100`
 - Terminal server: `journalctl -u nemoclaw-terminal -n 50`
 - nginx: `sudo tail -50 /var/log/nginx/error.log` and `sudo nginx -t` for config syntax
+- Gateway (host process, no systemd unit): `~/.local/state/nemoclaw/openshell-docker-gateway/openshell-gateway.log`
 
-Common fixes: `systemctl restart <service>`, or re-run `~/nemoclaw-cookbook/scripts/install-services.sh` to reset all services.
+Common fixes: `systemctl restart <service>` for nginx/terminal; `nemoclaw <sandbox> recover` for the gateway; or re-run `~/nemoclaw-cookbook/scripts/install-services.sh` to reset cookbook services.
 
 ### Investigating OpenClaw version compatibility
 

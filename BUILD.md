@@ -207,12 +207,13 @@ This starts a Cloudflare quick tunnel for the Telegram webhook URL. Note: `nemoc
 | Component | Purpose | Managed by |
 |-----------|---------|-----------|
 | **nginx** | Reverse proxy: port 80 → dashboard (18789), Origin header rewriting for Secure Link | systemd |
-| **openshell-gateway.service** | Auto-starts the OpenShell gateway on boot | systemd |
 | **nemoclaw-terminal.service** | Browser terminal server at `/terminal` (optional) | systemd |
 
-All services start on boot and restart on failure. The script is idempotent — safe to re-run after config changes.
+These services start on boot. The script is idempotent — safe to re-run after config changes.
 
-To manage manually: `systemctl status|restart|stop <service-name>`. See USE.md § System Services for full commands.
+The OpenShell gateway itself is *not* under cookbook systemd management. It runs as a host process under upstream `nemoclaw`'s own lifecycle. If it goes down after a host reboot, run `nemoclaw <sandbox> recover` to bring it back. `install-services.sh` removes any `openshell-gateway.service` unit it finds so the host converges on this model.
+
+To manage manually: `systemctl status|restart|stop <service-name>` for nginx and the terminal server. See USE.md § System Services for full commands.
 
 ## Step 10: Tokenized UI URL
 

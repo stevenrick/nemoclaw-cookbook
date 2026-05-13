@@ -179,13 +179,6 @@ else
   warn "nginx not running (install with: ~/nemoclaw-cookbook/scripts/install-services.sh)"
 fi
 
-# OpenShell gateway systemd
-if [ -f /etc/systemd/system/openshell-gateway.service ]; then
-  pass "openshell-gateway.service installed"
-else
-  warn "openshell-gateway.service not installed (systemd auto-start unavailable)"
-fi
-
 # Terminal server
 ENABLE_TERMINAL_SERVER="${ENABLE_TERMINAL_SERVER:-true}"
 if [ "$ENABLE_TERMINAL_SERVER" = "true" ]; then
