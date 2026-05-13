@@ -309,7 +309,7 @@ Three options for non-browser callers, simplest first:
 
 **Browser clients.** Nginx terminates CORS for `/v1/*` because OpenClaw emits no `Access-Control-Allow-*` headers and returns 405 to `OPTIONS`. Tools like Open WebUI work via local nginx without further configuration.
 
-**Upstream gaps.** When NemoClaw exposes the equivalent of `NEMOCLAW_OPENAI_HTTP_ENABLED` natively (parallel to `NEMOCLAW_WEB_SEARCH_ENABLED`), the cookbook's `setup.sh` merge block retires. When OpenClaw ships native CORS for `/v1/*`, the nginx CORS termination collapses to a plain `proxy_pass`. Both are tracked as follow-ups, not blockers.
+**Upstream gaps.** When NemoClaw exposes the equivalent of `NEMOCLAW_OPENAI_HTTP_ENABLED` natively (parallel to `NEMOCLAW_WEB_SEARCH_ENABLED`), the cookbook's `scripts/build-integrations-config.py` block retires alongside the `dockerfile-integrations` fragment. When OpenClaw ships native CORS for `/v1/*`, the nginx CORS termination collapses to a plain `proxy_pass`. Both are tracked as follow-ups, not blockers.
 
 ### Adding other services
 
@@ -317,7 +317,7 @@ To add a new API integration:
 
 1. Add the API key to `~/.env`
 2. Add a policy fragment to `patches/fragments/` for the service's endpoints
-3. If the integration needs openclaw.json config, add it to `build_integrations_config()` in `setup.sh`
+3. If the integration needs openclaw.json config, add a block to `scripts/build-integrations-config.py` that reads its `.env` flag(s) and emits the merge keys. `apply-patches.sh` calls this helper automatically; setup.sh and `/upgrade` both pick it up after sourcing `~/.env`.
 4. Update `.env.example` with the new key
 5. Run `/upgrade` to apply to a running sandbox
 
