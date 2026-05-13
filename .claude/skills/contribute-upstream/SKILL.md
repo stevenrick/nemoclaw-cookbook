@@ -80,6 +80,19 @@ When the change is built, tested, and validated against the matrix, invoke which
 
 If your change affects user-facing behavior (new diagnostics, changed defaults, new commands, modified messages), Phase 2 should have surfaced a docs-update skill — invoke that too, in the same PR. Doc-update is not optional for user-facing changes; upstream explicitly enforces this.
 
+### After the PR is open — run the upstream nightly E2E suite
+
+For any substantive change, the upstream nightly E2E suite is the highest-signal validation available before human review. Trigger phrase: **"run the nightly E2E for my PR and provide me a link."** Discover the dispatch surface dynamically (workflow file lives under `.github/workflows/`, typically named `nightly-e2e.yaml`; inputs may include a `jobs` filter for running a subset):
+
+```bash
+gh workflow list --repo NVIDIA/NemoClaw | grep -i nightly
+gh workflow view nightly-e2e.yaml --repo NVIDIA/NemoClaw    # inputs + job names
+gh workflow run  nightly-e2e.yaml --repo NVIDIA/NemoClaw --ref <pr-branch> [-f jobs="<comma-separated>"]
+gh run list      --workflow nightly-e2e.yaml --repo NVIDIA/NemoClaw --branch <pr-branch> --limit 1 --json url,databaseId
+```
+
+Post the run URL in the PR conversation so reviewers have one place to land. The exact workflow name, the input shape, and the dispatch permissions may change — re-discover via Phase 2's scan rather than memorizing.
+
 ## After merge — merged ≠ done
 
 A merged PR isn't done until it survives ~48 hours without a revert, supersession, or follow-up issue. Watch the surface area:
