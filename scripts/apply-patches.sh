@@ -108,6 +108,43 @@ with open(path, 'w') as f: f.write(data)
   echo "    ✓ integrations config baked into Dockerfile"
 fi
 
+# Entrypoint: make /sandbox/.env actually take effect.
+# Upstream's nemoclaw-start.sh chmods .env to 600 but never sources it, so the
+# gateway process never sees secrets the cookbook injects via setup.sh Step 8.
+# Plugins that read process.env (Tavily etc.) end up uncredentialed. Patch the
+# entrypoint to source .env in the same block where it's chmod'd. Idempotent —
+# the marker check prevents double-injection on re-applies.
+ENTRYPOINT_SH="$NEMOCLAW_DIR/scripts/nemoclaw-start.sh"
+if [ -f "$ENTRYPOINT_SH" ]; then
+  python3 -c "
+import sys
+path = sys.argv[1]
+marker = '# COOKBOOK: source /sandbox/.env'
+with open(path) as f: data = f.read()
+if marker in data:
+    sys.exit(0)
+needle = '''if [ -f .env ]; then
+  if ! chmod 600 .env 2>/dev/null; then
+    echo \"[SECURITY WARNING] Could not restrict .env permissions — file may be world-readable (read-only filesystem)\" >&2
+  fi
+fi'''
+replacement = '''if [ -f .env ]; then
+  if ! chmod 600 .env 2>/dev/null; then
+    echo \"[SECURITY WARNING] Could not restrict .env permissions — file may be world-readable (read-only filesystem)\" >&2
+  fi
+  # COOKBOOK: source /sandbox/.env so plugin secrets (TAVILY_API_KEY, etc.)
+  # reach the gateway process env. Upstream only chmods; it never loads.
+  # shellcheck disable=SC1091
+  set -a; . ./.env 2>/dev/null || true; set +a
+fi'''
+if needle not in data:
+    print('WARNING: entrypoint .env block anchor not found — skipping env-loader patch', file=sys.stderr)
+    sys.exit(0)
+with open(path, 'w') as f: f.write(data.replace(needle, replacement, 1))
+print('  ✓ nemoclaw-start.sh patched to source /sandbox/.env')
+" "$ENTRYPOINT_SH"
+fi
+
 # Claude Code: optional
 if [ "$INSTALL_CLAUDE_CODE" = "true" ]; then
   insert_before "$DOCKERFILE" "$ANCHOR" "$FRAGMENTS_DIR/dockerfile-claude-code"
