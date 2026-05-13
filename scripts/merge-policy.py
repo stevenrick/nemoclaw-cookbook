@@ -106,6 +106,12 @@ def format_endpoint_yaml(endpoint, indent=6):
             result.append(f"{prefix}  enforcement: {endpoint['enforcement']}")
         if "tls" in endpoint:
             result.append(f"{prefix}  tls: {endpoint['tls']}")
+        if "request_body_credential_rewrite" in endpoint:
+            value = "true" if endpoint["request_body_credential_rewrite"] else "false"
+            result.append(f"{prefix}  request_body_credential_rewrite: {value}")
+        if "websocket_credential_rewrite" in endpoint:
+            value = "true" if endpoint["websocket_credential_rewrite"] else "false"
+            result.append(f"{prefix}  websocket_credential_rewrite: {value}")
         if "rules" in endpoint:
             result.append(f"{prefix}  rules:")
             for rule in endpoint["rules"]:
