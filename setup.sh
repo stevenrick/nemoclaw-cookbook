@@ -107,6 +107,20 @@ if tavily_key:
         'provider': 'tavily',
     }}}
 
+# --- OpenAI-compatible HTTP API ---
+# Enables /v1/chat/completions, /v1/responses, /v1/models, /v1/embeddings on
+# the gateway. Both chatCompletions and responses are flipped because
+# OpenClaw derives openAiCompatEnabled from EITHER, and /v1/models +
+# /v1/embeddings are gated by that derived flag. Enabling both maximizes
+# SDK compatibility — older SDKs use chat completions, newer use responses.
+# Retire when NemoClaw upstream adds NEMOCLAW_OPENAI_HTTP_ENABLED to
+# generate-openclaw-config.py natively (parallel to NEMOCLAW_WEB_SEARCH_ENABLED).
+openai_http = os.environ.get('NEMOCLAW_OPENAI_HTTP_ENABLED', '').lower()
+if openai_http in ('1', 'true', 'yes'):
+    gw_http = config.setdefault('gateway', {}).setdefault('http', {}).setdefault('endpoints', {})
+    gw_http['chatCompletions'] = {'enabled': True}
+    gw_http['responses'] = {'enabled': True}
+
 print(base64.b64encode(json.dumps(config).encode()).decode())
 "
 }

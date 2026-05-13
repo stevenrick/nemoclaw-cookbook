@@ -36,6 +36,21 @@ write_urls() {
     echo "https://${TUNNEL_FQDN}/#token=${token}" > "$HOME/openclaw-tunnel-url.txt"
     echo "  ✓ Tunnel UI URL saved to ~/openclaw-tunnel-url.txt"
   fi
+
+  # OpenAI-compatible HTTP API env file (when integration is enabled)
+  local openai_flag="${NEMOCLAW_OPENAI_HTTP_ENABLED:-}"
+  if [ "$openai_flag" = "1" ] || [ "$openai_flag" = "true" ]; then
+    local base_url="http://127.0.0.1/v1"
+    if [ "${NEMOCLAW_OPENAI_HTTP_TUNNEL:-}" = "1" ] || [ "${NEMOCLAW_OPENAI_HTTP_TUNNEL:-}" = "true" ]; then
+      [ -n "$TUNNEL_FQDN" ] && base_url="https://${TUNNEL_FQDN}/v1"
+    fi
+    {
+      echo "OPENAI_BASE_URL=${base_url}"
+      echo "OPENAI_API_KEY=${token}"
+    } > "$HOME/openclaw-openai.env"
+    chmod 600 "$HOME/openclaw-openai.env"
+    echo "  ✓ OpenAI HTTP API env saved to ~/openclaw-openai.env"
+  fi
 }
 
 TMPDIR_TOKEN=$(mktemp -d)

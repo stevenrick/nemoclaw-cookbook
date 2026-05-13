@@ -41,6 +41,47 @@ server {
         proxy_buffering off;
     }
 
+    # OpenAI-compatible HTTP API.
+    # Active only when NEMOCLAW_OPENAI_HTTP_ENABLED=1 baked the gateway config
+    # (the block is always present; an inert gateway 404s /v1/* regardless).
+    # OpenClaw emits no CORS headers and returns 405 to OPTIONS, so nginx
+    # terminates CORS here — without this, browser clients (open-webui) fail
+    # preflight against /v1/*. Retire when OpenClaw ships native CORS.
+    #
+    # __OPENAI_HTTP_DENY__ is substituted by install-services.sh:
+    # - NEMOCLAW_OPENAI_HTTP_TUNNEL unset: "deny all;" (local only)
+    # - set:                              empty (cloudflared can reach it,
+    #                                            gateway token still gates)
+    location ^~ /v1/ {
+        if ($request_method = OPTIONS) {
+            add_header Access-Control-Allow-Origin $http_origin always;
+            add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
+            add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
+            add_header Access-Control-Max-Age 86400 always;
+            add_header Content-Length 0;
+            add_header Content-Type "text/plain charset=UTF-8";
+            return 204;
+        }
+
+        add_header Access-Control-Allow-Origin $http_origin always;
+        add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
+
+        allow 127.0.0.1;
+        __OPENAI_HTTP_DENY__
+
+        proxy_pass http://127.0.0.1:18789;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Streaming responses (SSE) must not be buffered
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 600s;
+    }
+
     # OpenClaw dashboard — all other requests
     location / {
         proxy_pass http://127.0.0.1:18789;
