@@ -41,6 +41,11 @@ exec tail -n +1 -F "$LOG" 2>/dev/null | grep -E --line-buffered "\
 |✗ \
 |\[WARN\]|Warning:|warning:\
 |\[ERROR\]|ERROR|Error:|FAILED|fatal|failed to|error:\
+|Sandbox containers cannot reach the gateway\
+|host\.openshell\.internal:8080\
+|host firewall may be blocking\
+|sudo ufw allow\
+|Then re-run .*nemoclaw onboard\
 |Built image|Uploaded to gateway\
 |Image .* is available in the gateway\
 |Creating sandbox \
