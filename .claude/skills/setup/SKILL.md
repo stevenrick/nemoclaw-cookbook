@@ -142,6 +142,7 @@ Keep working while it runs; notifications arrive at each milestone. The build ph
 If setup fails, diagnose from the events you saw:
 - Patch failure → suggest `claude /refresh-patches`
 - Docker error → check if Docker is running and has enough disk
+- Docker-driver gateway firewall error → if output says `Sandbox containers cannot reach the gateway at host.openshell.internal:8080`, surface it as an actionable upstream installer diagnosis. Relay the exact remediation NemoClaw prints, apply it only with user approval, then rerun `./setup.sh`. It should detect the failed onboard session and set `NEMOCLAW_FRESH=1` automatically.
 - Network error → check connectivity
 - NemoClaw install error → check the install.sh output for specifics
 - Service install error → re-run just: `~/nemoclaw-cookbook/scripts/install-services.sh`
