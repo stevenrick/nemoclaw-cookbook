@@ -407,6 +407,19 @@ This rebuilds the sandbox-base image locally (~5-10 min first time, cached after
 
 ## Troubleshooting
 
+### Docker-driver gateway blocked by UFW
+If onboarding fails with `Sandbox containers cannot reach the gateway at host.openshell.internal:8080`, retry once after restarting Docker:
+```bash
+sudo systemctl restart docker
+cd ~/nemoclaw-cookbook && ./setup.sh
+```
+
+If it repeats and UFW is active, follow the remediation printed by NemoClaw:
+```bash
+# Run the sudo ufw allow command printed by NemoClaw, then:
+cd ~/nemoclaw-cookbook && ./setup.sh
+```
+
 ### Web UI unreachable after rebuild
 The internal OpenShell port forward (18789) can die during sandbox destroy/rebuild. `verify-deployment.sh` detects and auto-restarts it, but if running manually:
 ```bash
