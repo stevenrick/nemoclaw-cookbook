@@ -289,9 +289,9 @@ Brev's "Secure Link" (the cloudflared tunnel that gives you the `*.brevlab.com` 
 
 This is a property of the *deployment* (Brev shared link → CF Access in front), not of the cookbook. Any tunnel that fronts an identity gate (Cloudflare Access, Zero Trust, Tailscale Funnel with auth, etc.) has the same shape. A tunnel *without* an identity gate would let the FQDN work for programmatic clients, with only the gateway token as auth — which is also the situation if you configure a CF Access bypass on `/v1/*`.
 
-Three options for non-browser callers, simplest first:
+Four options for non-browser callers, simplest first:
 
-1. **SSH port-forward (recommended):**
+1. **SSH port-forward (recommended for dev):**
    ```bash
    ssh -L 8080:127.0.0.1:80 <brev-host>
    # Then on the laptop:
@@ -299,13 +299,25 @@ Three options for non-browser callers, simplest first:
    ```
    Bypasses the public tunnel entirely. No CF Access friction, no Cloudflare dashboard config. The gateway token still gates the endpoint, and SSH key auth gates the tunnel — strong defense in depth, nothing extra to configure.
 
-2. **Cloudflare Access service token:** create one in the Brev/Cloudflare Access dashboard, then send `CF-Access-Client-Id` + `CF-Access-Client-Secret` headers alongside `Authorization`. Lets you use the FQDN directly. Best when you have a fixed set of machines that need access and you want to manage them as identities.
+2. **Brev Secure Link → "Make Public" (simplest on Brev):** the link you created in Step 9b defaults to Cloudflare Access SSO. To open it for programmatic clients:
 
-3. **Cloudflare Access bypass for `/v1/*`:** add a bypass rule for the API paths in the Access dashboard. The FQDN becomes effectively public, gated only by the gateway token. Reduces the auth surface from two factors to one — only do this if you understand the trade-off and have rotation hygiene in place.
+   1. Brev dashboard → your instance → **Secure Links**
+   2. Find the link for port 80 (the one whose hostname you set as `TUNNEL_FQDN`)
+   3. **Edit Access** → toggle **Make Public** on, and save
 
-`NEMOCLAW_OPENAI_HTTP_TUNNEL=1` controls only the *nginx* layer (lifts the `deny all` rule on non-loopback IPs). It's a no-op when CF Access is still in front — even with nginx open, CF Access blocks the request before it reaches nginx. The flag is useful in option (2) and option (3), and in deployments without an SSO gate.
+   The Cloudflare Access gate is now off for the entire hostname. The FQDN works directly for `curl`, the `openai` SDK, and any other programmatic client — no headers beyond `Authorization: Bearer <gateway-token>`. No need to set `NEMOCLAW_OPENAI_HTTP_TUNNEL=1`; cloudflared connects to nginx on the loopback interface, so the existing `allow 127.0.0.1` rule covers it whether the deny-all is rendered or not (verified empirically).
 
-**Security.** This endpoint grants operator-level access to the sandbox. The gateway token is treated like an owner credential — rotate it by bouncing the sandbox. With CF Access in front of the tunnel (Brev's default), external programmatic access requires *both* a valid Access identity and the gateway token, which is a meaningful defense-in-depth posture.
+   **Caveat:** this makes the *entire* hostname reachable without SSO, dashboard included. The gateway token is now the only thing standing between the public internet and operator-level access to your sandbox — anyone who learns the URL and token (a leaked log line, a screen-share, `~/openclaw-tunnel-url.txt` ending up in the wrong place) can drive your agent and burn your NVIDIA quota until you rotate the sandbox. Reasonable for a personal dev box during a testing session; not something to leave on indefinitely.
+
+3. **Cloudflare Access service token:** create one in the Brev/Cloudflare Access dashboard, then send `CF-Access-Client-Id` + `CF-Access-Client-Secret` headers alongside `Authorization`. Lets you use the FQDN directly with the dashboard still SSO-gated. Best when you have a fixed set of machines that need access and you want to manage them as identities.
+
+4. **Cloudflare Access bypass for `/v1/*` only:** add a bypass rule for the API paths in the Access dashboard. The API becomes effectively public, gated only by the gateway token, while the dashboard stays SSO-gated. Narrower blast radius than option (2) — only do this if you understand the trade-off and have rotation hygiene in place.
+
+**When `NEMOCLAW_OPENAI_HTTP_TUNNEL=1` actually matters.** This flag lifts the nginx `deny all;` rule on `/v1/*`, allowing non-loopback source IPs to reach the endpoint. It exists for one specific deployment shape: a self-hosted machine where nginx port 80 is exposed directly on the host's network interface (no cloudflared, no SSH port-forward, no fronting reverse proxy), and you want remote clients to hit `/v1/*` with only the gateway token as auth. In that shape, pair it with TLS termination and rate limiting at the network edge — once the IP allowlist is gone, the gateway token is the only thing standing between the open network and operator-level access.
+
+For the four options above, the flag is a no-op: cloudflared and SSH port-forward both connect to nginx on `127.0.0.1`, which `allow 127.0.0.1;` already permits regardless of the deny-all (verified empirically). Leave the flag unset unless you're running the direct-exposure shape it's designed for.
+
+**Security.** This endpoint grants operator-level access to the sandbox. The gateway token is treated like an owner credential — rotate it by bouncing the sandbox. With CF Access in front of the tunnel (Brev's default), external programmatic access requires *both* a valid Access identity and the gateway token, which is a meaningful defense-in-depth posture. Options (2) and (4) intentionally collapse that to a single factor; treat the token accordingly.
 
 **Browser clients.** Nginx terminates CORS for `/v1/*` because OpenClaw emits no `Access-Control-Allow-*` headers and returns 405 to `OPTIONS`. Tools like Open WebUI work via local nginx without further configuration.
 
@@ -414,6 +426,31 @@ To check if fragments still apply against the latest upstream (without modifying
 This clones upstream into a temp directory, tests each fragment, and reports pass/fail. Safe to run in CI on a schedule to catch upstream drift early.
 
 ## Troubleshooting
+
+### Docker-driver gateway blocked by UFW
+
+During onboarding, OpenShell's Docker-driver gateway must be reachable from sandbox containers at `host.openshell.internal:8080`. If setup prints:
+
+```text
+Sandbox containers cannot reach the gateway at host.openshell.internal:8080 (<gateway-ip>:8080).
+A host firewall may be blocking traffic from the OpenShell Docker bridge.
+```
+
+first restart Docker if it looks wedged, then retry setup once:
+
+```bash
+sudo systemctl restart docker
+cd ~/nemoclaw-cookbook && ./setup.sh
+```
+
+If the same preflight fails again and UFW is active, follow the remediation printed by NemoClaw. Treat the installer output as the source of truth:
+
+```bash
+# Run the sudo ufw allow command printed by NemoClaw, then:
+cd ~/nemoclaw-cookbook && ./setup.sh
+```
+
+`setup.sh` detects the failed onboard session and sets `NEMOCLAW_FRESH=1` automatically on the rerun.
 
 ### Commands not found after install
 
