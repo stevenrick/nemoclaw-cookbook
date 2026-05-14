@@ -1,11 +1,11 @@
 # Upstream Compatibility
 
-Last validated end-to-end deployment: **2026-05-12**
+Last validated end-to-end deployment: **2026-05-14**
 
 | Component | Commit / Tag | Description | Link |
 |-----------|-------------|-------------|------|
-| NemoClaw | `c4aaec3bb` (v0.0.38) | `fix(runtime): repair stale inference DNS routes (#3267)` | [commit](https://github.com/NVIDIA/NemoClaw/commit/c4aaec3bb) |
-| OpenShell | `4483c860` (v0.0.36) | `feat(server,driver-vm,e2e): gateway-owned readiness + VM compute driver e2e (#901)` | [commit](https://github.com/NVIDIA/OpenShell/commit/4483c860) |
+| NemoClaw | `5818cfa8` (v0.0.41) | `fix(e2e): avoid stale nemoclaw command hash (#3491)` | [commit](https://github.com/NVIDIA/NemoClaw/commit/5818cfa8) |
+| OpenShell | `df5a8b94` (v0.0.39) | `fix(providers): read opencode config file during credential discovery (#1290)` | [commit](https://github.com/NVIDIA/OpenShell/commit/df5a8b94) |
 | sandbox-base | `47a54a53` | OpenClaw 2026.4.24 (npm openclaw@2026.4.24) | [package](https://github.com/NVIDIA/NemoClaw/pkgs/container/nemoclaw%2Fsandbox-base) |
 
 ## What this means
@@ -28,6 +28,7 @@ Present-state inventory of cookbook patches and scripts, with the condition for 
 | Driver-aware sandbox bounce in `setup.sh` Step 8 (`docker exec … kubectl delete pod` on k3s, `docker restart` on docker-driver) after injecting `/sandbox/.env` | No first-class upstream mechanism to pass third-party plugin credentials at onboard time, so the cookbook injects post-boot and bounces to reload | [NemoClaw#1720](https://github.com/NVIDIA/NemoClaw/pull/1720) lands — bake the credentials into onboard ARGs and remove the post-deploy bounce |
 | `setup.sh` auto-deriving `NEMOCLAW_POLICY_PRESETS` from configured messaging tokens | Upstream's tier-based policy selector excludes messaging presets from `balanced` by default, with no token-driven inclusion in non-interactive mode | Upstream restores token-driven preset inclusion (or ships an equivalent tier that covers the common case) |
 | `setup.sh` pinning `OPENSHELL_VERSION` to NemoClaw's `max_openshell_version` (plus pinning the OpenShell repo checkout to the same tag) | OpenShell release cadence runs ahead of NemoClaw's `blueprint.yaml` constraint, and HEAD's `install.sh` may expect a newer artifact format than older releases ship | NemoClaw's release cadence keeps `max_openshell_version` current with published OpenShell releases, and OpenShell's installer maintains backward-compatible release artifacts |
+| `setup.sh` auto-setting `NEMOCLAW_FRESH=1` when it detects a `~/.nemoclaw/onboard-session.json` marker from a previously failed onboard attempt (lines 164-170) | NemoClaw's onboard resumes a half-baked prior session by default; a transient first-run failure (UFW, Docker, network) leaves the user stuck on subsequent runs unless they manually set `NEMOCLAW_FRESH=1` or delete the session file | Upstream NemoClaw onboard auto-detects failed prior sessions and offers (or applies) a fresh start without requiring an external flag |
 
 When adding a new cookbook patch, add a row here describing the gap and the removal condition. When removing a patch (upstream closed the gap), delete both the patch and the row.
 
