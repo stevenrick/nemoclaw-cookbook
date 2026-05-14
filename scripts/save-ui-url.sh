@@ -38,12 +38,12 @@ write_urls() {
   fi
 
   # OpenAI-compatible HTTP API env file (when integration is enabled).
-  # Defaults to http://127.0.0.1/v1 because Brev's cloudflared tunnel sits
-  # behind Cloudflare Access — programmatic clients (Python openai SDK,
-  # curl) get redirected to an SSO login page unless they have a CF Access
-  # service token. Local URL works from the Brev host and from a laptop
-  # via SSH port-forward. The tunnel URL is written as a commented
-  # alternative for users who configure CF Access service tokens.
+  # Defaults to http://127.0.0.1/v1 — works from the Brev host directly and
+  # from a laptop via SSH port-forward. The tunnel URL is written as a
+  # commented alternative because Brev's Secure Link is gated by Cloudflare
+  # Access with SSO by default, so programmatic clients get redirected to a
+  # login page until that gate is removed or bypassed. See BUILD.md for the
+  # four ways to make the tunnel URL programmatically reachable.
   local openai_flag="${NEMOCLAW_OPENAI_HTTP_ENABLED:-}"
   if [ "$openai_flag" = "1" ] || [ "$openai_flag" = "true" ]; then
     {
@@ -55,9 +55,17 @@ write_urls() {
       echo "OPENAI_API_KEY=${token}"
       if [ -n "$TUNNEL_FQDN" ]; then
         echo ""
-        echo "# Alternative: tunnel URL. Requires a Cloudflare Access service"
-        echo "# token (CF-Access-Client-Id + CF-Access-Client-Secret headers)"
-        echo "# OR a /v1/* bypass rule in the Brev/Cloudflare Access dashboard."
+        echo "# Alternative: tunnel URL. Brev's Secure Link defaults to"
+        echo "# Cloudflare Access SSO — programmatic clients need one of:"
+        echo "#   (a) Brev dashboard → Secure Links → this link → Edit Access"
+        echo "#       → toggle 'Make Public' on (simplest; exposes the entire"
+        echo "#       hostname incl. dashboard, gated only by the gateway token"
+        echo "#       below)"
+        echo "#   (b) CF Access service token + CF-Access-Client-Id / -Secret"
+        echo "#       headers alongside Authorization"
+        echo "#   (c) CF Access /v1/* bypass rule (API public, dashboard still"
+        echo "#       SSO-gated — narrowest blast radius)"
+        echo "# See BUILD.md (\"Exposing the API beyond the host\") for trade-offs."
         echo "# OPENAI_BASE_URL=https://${TUNNEL_FQDN}/v1"
       fi
     } > "$HOME/openclaw-openai.env"
