@@ -4,6 +4,11 @@
 #
 # Reads from: ~/.env (INSTALL_CLAUDE_CODE, INSTALL_CODEX), git repos, nemoclaw list
 # Writes to:  ~/.nemoclaw/cookbook-deployment.json
+#
+# TOOLS and INTEGRATIONS hold JSON strings that we hand to Python via env vars
+# (Python reads them with os.environ, no shell expansion), so SC2089/SC2090
+# word-splitting warnings don't apply.
+# shellcheck disable=SC2089,SC2090
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
