@@ -49,9 +49,12 @@ server {
     # preflight against /v1/*. Retire when OpenClaw ships native CORS.
     #
     # __OPENAI_HTTP_DENY__ is substituted by install-services.sh:
-    # - NEMOCLAW_OPENAI_HTTP_TUNNEL unset: "deny all;" (local only)
-    # - set:                              empty (cloudflared can reach it,
-    #                                            gateway token still gates)
+    # - NEMOCLAW_OPENAI_HTTP_TUNNEL unset: "deny all;" — only 127.0.0.1
+    #   can reach /v1/* (this is the secure default; cloudflared and
+    #   SSH port-forward still work because both surface as 127.0.0.1)
+    # - set: empty — any source IP can reach /v1/*; gateway token is
+    #   the only auth. Use only when nginx is exposed directly on the
+    #   host's network interface with no fronting proxy.
     location ^~ /v1/ {
         if ($request_method = OPTIONS) {
             add_header Access-Control-Allow-Origin $http_origin always;
