@@ -1,8 +1,8 @@
 # Tavily web search API access.
 #
-# Upstream only ships Brave as a first-class web-search provider. Remove this
-# fragment when upstream adds a `tavily` policy preset. See UPSTREAM.md for
-# the full inventory of cookbook scaffolds and their removal conditions.
+# Upstream v0.0.50 ships Brave as the first-class web-search provider. This
+# remains a cookbook-only Tavily bridge until NemoClaw exposes Tavily through
+# onboard/config generation and a native policy preset.
 new_sections:
   tavily:
     name: tavily
@@ -12,12 +12,6 @@ new_sections:
         protocol: rest
         enforcement: enforce
         tls: terminate
-        # NOTE: OpenShell #1286 (in v0.0.39+) makes REST body credential rewrite
-        # opt-in via `request_body_credential_rewrite: true`. Older versions
-        # (v0.0.36-v0.0.38) reject that field as unknown but rewrite bodies by
-        # default, so we omit it for cross-version compatibility. When NemoClaw
-        # blueprints start pinning OpenShell >= v0.0.39, apply-patches.sh needs
-        # to detect the version and inject the field. Tracking task #7-ish.
         rules:
           - allow: { method: POST, path: "/**" }
     binaries:

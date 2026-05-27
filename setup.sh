@@ -34,6 +34,9 @@ export NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 [ -n "${NEMOCLAW_PROVIDER:-}" ] && export NEMOCLAW_PROVIDER
 [ -n "${NEMOCLAW_ENDPOINT_URL:-}" ] && export NEMOCLAW_ENDPOINT_URL
 [ -n "${NEMOCLAW_GPU:-}" ] && export NEMOCLAW_GPU
+[ -n "${NEMOCLAW_RESOURCE_PROFILE:-}" ] && export NEMOCLAW_RESOURCE_PROFILE
+[ -n "${NEMOCLAW_CPU:-}" ] && export NEMOCLAW_CPU
+[ -n "${NEMOCLAW_RAM:-}" ] && export NEMOCLAW_RAM
 [ -n "${NEMOCLAW_EXPERIMENTAL:-}" ] && export NEMOCLAW_EXPERIMENTAL
 
 # Alternative inference provider keys
@@ -43,55 +46,49 @@ export NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 # Messaging integrations
 [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && export TELEGRAM_BOT_TOKEN
 [ -n "${TELEGRAM_ALLOWED_IDS:-}" ] && export TELEGRAM_ALLOWED_IDS
+[ -n "${TELEGRAM_REQUIRE_MENTION:-}" ] && export TELEGRAM_REQUIRE_MENTION
 [ -n "${DISCORD_BOT_TOKEN:-}" ] && export DISCORD_BOT_TOKEN
+[ -n "${DISCORD_SERVER_ID:-}" ] && export DISCORD_SERVER_ID
+[ -n "${DISCORD_SERVER_IDS:-}" ] && export DISCORD_SERVER_IDS
+[ -n "${DISCORD_USER_ID:-}" ] && export DISCORD_USER_ID
+[ -n "${DISCORD_ALLOWED_IDS:-}" ] && export DISCORD_ALLOWED_IDS
+[ -n "${DISCORD_REQUIRE_MENTION:-}" ] && export DISCORD_REQUIRE_MENTION
 [ -n "${SLACK_BOT_TOKEN:-}" ] && export SLACK_BOT_TOKEN
+[ -n "${SLACK_APP_TOKEN:-}" ] && export SLACK_APP_TOKEN
+[ -n "${SLACK_ALLOWED_USERS:-}" ] && export SLACK_ALLOWED_USERS
+[ -n "${SLACK_ALLOWED_CHANNELS:-}" ] && export SLACK_ALLOWED_CHANNELS
+[ -n "${WECHAT_ALLOWED_IDS:-}" ] && export WECHAT_ALLOWED_IDS
+[ -n "${NEMOCLAW_WECHAT_QUIET:-}" ] && export NEMOCLAW_WECHAT_QUIET
 
 # Tool integrations
 [ -n "${BRAVE_API_KEY:-}" ] && export BRAVE_API_KEY
 [ -n "${TAVILY_API_KEY:-}" ] && export TAVILY_API_KEY
 [ -n "${NEMOCLAW_OPENAI_HTTP_ENABLED:-}" ] && export NEMOCLAW_OPENAI_HTTP_ENABLED
 [ -n "${NEMOCLAW_OPENAI_HTTP_TUNNEL:-}" ] && export NEMOCLAW_OPENAI_HTTP_TUNNEL
-
-# Optional sandbox tools (default: true for backward compatibility)
-export INSTALL_CLAUDE_CODE="${INSTALL_CLAUDE_CODE:-true}"
-export INSTALL_CODEX="${INSTALL_CODEX:-true}"
+[ -n "${CLOUDFLARE_TUNNEL_TOKEN:-}" ] && export CLOUDFLARE_TUNNEL_TOKEN
 
 # Policy configuration
 [ -n "${NEMOCLAW_POLICY_TIER:-}" ] && export NEMOCLAW_POLICY_TIER
 [ -n "${NEMOCLAW_POLICY_MODE:-}" ] && export NEMOCLAW_POLICY_MODE
 [ -n "${NEMOCLAW_POLICY_PRESETS:-}" ] && export NEMOCLAW_POLICY_PRESETS
 
-# Upstream #1753 replaced credential-based preset auto-detection with a
-# tier-based selector. The default `balanced` tier excludes messaging presets,
-# so TELEGRAM_BOT_TOKEN et al. no longer wire up policy egress automatically.
-# Derive presets from configured tokens unless the user has opted into their
-# own tier/mode/presets choice.
-if [ -z "${NEMOCLAW_POLICY_TIER:-}" ] \
-   && [ -z "${NEMOCLAW_POLICY_MODE:-}" ] \
-   && [ -z "${NEMOCLAW_POLICY_PRESETS:-}" ]; then
-  PRESETS="npm,pypi,huggingface,brew"
-  [ -n "${BRAVE_API_KEY:-}" ] && PRESETS="${PRESETS},brave"
-  [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && PRESETS="${PRESETS},telegram"
-  [ -n "${DISCORD_BOT_TOKEN:-}" ] && PRESETS="${PRESETS},discord"
-  [ -n "${SLACK_BOT_TOKEN:-}" ] && PRESETS="${PRESETS},slack"
-  export NEMOCLAW_POLICY_PRESETS="${PRESETS}"
-  echo "  Derived policy presets from configured credentials: ${PRESETS}"
+# Access URL configuration. Upstream NemoClaw now uses CHAT_UI_URL to bake the
+# dashboard origin and to disable device auth for non-loopback browser access.
+TUNNEL_FQDN="${TUNNEL_FQDN:-}"
+TUNNEL_FQDN="${TUNNEL_FQDN#https://}"
+TUNNEL_FQDN="${TUNNEL_FQDN#http://}"
+if [ -n "$TUNNEL_FQDN" ]; then
+  export CHAT_UI_URL="https://$TUNNEL_FQDN"
 fi
+[ -n "${CHAT_UI_URL:-}" ] && export CHAT_UI_URL
+[ -n "${NEMOCLAW_CORS_ORIGIN:-}" ] && export NEMOCLAW_CORS_ORIGIN
 
 # Integration config payload (NEMOCLAW_INTEGRATIONS_B64) is computed by
 # apply-patches.sh from .env-driven flags (TAVILY_API_KEY,
 # NEMOCLAW_OPENAI_HTTP_ENABLED, etc.) via scripts/build-integrations-config.py.
-# Every caller that runs apply-patches.sh after sourcing .env gets the right
-# payload without remembering — including /upgrade and /refresh-patches.
 
 echo "=== Step 1: Clone / update repositories ==="
 cd "$HOME"
-if [ -d OpenShell ]; then
-  echo "  OpenShell exists, pulling latest..."
-  git -C OpenShell pull --ff-only || echo "  Warning: pull failed, continuing with existing checkout"
-else
-  git clone https://github.com/NVIDIA/OpenShell
-fi
 if [ -d NemoClaw ]; then
   echo "  NemoClaw exists, pulling latest..."
   git -C NemoClaw checkout -- Dockerfile Dockerfile.base nemoclaw-blueprint/policies/openclaw-sandbox.yaml scripts/nemoclaw-start.sh 2>/dev/null || true
@@ -100,34 +97,9 @@ else
   git clone https://github.com/NVIDIA/NemoClaw
 fi
 
-echo "=== Step 2: Install OpenShell ==="
-# NemoClaw's blueprint declares the supported OpenShell version range.
-# `sh install.sh` defaults to the latest release, which may be above NemoClaw's
-# validated max and fail the onboard preflight. Derive the install version
-# from `max_openshell_version` unless the user overrode it explicitly.
-BLUEPRINT_YAML="$HOME/NemoClaw/nemoclaw-blueprint/blueprint.yaml"
-if [ -z "${OPENSHELL_VERSION:-}" ] && [ -f "$BLUEPRINT_YAML" ]; then
-  BLUEPRINT_MAX=$(awk -F'"' '/^max_openshell_version:/{print $2; exit}' "$BLUEPRINT_YAML")
-  if [ -n "$BLUEPRINT_MAX" ]; then
-    OPENSHELL_VERSION="v${BLUEPRINT_MAX}"
-    export OPENSHELL_VERSION
-    echo "  Pinned OpenShell to ${OPENSHELL_VERSION} (from blueprint max_openshell_version)"
-  fi
-fi
-# Also check out the OpenShell repo at the same tag. The install.sh format
-# expectations (e.g. .deb vs .tar.gz) evolve over time, so HEAD's install.sh
-# can fail against an older release's artifacts.
-if [ -n "${OPENSHELL_VERSION:-}" ] && [ -d "$HOME/OpenShell/.git" ]; then
-  CURRENT_REF=$(git -C "$HOME/OpenShell" describe --tags --exact-match 2>/dev/null || echo "")
-  if [ "$CURRENT_REF" != "$OPENSHELL_VERSION" ]; then
-    git -C "$HOME/OpenShell" fetch --tags --depth 1 origin "$OPENSHELL_VERSION" 2>/dev/null \
-      && git -C "$HOME/OpenShell" checkout "$OPENSHELL_VERSION" 2>/dev/null \
-      && echo "  Checked out OpenShell repo at ${OPENSHELL_VERSION}" \
-      || echo "  Warning: could not pin OpenShell repo to ${OPENSHELL_VERSION} — using current HEAD"
-  fi
-fi
-cd "$HOME/OpenShell"
-sh install.sh
+echo "=== Step 2: Install OpenShell via upstream NemoClaw ==="
+cd "$HOME/NemoClaw"
+bash scripts/install-openshell.sh
 export PATH="$HOME/.local/bin:$PATH"
 if ! grep -q 'local/bin' "$HOME/.bashrc" 2>/dev/null; then
   # shellcheck disable=SC2016
@@ -135,15 +107,11 @@ if ! grep -q 'local/bin' "$HOME/.bashrc" 2>/dev/null; then
 fi
 openshell --version
 
-echo "=== Step 3: Pull latest sandbox base image ==="
-docker pull ghcr.io/nvidia/nemoclaw/sandbox-base:latest
-
-echo "=== Step 4: Apply patches ==="
+echo "=== Step 3: Apply patches ==="
 # See UPSTREAM.md for the versions patches were last validated against.
 # Uses modular fragments (not git apply) for resilience to upstream changes.
-# If patches fail, see BUILD.md or run: claude /refresh-patches
 cd "$HOME/NemoClaw"
-git checkout -- Dockerfile Dockerfile.base nemoclaw-blueprint/policies/openclaw-sandbox.yaml 2>/dev/null || true
+git checkout -- Dockerfile Dockerfile.base nemoclaw-blueprint/policies/openclaw-sandbox.yaml scripts/nemoclaw-start.sh 2>/dev/null || true
 
 "${SCRIPT_DIR}/scripts/apply-patches.sh" "$HOME/NemoClaw"
 
@@ -159,7 +127,7 @@ if [ -f "$HOME/.nemoclaw/cookbook-deployment.json" ]; then
   fi
 fi
 
-echo "=== Step 5: Install NemoClaw ==="
+echo "=== Step 4: Install NemoClaw ==="
 # If a prior run died mid-onboard, install.sh refuses to start a new session.
 # Detect a failed-status session and auto-recover by passing NEMOCLAW_FRESH=1.
 # Users can still set NEMOCLAW_FRESH=1 explicitly to force a clean start.
@@ -185,7 +153,7 @@ POST_FAILURES=0
 SANDBOX=$(nemoclaw list 2>/dev/null | awk '/\*/{print $1}' | head -1)
 SANDBOX="${SANDBOX:-my-assistant}"
 
-echo "=== Step 6: Install services (nginx, systemd, terminal server) ==="
+echo "=== Step 5: Install services (nginx, systemd, terminal server) ==="
 if "${SCRIPT_DIR}/scripts/install-services.sh"; then
   # CHAT_UI_URL may now be set by install-services.sh (cloudflared FQDN detection)
   [ -n "${CHAT_UI_URL:-}" ] && export CHAT_UI_URL
@@ -194,15 +162,15 @@ else
   POST_FAILURES=$((POST_FAILURES + 1))
 fi
 
-echo "=== Step 7: Save tokenized UI URL ==="
-# Token is available as soon as the sandbox is running (step 5).
+echo "=== Step 6: Save tokenized UI URL ==="
+# Token is available as soon as the sandbox is running.
 # Extract it now, before optional steps, so the URL file exists ASAP.
 "${SCRIPT_DIR}/scripts/save-ui-url.sh" || {
   echo "  Warning: URL extraction failed — retrieve manually (see BUILD.md)."
   POST_FAILURES=$((POST_FAILURES + 1))
 }
 
-echo "=== Step 8: Register integration providers ==="
+echo "=== Step 7: Register cookbook integrations ==="
 
 register_provider() {
   local name="$1" envkey="$2"
@@ -212,22 +180,19 @@ register_provider() {
   echo "    ✓ $name"
 }
 
-# Web search providers
+# Brave Search is native upstream; NemoClaw handles provider registration when
+# BRAVE_API_KEY is exported during onboard. Tavily remains cookbook-only and
+# still needs a generic provider plus process.env inside the sandbox.
 if [ -n "${TAVILY_API_KEY:-}" ]; then
   register_provider "${SANDBOX}-tavily" "TAVILY_API_KEY"
-elif [ -n "${BRAVE_API_KEY:-}" ]; then
-  register_provider "${SANDBOX}-brave-search" "BRAVE_API_KEY"
 fi
 
-# Inject integration API keys into the sandbox workspace .env.
-# The patched entrypoint (see apply-patches.sh nemoclaw-start.sh patch)
-# sources /sandbox/.env into the gateway process env so plugins that read
-# process.env (Tavily etc.) see their secrets. We then bounce the sandbox
-# pod below so the gateway re-launches with the new env. Bounce only when
-# we actually wrote .env.
+# Inject the Tavily key into the sandbox workspace .env. The patched entrypoint
+# (see apply-patches.sh) sources /sandbox/.env into the gateway process env so
+# plugins that read process.env see their secrets. Bounce only when we actually
+# wrote .env.
 SANDBOX_ENV_LINES=""
 [ -n "${TAVILY_API_KEY:-}" ] && SANDBOX_ENV_LINES="${SANDBOX_ENV_LINES}TAVILY_API_KEY=${TAVILY_API_KEY}\n"
-[ -n "${BRAVE_API_KEY:-}" ] && SANDBOX_ENV_LINES="${SANDBOX_ENV_LINES}BRAVE_API_KEY=${BRAVE_API_KEY}\n"
 SANDBOX_ENV_WRITTEN=0
 if [ -n "$SANDBOX_ENV_LINES" ]; then
   echo "  Injecting integration keys into sandbox workspace..."
@@ -241,12 +206,10 @@ if [ -n "$SANDBOX_ENV_LINES" ]; then
   fi
 fi
 
-# Bounce the sandbox so the gateway re-launches with /sandbox/.env loaded
-# into its env (entrypoint patch handles the sourcing). First boot happened
-# before .env existed, so the gateway is uncredentialed for plugins that
-# read process.env (Tavily, etc.). Stopgap until upstream supports
-# third-party credential passthrough at onboard time
-# (NVIDIA/NemoClaw#1720) — remove this whole block when that lands.
+# Bounce the sandbox so the gateway re-launches with /sandbox/.env loaded into
+# its env. First boot happened before .env existed, so the gateway is
+# uncredentialed for Tavily. Remove this block when Tavily is upstreamed through
+# NemoClaw's provider/onboard flow.
 #
 # Driver-aware: v0.0.38 and earlier run a k3s cluster container
 # (`openshell-cluster-*`) and bounce via `kubectl delete pod`; v0.0.39+
@@ -270,7 +233,7 @@ if [ "$SANDBOX_ENV_WRITTEN" = "1" ] && [ -n "$SANDBOX" ]; then
         POST_FAILURES=$((POST_FAILURES + 1))
       }
     else
-      echo "  Warning: failed to delete pod for restart — Tavily/Brave may not pick up new env"
+      echo "  Warning: failed to delete pod for restart — Tavily may not pick up new env"
       POST_FAILURES=$((POST_FAILURES + 1))
     fi
   elif [ -n "$SANDBOX_CONTAINER" ]; then
@@ -286,23 +249,23 @@ if [ "$SANDBOX_ENV_WRITTEN" = "1" ] && [ -n "$SANDBOX" ]; then
         POST_FAILURES=$((POST_FAILURES + 1))
       }
     else
-      echo "  Warning: failed to restart sandbox container — Tavily/Brave may not pick up new env"
+      echo "  Warning: failed to restart sandbox container — Tavily may not pick up new env"
       POST_FAILURES=$((POST_FAILURES + 1))
     fi
   else
     echo "  Warning: no openshell-cluster or openshell-${SANDBOX}-* container found — skipping bounce."
-    echo "    Tavily/Brave may not pick up new env until the next sandbox restart."
+    echo "    Tavily may not pick up new env until the next sandbox restart."
     POST_FAILURES=$((POST_FAILURES + 1))
   fi
 fi
 
-echo "=== Step 9: Start services ==="
+echo "=== Step 8: Start services ==="
 # Reload env to pick up nvm
 export NVM_DIR="$HOME/.nvm"
 # shellcheck source=/dev/null
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 
-# Bounce the port forward. When the sandbox got bounced in Step 8 the pod
+# Bounce the port forward. When the sandbox got bounced in Step 7 the pod
 # IP changed, so the existing forward points at a dead endpoint and nginx
 # returns 502. `nemoclaw <name> recover` rebuilds the forward in a single
 # step that knows how to wait for the new pod's gateway — more reliable than
@@ -323,23 +286,25 @@ if [ -n "$SANDBOX" ]; then
   fi
 fi
 
-# Start messaging bridges if tokens are configured
-if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] || [ -n "${DISCORD_BOT_TOKEN:-}" ] || [ -n "${SLACK_BOT_TOKEN:-}" ]; then
+# Messaging channels are configured by upstream onboard/rebuild. `nemoclaw
+# tunnel start` is only needed for an optional Cloudflare tunnel, not for the
+# host-side channel registry itself.
+if [ -n "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]; then
   nemoclaw tunnel start || {
-    echo "  Warning: failed to start messaging bridges"
+    echo "  Warning: failed to start Cloudflare tunnel"
     POST_FAILURES=$((POST_FAILURES + 1))
   }
 else
-  echo "  No messaging tokens set — skipping bridges."
+  echo "  No CLOUDFLARE_TUNNEL_TOKEN set — skipping optional cloudflared tunnel."
 fi
 
-echo "=== Step 10: Write deployment manifest ==="
+echo "=== Step 9: Write deployment manifest ==="
 "${SCRIPT_DIR}/scripts/write-manifest.sh" || {
   echo "  Warning: manifest write failed"
   POST_FAILURES=$((POST_FAILURES + 1))
 }
 
-echo "=== Step 11: Verify deployment ==="
+echo "=== Step 10: Verify deployment ==="
 "${SCRIPT_DIR}/scripts/verify-deployment.sh" || echo "  Some checks failed — review above."
 
 set -e
@@ -356,9 +321,8 @@ else
 fi
 echo ""
 if [ -f "$HOME/openclaw-tunnel-url.txt" ]; then
-  TUNNEL_URL=$(cat "$HOME/openclaw-tunnel-url.txt")
-  echo "Web UI: $TUNNEL_URL"
-  echo "  Open in your browser — no port forwarding needed."
+  echo "Web UI: ~/openclaw-tunnel-url.txt"
+  echo "  Open the URL from that file — no port forwarding needed."
 else
   echo "Web UI: brev port-forward <instance> -p 18789:18789"
   echo "  Then open: cat ~/openclaw-ui-url.txt"
@@ -366,17 +330,11 @@ else
   echo "  To use a Secure Link instead (no port-forward):"
   echo "    1. Go to Brev Settings → Secure Links → add port 80"
   echo "    2. Set TUNNEL_FQDN=<your-link> in ~/.env"
-  echo "    3. Re-run setup.sh (or /upgrade)"
+  echo "    3. Re-run setup.sh"
 fi
 echo ""
 echo "Next steps:"
-if [ "$INSTALL_CODEX" = "true" ]; then
-  echo "  1. Authenticate Codex (can be scripted via brev exec):"
-  echo "     codex login --device-auth"
-fi
-if [ "$INSTALL_CLAUDE_CODE" = "true" ]; then
-  echo "  2. Authenticate Claude Code (interactive via brev shell):"
-  echo "     brev shell <instance> → nemoclaw my-assistant connect → claude"
-fi
+echo "  Open the Web UI above, or run:"
+echo "     nemoclaw ${SANDBOX} connect"
 echo ""
 echo "See USE.md for day-to-day commands."

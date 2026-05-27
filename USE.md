@@ -1,21 +1,21 @@
 # USE: NemoClaw Day-to-Day Reference
 
-Quick reference for everything you can do with your running NemoClaw setup.
+Examples use the default sandbox name, `my-assistant`. If you set `NEMOCLAW_SANDBOX_NAME`, substitute your name. Check with:
 
-> **Sandbox name:** Examples below use `my-assistant`, which is the default. If you set `NEMOCLAW_SANDBOX_NAME` during setup, substitute your name. Run `nemoclaw list` to check.
+```bash
+nemoclaw list
+```
 
-## Connecting to the Sandbox
+## Connect
 
-The sandbox is not a regular Docker container — it runs inside OpenShell's K3s cluster. Don't use `docker exec`.
-
-**Interactive (via brev shell):**
+Interactive:
 
 ```bash
 brev shell <instance>
 nemoclaw my-assistant connect
 ```
 
-**Non-interactive (via brev exec + SSH proxy):**
+Non-interactive command inside the sandbox:
 
 ```bash
 brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
@@ -23,557 +23,324 @@ brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev
   sandbox@openshell-my-assistant '<command>'"
 ```
 
-The non-interactive method works for both humans and agents. Use it for automation, scripting, and relaying auth URLs.
+The sandbox is managed by OpenShell. Do not use `docker exec` as the normal access path.
 
 ## Endpoints
 
-After deployment, these are the ways to interact with your NemoClaw instance:
-
 | Endpoint | URL / Command | Purpose |
-|----------|--------------|---------|
-| **Web UI** | `https://<fqdn>/#token=<hex>` or `http://127.0.0.1:18789/#token=<hex>` | Dashboard — chat, skills, settings |
-| **Browser Terminal** | `https://<fqdn>/terminal#token=<hex>` or `http://127.0.0.1/terminal#token=<hex>` | Network policy approval (`openshell term`) |
-| **Telegram** | Your bot (set `TELEGRAM_BOT_TOKEN` in `.env`) | Mobile and async messaging |
-| **Discord** | Your bot (set `DISCORD_BOT_TOKEN` in `.env`) | Chat via Discord |
-| **Slack** | Your bot (set `SLACK_BOT_TOKEN` in `.env`) | Chat via Slack |
-| **CLI** | `nemoclaw <sandbox> connect` → `openclaw tui` | Terminal UI inside the sandbox |
+|----------|---------------|---------|
+| Web UI | `~/openclaw-tunnel-url.txt` or `~/openclaw-ui-url.txt` | Dashboard chat, skills, settings |
+| Browser terminal | `/terminal#token=<hex>` on the same host | OpenShell policy approval TUI |
+| CLI | `nemoclaw <sandbox> connect` | Terminal UI inside the sandbox |
+| Telegram / Discord / Slack | Your configured bot or app | Async messaging |
+| OpenAI-compatible HTTP | `~/openclaw-openai.env` | Optional `/v1/*` client settings |
 
-To get your tokenized URLs, run:
-
-```bash
-brev exec <instance> "cat ~/openclaw-tunnel-url.txt"   # Secure Link URL
-brev exec <instance> "cat ~/openclaw-ui-url.txt"        # Port-forward URL
-```
-
-See the sections below for detailed setup and troubleshooting for each endpoint.
-
-## Web UI
-
-**If you configured a Secure Link** (`TUNNEL_FQDN` in `.env`):
+Open URLs without printing the tokenized value:
 
 ```bash
-brev exec <instance> "cat ~/openclaw-tunnel-url.txt"
+# Secure Link
+URL=$(brev exec <instance> "sed -n '1p' ~/openclaw-tunnel-url.txt" | sed -n '/^https:/p' | head -1)
+open "$URL"
+
+# Browser terminal on that Secure Link
+TERMINAL_URL=$(printf '%s' "$URL" | sed 's#/#/terminal#3')
+open "$TERMINAL_URL"
 ```
 
-Open that URL — nginx proxies to the dashboard with Origin rewriting, so no port-forward or `127.0.0.1` restrictions.
-
-**If using port-forward** (no `TUNNEL_FQDN`):
+Port-forward fallback:
 
 ```bash
 brev port-forward <instance> -p 18789:18789
-brev exec <instance> "cat ~/openclaw-ui-url.txt"
+URL=$(brev exec <instance> "sed -n '1p' ~/openclaw-ui-url.txt" | sed -n '/^http:/p' | head -1)
+open "$URL"
 ```
 
-Open the URL with `127.0.0.1` (not `localhost` — the sandbox CORS config requires it).
-
-**If the URL file is missing**, regenerate it:
+If URL files are missing:
 
 ```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && ~/nemoclaw-cookbook/scripts/save-ui-url.sh"
+brev exec <instance> "~/nemoclaw-cookbook/scripts/save-ui-url.sh"
 ```
 
-If the internal OpenShell port forward stops (sandbox is running but Web UI is unreachable):
+Upstream NemoClaw can also expose the browser URL and raw gateway token for troubleshooting. Redact the URL and check only token length in shared logs:
 
 ```bash
-brev exec <instance> "openshell forward start 18789 my-assistant --background"
+nemoclaw my-assistant dashboard-url --quiet | sed -E 's/#token=.*/#token=<redacted>/'
+nemoclaw my-assistant gateway-token --quiet | wc -c
 ```
 
-## Browser Terminal
-
-If the terminal server is enabled (`ENABLE_TERMINAL_SERVER=true` in `.env`, default), you can access an `openshell term` session in the browser:
-
-```
-https://<your-secure-link>/terminal#token=<hex>
-```
-
-Or via port-forward: `http://127.0.0.1/terminal#token=<hex>` (requires nginx on port 80).
-
-This gives you the OpenShell egress approval TUI — approve or deny sandbox network requests from any browser.
-
-## OpenClaw (inside the sandbox)
+## OpenClaw Inside the Sandbox
 
 ```bash
-openclaw tui                                                    # Interactive terminal UI
-openclaw agent --agent main --local -m "hello" --session-id test  # One-off message
+openclaw tui
+openclaw agent --agent main --local -m "hello" --session-id test
+openclaw channels list
 ```
 
-## Coding Agents (Claude Code + Codex)
+## Messaging
 
-> These tools are only available if installed during setup (default: both enabled). Check with `INSTALL_CLAUDE_CODE` and `INSTALL_CODEX` in `.env`, or look at the deployment manifest: `cat ~/.nemoclaw/cookbook-deployment.json`.
-
-NemoClaw's `coding-agent` skill automatically delegates coding tasks to Claude Code or Codex.
-Just ask your agent (via Telegram, web UI, or terminal) to build something and it will spawn
-the right coding agent in the background.
-
-### Using Claude Code directly
+Messaging is handled by upstream NemoClaw/OpenClaw. Configure tokens in `~/.env` before setup:
 
 ```bash
-brev shell <instance>
-nemoclaw my-assistant connect
-claude --dangerously-skip-permissions   # Full autonomy mode (safe inside OpenShell sandbox)
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_ALLOWED_IDS=...
+TELEGRAM_REQUIRE_MENTION=1
+DISCORD_BOT_TOKEN=...
+DISCORD_SERVER_ID=...
+DISCORD_ALLOWED_IDS=...
+DISCORD_REQUIRE_MENTION=1
+SLACK_BOT_TOKEN=...
+SLACK_APP_TOKEN=...
+SLACK_ALLOWED_USERS=...
+SLACK_ALLOWED_CHANNELS=...
 ```
 
-Claude Code has the Codex plugin installed (a plugin that runs inside Claude Code), adding these slash commands:
-- `/codex:review` — code review
-- `/codex:adversarial-review` — adversarial code review
-- `/codex:rescue` — rescue stuck tasks
+Slack requires both the bot token and the app-level Socket Mode token. Upstream validates token formats during onboarding; placeholder values are ignored.
 
-See https://github.com/openai/codex-plugin-cc for the full list.
-
-If you get an auth error, re-authenticate:
+Start or stop an optional upstream Cloudflare tunnel:
 
 ```bash
-codex login --device-auth   # Can be run non-interactively via brev exec
-claude                       # Interactive TUI — follow login prompts
-```
-
-The login flow reaches `platform.claude.com`, `downloads.claude.ai`, and `raw.githubusercontent.com`.
-These are pre-approved in the sandbox network policy. If you see blocked requests in `openshell term`,
-the policy may need updating (see BUILD.md Step 5).
-
-SSO tokens persist across restarts but not sandbox rebuilds. Re-run both logins after any rebuild.
-
-### Using Codex directly
-
-```bash
-brev shell <instance>
-nemoclaw my-assistant connect
-codex                                   # Interactive mode
-codex -q "explain this codebase"        # One-off query
-```
-
-### Delegating via NemoClaw (autonomous)
-
-The OpenClaw agent inside the sandbox has a `coding-agent` skill that can spawn either Claude Code
-or Codex as a background process. Just tell your agent what to build — via Telegram, the web UI,
-or `openclaw tui` — and it handles the rest.
-
-Examples you can send via Telegram:
-- "Create a Python Flask API with health check and user endpoints"
-- "Review the code in /sandbox/myproject and suggest improvements"
-- "Refactor the database module to use async/await"
-
-## Telegram
-
-### How it works
-
-Telegram messaging runs natively inside OpenClaw via the gateway delivery queue — no host-side bridge. Messages are async with no timeout, so long-running coding agent tasks work reliably. The Telegram token is injected at sandbox build time and the bot connects automatically.
-
-`nemoclaw tunnel start` starts the Cloudflare quick tunnel needed for the Telegram webhook callback URL:
-
-```bash
-# If vars are already exported in your shell:
+source ~/.env
 nemoclaw tunnel start
-
-# If starting fresh (no ~/.env or vars not exported):
-NVIDIA_API_KEY=<key> TELEGRAM_BOT_TOKEN=<token> TELEGRAM_ALLOWED_IDS=<id> nemoclaw tunnel start
+nemoclaw tunnel stop
+nemoclaw status
 ```
 
-### Manage
-
-```bash
-nemoclaw status    # Tunnel health
-nemoclaw tunnel stop      # Stop tunnel
-nemoclaw tunnel start     # Restart tunnel
-```
-
-To check channel status inside the sandbox:
-```bash
-# Via brev exec + SSH proxy:
-openclaw channels list        # Shows: Telegram main: configured, token=config, enabled
-```
-
-### Security
-
-`TELEGRAM_ALLOWED_IDS` in `.env` restricts which Telegram accounts can talk to the bot. Get your chat ID from **@userinfobot**. Comma-separate multiple IDs.
-
-### Approve network requests
-
-When the agent wants to make external requests, you approve them via:
-
-```bash
-openshell term
-```
+Messaging channels and their required policy presets are handled by upstream onboarding and rebuild commands. Set `NEMOCLAW_POLICY_TIER`, `NEMOCLAW_POLICY_MODE`, or `NEMOCLAW_POLICY_PRESETS` only when you want to override upstream's suggested policy selection.
 
 ## Web Search
 
-The agent can search the web when a search provider is configured. Set one in `~/.env`:
+Configure one provider in `~/.env`:
 
-- **Tavily** (recommended): `TAVILY_API_KEY=tvly-...`
-- **Brave**: `BRAVE_API_KEY=BSA-...`
+```bash
+BRAVE_API_KEY=BSA-...     # Native upstream
+TAVILY_API_KEY=tvly-...   # Cookbook overlay
+```
 
-If both are set, Tavily takes priority.
+If both are set, the cookbook config gives Tavily priority for OpenClaw web search. After changing web-search configuration, rerun:
 
-### Adding to an existing sandbox
-
-1. Add the API key to `~/.env`.
-2. Run `/upgrade` — it detects the new key, rebuilds the sandbox, and restores your workspace.
-
-### Adding during fresh setup
-
-Add the key to `~/.env` before running `./setup.sh` — it's picked up automatically.
+```bash
+cd ~/nemoclaw-cookbook && ./setup.sh
+```
 
 ## Inference
 
-### Check current config
+Check current gateway inference:
 
 ```bash
 openshell inference get
 ```
 
-### Switch models
-
-Set `NEMOCLAW_MODEL` in `.env` before setup/rebuild, or switch at runtime:
+Switch model at runtime:
 
 ```bash
-# Lightweight model
-openshell inference set --provider nvidia-prod --model nvidia/nemotron-3-nano-30b-a3b
-
-# Default large model
 openshell inference set --provider nvidia-prod --model nvidia/nemotron-3-super-120b-a12b
-
-# Non-NVIDIA model (if configured)
-openshell inference set --provider nvidia-prod --model openai/gpt-oss-120b
-
-# Increase timeout (seconds)
 openshell inference update --timeout 300
 ```
 
-Changes are gateway-scoped (shared across all sandboxes) and hot-reload in ~5 seconds.
+Or set `NEMOCLAW_MODEL` / `NEMOCLAW_PROVIDER` in `~/.env` before setup.
+
+## Resources
+
+Inspect upstream sandbox resource profiles:
+
+```bash
+nemoclaw resources
+nemoclaw resources --json
+```
+
+Set a profile before setup:
+
+```bash
+NEMOCLAW_RESOURCE_PROFILE=developer
+```
+
+`NEMOCLAW_CPU` and `NEMOCLAW_RAM` can override profile values for scripted runs.
+
+## OpenAI-Compatible HTTP API
+
+Enable before setup:
+
+```bash
+NEMOCLAW_OPENAI_HTTP_ENABLED=1
+```
+
+Load client settings after deploy:
+
+```bash
+source ~/openclaw-openai.env
+```
+
+Smoke test from the Brev host:
+
+```bash
+python -c "from openai import OpenAI; print([m.id for m in OpenAI().models.list().data])"
+```
+
+For laptop clients, prefer an SSH port-forward:
+
+```bash
+ssh -L 8080:127.0.0.1:80 <brev-host>
+OPENAI_BASE_URL=http://127.0.0.1:8080/v1 OPENAI_API_KEY=<gateway-token> python your_client.py
+```
+
+`NEMOCLAW_OPENAI_HTTP_TUNNEL=1` removes nginx's loopback-only guard for `/v1/*`. Use it only when nginx is intentionally exposed directly on the host network and the gateway token is the external auth boundary.
 
 ## Sandbox Management
 
 ```bash
-nemoclaw list                         # List all sandboxes
-nemoclaw my-assistant status          # Health, model, policies
-nemoclaw my-assistant logs --follow   # Stream logs
-nemoclaw my-assistant connect         # Shell in (via brev shell)
-nemoclaw my-assistant destroy         # Delete (WARNING: deletes workspace files — back up first with /backup or backup-full.sh)
+nemoclaw list
+nemoclaw my-assistant status
+nemoclaw my-assistant logs --follow
+nemoclaw my-assistant connect
+nemoclaw my-assistant recover
+nemoclaw my-assistant destroy --yes
 ```
+
+Back up before destroy or rebuild.
 
 ## System Services
 
-The cookbook manages two systemd services for infrastructure: nginx (reverse proxy) and nemoclaw-terminal (browser terminal). The OpenShell gateway is managed by upstream `nemoclaw` itself — there is no cookbook systemd unit for it.
+The cookbook manages nginx and the optional browser terminal service. Upstream `nemoclaw` manages the OpenShell gateway lifecycle.
 
 ```bash
-# Cookbook services
-systemctl status nemoclaw-terminal     # Browser terminal server (if enabled)
-sudo systemctl status nginx            # Reverse proxy
+systemctl status nemoclaw-terminal
+sudo systemctl status nginx
+journalctl -u nemoclaw-terminal -n 50
+sudo tail -f /var/log/nginx/error.log
+sudo systemctl restart nginx
 
-journalctl -u nemoclaw-terminal -n 50  # Last 50 terminal server lines
-sudo tail -f /var/log/nginx/error.log  # nginx errors
-
-sudo systemctl restart nginx           # Restart proxy
-
-# OpenShell gateway (host process, not systemd-managed)
-ps auxf | grep openshell-gateway       # Is the gateway process running?
-nemoclaw <sandbox> recover             # Bring it back up after a reboot or crash
+nemoclaw my-assistant recover
 tail -f ~/.local/state/nemoclaw/openshell-docker-gateway/openshell-gateway.log
 ```
-
-**`nemoclaw tunnel start/stop` vs `nemoclaw <sandbox> recover`:** `nemoclaw tunnel start` starts the Cloudflare tunnel (needed for Telegram webhooks). `nemoclaw <sandbox> recover` re-establishes the gateway and dashboard port-forward after the gateway process goes down (e.g., host reboot).
 
 ## Network Policies
 
 ```bash
-nemoclaw my-assistant policy-list     # Show available and applied presets
-nemoclaw my-assistant policy-add      # Add a preset
+nemoclaw my-assistant policy-list
+nemoclaw my-assistant policy-add
+openshell term
 ```
 
-Default presets: `pypi`, `npm`, `telegram` (plus built-in policies for GitHub, Discord, NVIDIA, Anthropic, etc.)
+Use the browser terminal at `/terminal#token=<hex>` when you want policy approvals without an SSH session.
 
-## Backup & Restore
+## Backup and Restore
 
-Snapshot your sandbox state to your local machine, and restore it later to any NemoClaw instance.
-
-**What's backed up:** workspace files (SOUL.md, USER.md, IDENTITY.md, AGENTS.md, HEARTBEAT.md, TOOLS.md, memory/), chat session history, and installed skills.
-
-**Not backed up:** infrastructure config (nginx, systemd — reinstalled by `install-services.sh`), Docker images (pulled fresh on rebuild), API credentials (stay in `.env` on host).
-
-**Claude Code users:** use `/backup` and `/restore` — they handle the full workflow interactively.
-
-Backups are stored locally in `backups/<timestamp>/` (gitignored). Each backup includes a `backup-meta.json` with the timestamp, source instance, sandbox name, and what's included.
-
-### Manual backup/restore (on the host)
+The backup script snapshots workspace files, chat sessions, and installed skills. It does not back up credentials, Docker images, nginx, or systemd units.
 
 ```bash
-# Backup workspace + sessions + skills
-~/nemoclaw-cookbook/scripts/backup-full.sh backup <sandbox>
-
-# List available backups
+~/nemoclaw-cookbook/scripts/backup-full.sh backup my-assistant
 ~/nemoclaw-cookbook/scripts/backup-full.sh list
-
-# Restore latest backup (workspace + sessions in one step — use when gateway is not running)
-~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox>
-
-# Restore a specific backup
-~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> 2026-04-05_143022
-
-# Two-phase restore (use after rebuild when gateway is already running)
-~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' workspace   # phase 1: before nemoclaw tunnel start
-nemoclaw tunnel start                                                             # start services
-~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' sessions    # phase 2: after nemoclaw tunnel start
+~/nemoclaw-cookbook/scripts/backup-full.sh restore my-assistant
+~/nemoclaw-cookbook/scripts/backup-full.sh restore my-assistant '' workspace
+~/nemoclaw-cookbook/scripts/backup-full.sh restore my-assistant '' sessions
 ```
 
-Replace `<sandbox>` with your sandbox name (default: `my-assistant` — run `nemoclaw list` to check).
+After a rebuild, restore workspace before restarting tunnels, then restore sessions after channels reconnect.
 
-Backups on the host are stored at `~/.nemoclaw/backups/<timestamp>/`.
-
-**Session restore note:** After a rebuild, sessions must be restored **after** `nemoclaw tunnel start`. The gateway reads sessions.json from disk on each operation, so restoring after start overwrites whatever the gateway created during channel reconnect. Restoring before start would be overwritten when Telegram/Discord channels reconnect.
-
-## Updating OpenClaw
-
-**Claude Code users:** run `/upgrade` — it checks versions, backs up, rebuilds, restores, and re-authenticates automatically.
-
-### Manual fallback
-
-If you need to upgrade without Claude Code, run via `brev exec` or inside `brev shell`:
+## Upgrade Flow
 
 ```bash
-source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
+~/nemoclaw-cookbook/scripts/backup-full.sh backup my-assistant
 
-# 1. Back up
-~/nemoclaw-cookbook/scripts/backup-full.sh backup <sandbox>
-
-# 2. Pull latest upstream
-cd ~/nemoclaw-cookbook && git pull
-cd ~/NemoClaw && git pull --ff-only origin main
-cd ~/OpenShell && git pull --ff-only origin main && sh install.sh
-docker pull ghcr.io/nvidia/nemoclaw/sandbox-base:latest
-
-# 3. Validate patches BEFORE destroying (critical — if this fails, stop here)
-cd ~/NemoClaw && git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml
-~/nemoclaw-cookbook/scripts/apply-patches.sh ~/NemoClaw
-
-# 4. Destroy and rebuild
-nemoclaw tunnel stop 2>/dev/null
-nemoclaw <sandbox> destroy --yes
-nemoclaw onboard
-
-# 5. Restore workspace, start services, then restore sessions
-~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' workspace
-nemoclaw tunnel start
-~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' sessions
+cd ~/nemoclaw-cookbook
+git pull --ff-only
+./scripts/validate-patches.sh
+./setup.sh
 ```
 
-Replace `<sandbox>` with your sandbox name (run `nemoclaw list` to check).
-
-After rebuild:
-- Update the deployment manifest: `~/nemoclaw-cookbook/scripts/write-manifest.sh`
-- Re-authenticate: `codex login --device-auth` then launch `claude` (login forced on first launch)
-- Reinstall the Codex plugin inside Claude Code
-- Restart messaging: `nemoclaw tunnel start` (with tokens exported)
-
-## Claude Code Skills
-
-If you use [Claude Code](https://claude.ai/code) in this repo, these slash commands are available:
-
-| Skill | What it does |
-|-------|-------------|
-| `/setup` | End-to-end deployment — env config, prerequisites, deploy, auth |
-| `/upgrade` | Check versions, update host tooling, rebuild sandbox if needed. Also handles adding integrations (e.g., web search) — just update `~/.env` and run `/upgrade` |
-| `/backup` | Snapshot workspace, sessions, and skills to local `backups/` directory |
-| `/restore` | Push a local backup to a remote sandbox |
-| `/brev` | Run commands on the remote instance — inspect, manage, transfer files |
-| `/dev` | Debug NemoClaw/OpenClaw/OpenShell issues, read sandbox logs, test upstream branches |
-| `/refresh-patches` | Update patch fragments when upstream NemoClaw changes break them |
-
-Key concepts from the skills:
-- **`/upgrade` distinguishes host-only updates from sandbox rebuilds.** CLI updates (NemoClaw, OpenShell) don't need a rebuild — zero downtime. Image changes (new tools, new sandbox-base) require backup/destroy/rebuild/restore.
-- **Patches are validated before anything is destroyed.** If fragments fail against new upstream, `/upgrade` aborts with your sandbox intact.
-- **Upstream overlap is audited automatically.** `/upgrade` and `/refresh-patches` check if upstream now provides something we previously patched, so we can trim our fragments.
+`setup.sh` pulls upstream NemoClaw, runs upstream OpenShell installation, reapplies required cookbook overlays, and rebuilds the sandbox when the recorded NemoClaw commit changed.
 
 ## Diagnostics
 
 ```bash
-nemoclaw debug                        # Full diagnostic dump
-nemoclaw debug --quick                # Quick health check
-openshell doctor                      # Gateway-level diagnostics
-openshell status                      # Gateway connection status
-~/nemoclaw-cookbook/scripts/verify-deployment.sh   # Cookbook health check (gateway, sandbox, dashboard, tools, manifest)
+nemoclaw debug
+nemoclaw debug --quick
+openshell doctor
+openshell status
+~/nemoclaw-cookbook/scripts/verify-deployment.sh
 ```
-
-## Upgrading OpenClaw (experimental)
-
-The sandbox-base image bundles a specific OpenClaw version (pinned by NemoClaw). To use a different version, set `OPENCLAW_VERSION` in `~/.env`:
-
-```bash
-OPENCLAW_VERSION=<version-tag>
-```
-
-This rebuilds the sandbox-base image locally (~5-10 min first time, cached after). The entire base image is rebuilt so everything stays in sync — config, UI, plugins, auth. Run `setup.sh` or `/upgrade` afterward to apply.
-
-**You are responsible for testing your chosen version.** Not all OpenClaw versions are compatible with the current NemoClaw release — tool schemas, UI scopes, and plugin dependencies can change between versions. See BUILD.md and the `/dev` skill for diagnostic approaches. Remove the variable to revert to the upstream default.
 
 ## Troubleshooting
 
-### Docker-driver gateway blocked by UFW
-If onboarding fails with `Sandbox containers cannot reach the gateway at host.openshell.internal:8080`, retry once after restarting Docker:
-```bash
-sudo systemctl restart docker
-cd ~/nemoclaw-cookbook && ./setup.sh
-```
-
-If it repeats and UFW is active, follow the remediation printed by NemoClaw:
-```bash
-# Run the sudo ufw allow command printed by NemoClaw, then:
-cd ~/nemoclaw-cookbook && ./setup.sh
-```
-
 ### Web UI unreachable after rebuild
-The internal OpenShell port forward (18789) can die during sandbox destroy/rebuild. `verify-deployment.sh` detects and auto-restarts it, but if running manually:
+
 ```bash
 openshell forward start 18789 my-assistant --background
+nemoclaw my-assistant recover
 ```
 
-### `nemoclaw` crashes with MODULE_NOT_FOUND after `git pull`
-Upstream NemoClaw added new TypeScript modules but the CLI wasn't rebuilt. Run `setup.sh` (which handles the full rebuild) or:
+### `nemoclaw` crashes after upstream pull
+
 ```bash
-cd ~/NemoClaw && bash install.sh --non-interactive
+cd ~/NemoClaw
+bash install.sh --non-interactive
 ```
 
-### `git pull` fails in ~/NemoClaw with "local changes would be overwritten"
-Our patches modify the Dockerfile and policy YAML. Reset before pulling:
+### `git pull` in `~/NemoClaw` is blocked by local changes
+
 ```bash
-cd ~/NemoClaw && git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml && git pull
+cd ~/NemoClaw
+git checkout -- Dockerfile Dockerfile.base nemoclaw-blueprint/policies/openclaw-sandbox.yaml scripts/nemoclaw-start.sh
+git pull --ff-only
 ```
-`setup.sh` handles this automatically.
 
-### `setup.sh` ran but sandbox still has old tools/patches
-`nemoclaw onboard` reuses an existing healthy sandbox instead of rebuilding. If upstream or patches changed, `setup.sh` auto-detects the drift and forces a rebuild. You can also force it manually:
+### Setup reuses an old sandbox
+
 ```bash
 export NEMOCLAW_RECREATE_SANDBOX=1
-./setup.sh
+cd ~/nemoclaw-cookbook && ./setup.sh
 ```
 
-## How Security Works
+## Agent Workspace
 
-- API keys live on the host at `~/.nemoclaw/credentials.json` -- never exposed inside the sandbox
-- The sandbox hits `https://inference.local/v1` for inference; the host proxy injects credentials server-side
-- Filesystem: Landlock restricts writes to `/sandbox` and `/tmp`; system paths are read-only
-- Network: only policy-approved hosts/ports are reachable
-- Process: runs as unprivileged `sandbox` user with seccomp filtering
-- Claude Code's `--dangerously-skip-permissions` is safe here because OpenShell enforces all the above constraints
+OpenClaw workspace files live under:
 
-## Agent Workspace (inside the sandbox)
+```text
+/sandbox/.openclaw/workspace/
+```
 
-The OpenClaw agent's workspace lives at `/sandbox/.openclaw-data/workspace/`:
+Chat sessions live under OpenClaw's agent session directory. Use `scripts/backup-full.sh` rather than copying internal paths by hand when possible.
 
-| File | Purpose |
-|------|---------|
-| `SOUL.md` | Agent personality and behavioral guidelines |
-| `IDENTITY.md` | Agent name and identity (default: "Nemo") |
-| `USER.md` | Learned information about the user |
-| `AGENTS.md` | Agent operating manual — memory, heartbeats, group chat rules |
-| `TOOLS.md` | Environment-specific notes (SSH hosts, device names, etc.) |
-| `HEARTBEAT.md` | Periodic check tasks (empty = skip heartbeats) |
-| `memory/` | Daily notes (`YYYY-MM-DD.md`) and long-term `MEMORY.md` |
+## Copy Files To or From the Sandbox
 
-Chat session history lives at `/sandbox/.openclaw-data/agents/main/sessions/` (JSONL files).
-
-The backup script (`scripts/backup-full.sh`) backs up workspace files, session history, and installed skills.
-
-### Copying files to/from the sandbox
-
-The sandbox filesystem is isolated — you can't access it directly from the host. Use `openshell sandbox download/upload` to transfer via a staging directory, then clean up.
-
-**On the host** (or via `brev exec`):
+Download:
 
 ```bash
-# Download: sandbox → host
-openshell sandbox download my-assistant /sandbox/.openclaw-data/workspace/myfile.md /tmp/sandbox-staging/
-# Note: creates /tmp/sandbox-staging/myfile.md (wraps file in a directory)
-cp /tmp/sandbox-staging/myfile.md ./myfile.md
+openshell sandbox download my-assistant /sandbox/path/file.md /tmp/sandbox-staging/
+cp /tmp/sandbox-staging/file.md ./file.md
 rm -rf /tmp/sandbox-staging
-
-# Upload: host → sandbox
-openshell sandbox upload my-assistant ./myfile.md /sandbox/.openclaw-data/workspace/
 ```
 
-**From your local machine via Brev** (three hops — sandbox → host staging → local):
+Upload:
 
 ```bash
-# Download: sandbox → local
+openshell sandbox upload my-assistant ./file.md /sandbox/path/
+```
+
+From a local machine through Brev:
+
+```bash
 brev exec <instance> "openshell sandbox download my-assistant /sandbox/path/file.md /tmp/sandbox-staging/"
 brev copy <instance>:/tmp/sandbox-staging/file.md ./file.md
 brev exec <instance> "rm -rf /tmp/sandbox-staging"
-
-# Upload: local → sandbox
-brev copy ./file.md <instance>:/tmp/sandbox-staging/file.md
-brev exec <instance> "openshell sandbox upload my-assistant /tmp/sandbox-staging/file.md /sandbox/path/"
-brev exec <instance> "rm -rf /tmp/sandbox-staging"
 ```
-
-Always clean up `/tmp/sandbox-staging` after transfers.
-
-## Remote Automation (Brev CLI)
-
-When running on a Brev instance, you can manage everything from your local machine without an interactive shell.
-
-### Commands on the host (nemoclaw, openshell)
-
-Non-interactive SSH doesn't source `.bashrc`, so source nvm and set PATH explicitly:
-
-```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && nemoclaw list"
-```
-
-### Commands inside the sandbox
-
-The sandbox runs inside OpenShell's K3s cluster, not as a Docker container. Reach it via the OpenShell SSH proxy:
-
-```bash
-brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-  -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name my-assistant' \
-  sandbox@openshell-my-assistant '<command>'"
-```
-
-### Starting Telegram remotely
-
-```bash
-brev exec <instance> ". \$HOME/.nvm/nvm.sh && export PATH=\"\$HOME/.local/bin:\$PATH\" \
-  && NVIDIA_API_KEY=<key> TELEGRAM_BOT_TOKEN=<token> TELEGRAM_ALLOWED_IDS=<id> nemoclaw tunnel start"
-```
-
-### Accessing the Web UI
-
-**Secure Link** (if `TUNNEL_FQDN` is set in `.env`):
-```bash
-brev exec <instance> "cat ~/openclaw-tunnel-url.txt"   # Open this URL directly
-```
-
-**Port forward** (fallback):
-```bash
-brev port-forward <instance> -p 18789:18789   # Returns immediately (backgrounded SSH tunnel)
-brev exec <instance> "cat ~/openclaw-ui-url.txt"       # Use 127.0.0.1, not localhost
-```
-
-See also: `/brev` skill in Claude Code for the full reference.
 
 ## Key Files
 
 | Path | Purpose |
 |------|---------|
-| `.env` (repo) → `~/.env` (remote) | API keys and tokens — edit locally, copied to instance during deploy |
-| `~/openclaw-ui-url.txt` | Tokenized web UI URL (auto-generated by `setup.sh` / `save-ui-url.sh`) |
-| `~/.nemoclaw/credentials.json` | Inference provider credentials (host-side) |
+| `~/.env` | Host-side credentials and deployment options |
+| `~/openclaw-ui-url.txt` | Tokenized local Web UI URL |
+| `~/openclaw-tunnel-url.txt` | Tokenized Secure Link Web UI URL |
+| `~/openclaw-openai.env` | Optional `/v1/*` client settings |
+| `~/.nemoclaw/credentials.json` | Host-side inference credentials |
 | `~/.nemoclaw/sandboxes.json` | Sandbox registry |
-| `~/.nemoclaw/cookbook-deployment.json` | Deployment manifest — versions, tools, providers (written by setup/upgrade) |
-| `~/NemoClaw/Dockerfile` or `~/.nemoclaw/source/Dockerfile` | Customized sandbox image (includes Claude Code) |
-| `~/nemoclaw-cookbook/BUILD.md` | How to rebuild from scratch |
-
-## Shell Environment
-
-If commands aren't found:
-
-```bash
-source ~/.bashrc
-```
+| `~/.nemoclaw/cookbook-deployment.json` | Cookbook deployment manifest |
+| `~/NemoClaw/Dockerfile` | Upstream Dockerfile after any active cookbook overlays |
 
 ## Resources
 
-- NemoClaw Docs: https://docs.nvidia.com/nemoclaw/latest/
-- OpenShell Docs: https://docs.nvidia.com/openshell/latest/
+- NemoClaw docs: https://docs.nvidia.com/nemoclaw/latest/
+- OpenShell docs: https://docs.nvidia.com/openshell/latest/
 - NemoClaw GitHub: https://github.com/NVIDIA/NemoClaw
 - OpenShell GitHub: https://github.com/NVIDIA/OpenShell
-- NemoClaw Discord: https://discord.gg/XFpfPv9Uvx
