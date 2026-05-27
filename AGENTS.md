@@ -13,7 +13,7 @@ scripts/
   merge-policy.py     # YAML-aware policy fragment merger
   validate-patches.sh # Check fragments still work against upstream
   install-services.sh # Installs nginx, systemd units, terminal server (called by setup.sh)
-  save-ui-url.sh      # Extract gateway token → ~/openclaw-ui-url.txt + tunnel URL
+  save-ui-url.sh      # Uses upstream URL/token commands → UI URL and /v1 env files
   backup-full.sh      # Workspace, chat history, and skills backup/restore
 config/
   nginx.conf.template # Reverse proxy template — __COOKBOOK_DIR__ substituted at deploy
@@ -22,28 +22,28 @@ terminal-server/      # WebSocket-to-PTY bridge for browser terminal (optional)
 BUILD.md              # Step-by-step setup with explanations
 USE.md                # Day-to-day commands and features
 CONTRIBUTING.md       # Contribution guidelines
-.claude/skills/       # Claude Code skills (e.g. /setup, /upgrade, /backup, /restore, /brev)
 ```
 
 ## Getting started
 
-**If the user wants to deploy NemoClaw**, don't follow the README manually. Claude Code users should run `/setup` which handles everything interactively. Other agents: read BUILD.md and follow it step by step — the key is to create `~/.env` first, check what's configured, and only ask the user for credentials they need to provide.
+**If the user wants to deploy NemoClaw**, read BUILD.md and follow it step by step. The key is to create `~/.env` first, check what's configured, and only ask the user for credentials they need to provide.
 
-**To upgrade an existing deployment**, use `/upgrade`. It checks versions, shows what's changed, and handles the full backup → update → rebuild → restore cycle.
+**To upgrade an existing deployment**, back up first, pull the cookbook and upstream NemoClaw, validate patches, then run `setup.sh` again. It delegates OpenShell installation and sandbox-base resolution to upstream NemoClaw.
 
 ## Key docs (read these, don't duplicate them)
 
 - **BUILD.md** — full setup walkthrough, what each fragment does and why, environment variables, troubleshooting
-- **USE.md** — sandbox commands, authentication flow, messaging bridges, upgrading
+- **USE.md** — sandbox commands, messaging channels, access methods, upgrading
 - **CONTRIBUTING.md** — contribution standards
 
 ## Rules
 
 - **Keep fragments minimal.** Each fragment should add one logical thing. Defer to upstream when it provides something we previously patched.
 - **Don't modify upstream repos directly.** All customizations go through `patches/fragments/` and `scripts/apply-patches.sh`.
-- **Preserve fragment intent, not exact lines.** If upstream restructures, adapt anchors but keep the logical additions (see `/refresh-patches`).
+- **Preserve fragment intent, not exact lines.** If upstream restructures, adapt anchors but keep the logical additions.
 - **Don't add features beyond what's asked.** This is a cookbook — lean and opinionated.
-- **Secrets belong in `.env`, never committed.** `.gitignore` covers `.env`. **Never print, log, or display actual key/token values.** Only confirm SET / NOT SET. Use `sed 's/=.*/=***/'` when listing env vars.
-- **Test fragments round-trip:** reset target files, apply, verify — before committing. Test all three paths (all tools, no tools, partial).
+- **Secrets are non-printable runtime values.** `.env`, generated client env files, gateway tokens, and tokenized dashboard URLs must never be committed, printed, logged, pasted into chat, or displayed in shared terminals. Only confirm SET / NOT SET, pass tokenized URLs directly to browsers/clients, and use `sed 's/=.*/=***/'` or equivalent redaction when listing env vars.
+- **Test fragments round-trip:** reset target files, apply, verify before committing. Test no overlays, Tavily-only, OpenAI HTTP-only, and both overlays when patch logic changes.
 - **Never guess external values.** Commit SHAs, version numbers, API signatures, URLs — if you're not certain, look it up (`git ls-remote`, docs, web search). Fabricated-but-plausible values waste more time than admitting you need to check.
 - **Check upstream overlap before adding to fragments.** If upstream already provides something, don't duplicate it. Run `scripts/validate-patches.sh` to audit.
+- **Only update UPSTREAM.md after deployment verification.** Source review and patch application are useful, but the compatibility table records the last verified end-to-end deployment.

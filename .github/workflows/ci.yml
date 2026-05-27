@@ -77,6 +77,6 @@ jobs:
       - name: Apply cookbook patches
         run: |
           pip3 install --quiet 'pyyaml>=6,<7'
-          INSTALL_CLAUDE_CODE=true INSTALL_CODEX=true ./scripts/apply-patches.sh /tmp/NemoClaw
+          TAVILY_API_KEY=dummy NEMOCLAW_OPENAI_HTTP_ENABLED=1 ./scripts/apply-patches.sh /tmp/NemoClaw
       - name: Build Docker image
         run: docker build --tag nemoclaw-cookbook-test:ci /tmp/NemoClaw

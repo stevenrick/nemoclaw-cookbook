@@ -3,10 +3,10 @@
 # Run locally or in CI. Clones upstream into a temp dir — no side effects.
 #
 # Checks:
-#   1. Dockerfile anchor line exists in upstream
-#   2. Policy section anchors exist for all fragment targets
-#   3. Full apply-patches.sh runs without errors
-#   4. Upstream overlap audit — flags if upstream now provides something we add
+#   1. Current upstream clone is reachable
+#   2. The post-config Dockerfile anchor still exists
+#   3. Full apply-patches.sh runs with all cookbook integrations enabled
+#   4. Upstream overlap audit flags patches that may now be native
 #
 # Usage: ./scripts/validate-patches.sh
 set -euo pipefail
@@ -25,105 +25,68 @@ echo ""
 
 FAILED=0
 
-# ── Check 1: Dockerfile anchor ──────────────────────────────────────
-ANCHOR="# Set up blueprint for local resolution"
-echo "Checking Dockerfile anchor..."
-if grep -qF "$ANCHOR" Dockerfile; then
-  echo "  ✓ Anchor found: '$ANCHOR'"
-else
-  echo "  ✗ Anchor NOT found: '$ANCHOR'"
-  echo "    Update the ANCHOR in scripts/apply-patches.sh to match upstream."
-  FAILED=1
-fi
-
-# ── Check 2: Policy section anchors ─────────────────────────────────
+POST_CONFIG_ANCHOR="# Pin config hash at build time so the entrypoint can verify integrity."
 POLICY="nemoclaw-blueprint/policies/openclaw-sandbox.yaml"
-echo "Checking policy section anchors..."
-# Only check sections that our add_endpoints/add_binaries fragments target.
-# - github was moved to a preset in upstream #1583 (policy-core uses new_sections).
-# - claude_code was moved to permissive-only in the base/permissive split — our
-#   policy-claude-code fragment now uses new_sections instead of add_endpoints.
-# nvidia stays as the only base-policy anchor we still need, as a basic schema
-# sanity check — if it disappeared, the policy structure has changed dramatically.
-if grep -qE "^  nvidia:" "$POLICY" 2>/dev/null; then
-  echo "  ✓ Section: nvidia"
+
+echo "Checking Dockerfile post-config anchor..."
+if grep -qF "$POST_CONFIG_ANCHOR" Dockerfile; then
+  echo "  ✓ Anchor found: '$POST_CONFIG_ANCHOR'"
 else
-  echo "  ✗ Section NOT found: nvidia"
-  echo "    Upstream may have renamed or removed this section."
+  echo "  ✗ Anchor NOT found: '$POST_CONFIG_ANCHOR'"
+  echo "    Update scripts/apply-patches.sh and dockerfile-integrations."
   FAILED=1
 fi
 
-# ── Check 3: Full apply test ────────────────────────────────────────
-echo "Running full apply-patches.sh (all tools enabled)..."
-# Ensure PyYAML is available
+echo "Checking policy shape..."
+if grep -qE "^network_policies:" "$POLICY" 2>/dev/null; then
+  echo "  ✓ Policy has network_policies"
+else
+  echo "  ✗ Policy shape changed: network_policies not found"
+  FAILED=1
+fi
+
+echo "Running apply-patches.sh with all cookbook integrations enabled..."
 pip3 install --quiet 'pyyaml>=6,<7' 2>/dev/null || pip install --quiet 'pyyaml>=6,<7' 2>/dev/null || true
 
-if INSTALL_CLAUDE_CODE=true INSTALL_CODEX=true "$COOKBOOK_DIR/scripts/apply-patches.sh" "$TMPDIR/NemoClaw" 2>&1; then
+if TAVILY_API_KEY=dummy NEMOCLAW_OPENAI_HTTP_ENABLED=1 "$COOKBOOK_DIR/scripts/apply-patches.sh" "$TMPDIR/NemoClaw" 2>&1; then
   echo "  ✓ Fragments applied successfully"
 else
   echo "  ✗ Fragment application failed"
   FAILED=1
 fi
 
-# ── Check 4: Upstream overlap audit ─────────────────────────────────
-# Check if upstream now provides things we previously had to add.
-# This doesn't fail the build — it's informational.
 echo ""
 echo "Upstream overlap audit..."
-
-# Reset to clean upstream for comparison
-git checkout -- Dockerfile "$POLICY" 2>/dev/null
+git checkout -- Dockerfile "$POLICY" scripts/nemoclaw-start.sh 2>/dev/null || true
 
 OVERLAPS=0
 
-# Check if upstream now installs Claude Code in Dockerfile
-if grep -q "claude.ai/install.sh\|/usr/local/bin/claude" Dockerfile; then
-  echo "  ⚠ Upstream Dockerfile now references Claude Code — review dockerfile-claude-code fragment"
+if grep -Rqi "TAVILY_API_KEY\|api.tavily.com\|provider.*tavily" scripts src nemoclaw-blueprint docs 2>/dev/null; then
+  echo "  ⚠ Upstream now references Tavily — review Tavily Dockerfile/config/policy fragments"
   OVERLAPS=1
 fi
 
-# Check if upstream now installs Codex in Dockerfile
-if grep -q "@openai/codex\|/usr/local/bin/codex" Dockerfile; then
-  echo "  ⚠ Upstream Dockerfile now references Codex — review dockerfile-codex fragment"
+if grep -Rqi "NEMOCLAW_OPENAI_HTTP_ENABLED" scripts src nemoclaw-blueprint docs 2>/dev/null; then
+  echo "  ⚠ Upstream now exposes NEMOCLAW_OPENAI_HTTP_ENABLED — review OpenAI HTTP config patch"
   OVERLAPS=1
 fi
 
-# Check if upstream now has git HTTPS config in Dockerfile
-if grep -q "insteadOf.*git@github.com" Dockerfile; then
-  echo "  ⚠ Upstream Dockerfile now has git HTTPS config — review dockerfile-core fragment"
-  OVERLAPS=1
-fi
-
-# Check if upstream policy now has our auth endpoints
-if grep -q "platform.claude.com" "$POLICY"; then
-  echo "  ⚠ Upstream policy now has platform.claude.com — review policy-claude-code.yaml fragment"
-  OVERLAPS=1
-fi
-
-if grep -q "api.openai.com" "$POLICY"; then
-  echo "  ⚠ Upstream policy now has api.openai.com — review policy-codex.yaml fragment"
-  OVERLAPS=1
-fi
-
-if grep -q "codeload.github.com" "$POLICY"; then
-  echo "  ⚠ Upstream policy now has codeload.github.com — review policy-core.yaml fragment"
+if grep -Rqi '"chatCompletions".*"enabled"\|"responses".*"enabled"' scripts/generate-openclaw-config.py src docs 2>/dev/null; then
+  echo "  ⚠ Upstream appears to configure OpenAI-compatible HTTP endpoints — review OpenAI HTTP config patch"
   OVERLAPS=1
 fi
 
 if [ "$OVERLAPS" -eq 0 ]; then
-  echo "  ✓ No overlaps — all cookbook additions are still unique"
+  echo "  ✓ No obvious overlaps for remaining cookbook patches"
 else
   echo ""
-  echo "  Overlaps found. Upstream may now handle things we previously patched."
-  echo "  Review the flagged fragments and remove any that upstream now covers."
-  echo "  Run: claude /refresh-patches"
+  echo "  Overlaps found. Upstream may now handle things we still patch."
+  echo "  Review the flagged fragments and remove any patch that upstream has absorbed."
 fi
 
-# ── Summary ──────────────────────────────────────────────────────────
 echo ""
 if [ "$FAILED" -eq 1 ]; then
   echo "VALIDATION FAILED — fragments need updating."
-  echo "Run: claude /refresh-patches"
   exit 1
 else
   echo "All checks passed."
