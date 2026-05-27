@@ -53,8 +53,8 @@ jobs:
           ```
 
           **Next steps:**
-          1. Run `/refresh-patches` in Claude Code to update fragments
-          2. Or manually inspect `scripts/validate-patches.sh` output
+          1. Inspect `scripts/validate-patches.sh` output
+          2. Refresh or delete any cookbook fragment that upstream has absorbed
 
           *This issue was created automatically by the upstream-drift workflow.*
           EOF

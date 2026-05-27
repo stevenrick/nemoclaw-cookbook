@@ -5,7 +5,7 @@
 # lifecycle (upstream `nemoclaw` does; run `nemoclaw <sandbox> recover` if
 # the gateway is down).
 #
-# Called by setup.sh after NemoClaw is installed. Also called by /upgrade.
+# Called by setup.sh after NemoClaw is installed. Safe to run manually.
 #
 # Requires: sudo (for nginx and systemd unit installation).
 # Idempotent: safe to re-run.
@@ -82,7 +82,11 @@ if [ "$ENABLE_TERMINAL_SERVER" = "true" ]; then
   fi
 
   cd "$COOKBOOK_DIR/terminal-server"
-  npm install --quiet 2>/dev/null
+  if [ -f package-lock.json ]; then
+    npm ci --omit=dev --quiet 2>/dev/null
+  else
+    npm install --quiet 2>/dev/null
+  fi
   cd "$COOKBOOK_DIR"
 
   sudo cp "$COOKBOOK_DIR/config/systemd/nemoclaw-terminal.service" /etc/systemd/system/

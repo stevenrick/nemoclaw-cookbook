@@ -5,8 +5,8 @@
 #
 # Usage: save-ui-url.sh [sandbox-name]
 #
-# The token lives in /sandbox/.openclaw/openclaw.json inside the sandbox.
-# Falls back to parsing sandbox logs if the config download fails.
+# Prefer upstream `dashboard-url` / `gateway-token` commands. Falls back to
+# downloading openclaw.json or parsing sandbox logs for older/broken installs.
 set -uo pipefail
 
 export NVM_DIR="$HOME/.nvm"
@@ -27,13 +27,42 @@ if [ -z "$SANDBOX" ]; then
   exit 1
 fi
 
+last_nonempty_line() {
+  awk 'NF { line=$0 } END { if (line) print line }'
+}
+
+append_token_fragment() {
+  local url="$1"
+  local token="$2"
+
+  if [ -z "$url" ]; then
+    return 1
+  fi
+  if [ -z "$token" ] || printf '%s' "$url" | grep -q '#token='; then
+    printf '%s\n' "$url"
+    return 0
+  fi
+
+  if printf '%s' "$url" | grep -q '#'; then
+    printf '%s&token=%s\n' "$url" "$token"
+  else
+    printf '%s/#token=%s\n' "${url%/}" "$token"
+  fi
+}
+
 write_urls() {
   local token="$1"
-  echo "http://127.0.0.1:18789/#token=${token}" > "$HOME/openclaw-ui-url.txt"
+  local local_url="${2:-}"
+
+  if [ -z "$local_url" ]; then
+    local_url="http://127.0.0.1:18789/#token=${token}"
+  fi
+
+  echo "$local_url" > "$HOME/openclaw-ui-url.txt"
   echo "  ✓ Local UI URL saved to ~/openclaw-ui-url.txt"
 
   if [ -n "$TUNNEL_FQDN" ]; then
-    echo "https://${TUNNEL_FQDN}/#token=${token}" > "$HOME/openclaw-tunnel-url.txt"
+    append_token_fragment "https://${TUNNEL_FQDN}/" "$token" > "$HOME/openclaw-tunnel-url.txt"
     echo "  ✓ Tunnel UI URL saved to ~/openclaw-tunnel-url.txt"
   fi
 
@@ -77,22 +106,66 @@ write_urls() {
 TMPDIR_TOKEN=$(mktemp -d)
 trap 'rm -rf "$TMPDIR_TOKEN"' EXIT
 
-# Primary: download openclaw.json from sandbox and extract the token
+# Primary: use upstream commands.
+UPSTREAM_URL=$(nemoclaw "$SANDBOX" dashboard-url --quiet 2>/dev/null | last_nonempty_line)
+GW_TOKEN=$(nemoclaw "$SANDBOX" gateway-token --quiet 2>/dev/null | last_nonempty_line)
+
+if [ -n "$GW_TOKEN" ]; then
+  if [ -n "$UPSTREAM_URL" ]; then
+    LOCAL_URL=$(append_token_fragment "$UPSTREAM_URL" "$GW_TOKEN")
+  else
+    LOCAL_URL=""
+  fi
+  write_urls "$GW_TOKEN" "$LOCAL_URL"
+  exit 0
+fi
+
+# Fallback: download openclaw.json from sandbox and extract the token.
 if openshell sandbox download "$SANDBOX" /sandbox/.openclaw/openclaw.json "$TMPDIR_TOKEN" 2>/dev/null; then
-  GW_TOKEN=$(python3 -c "import json; print(json.load(open('$TMPDIR_TOKEN/openclaw.json')).get('gateway',{}).get('auth',{}).get('token',''))" 2>/dev/null)
+  GW_TOKEN=$(python3 - "$TMPDIR_TOKEN" <<'PY' 2>/dev/null
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+for path in root.rglob("openclaw.json"):
+    cfg = json.load(path.open())
+    token = cfg.get("gateway", {}).get("auth", {}).get("token", "")
+    if token:
+        print(token)
+        break
+PY
+)
   if [ -n "$GW_TOKEN" ]; then
-    write_urls "$GW_TOKEN"
+    if [ -n "$UPSTREAM_URL" ]; then
+      LOCAL_URL=$(append_token_fragment "$UPSTREAM_URL" "$GW_TOKEN")
+    else
+      LOCAL_URL=""
+    fi
+    write_urls "$GW_TOKEN" "$LOCAL_URL"
     exit 0
   fi
 fi
 
 # Fallback: parse sandbox logs for the gateway startup line
-GW_TOKEN=$(nemoclaw "$SANDBOX" logs 2>/dev/null | sed -n 's/.*Local UI: http:\/\/127\.0\.0\.1:18789\/#token=\([a-f0-9]*\).*/\1/p' | tail -1)
+GW_TOKEN=$(nemoclaw "$SANDBOX" logs 2>/dev/null | sed -n 's/.*Local UI: http:\/\/127\.0\.0\.1:18789\/#token=\([^[:space:]]*\).*/\1/p' | tail -1)
 if [ -n "$GW_TOKEN" ]; then
-  write_urls "$GW_TOKEN"
+  if [ -n "$UPSTREAM_URL" ]; then
+    LOCAL_URL=$(append_token_fragment "$UPSTREAM_URL" "$GW_TOKEN")
+  else
+    LOCAL_URL=""
+  fi
+  write_urls "$GW_TOKEN" "$LOCAL_URL"
   echo "  (token extracted from logs)"
   exit 0
 fi
 
-echo "  ⚠ Could not extract UI URL — retrieve manually: nemoclaw $SANDBOX logs | grep 'Local UI'"
+if [ -n "$UPSTREAM_URL" ]; then
+  echo "$UPSTREAM_URL" > "$HOME/openclaw-ui-url.txt"
+  echo "  ✓ Local UI URL saved to ~/openclaw-ui-url.txt"
+  echo "  ⚠ Gateway token was not available; ~/openclaw-openai.env was not written."
+  exit 0
+fi
+
+echo "  ⚠ Could not extract UI URL — retrieve manually: nemoclaw $SANDBOX dashboard-url --quiet"
 exit 1

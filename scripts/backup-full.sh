@@ -9,10 +9,11 @@
 set -euo pipefail
 
 BACKUP_BASE="${HOME}/.nemoclaw/backups"
-SESSIONS_PATH="/sandbox/.openclaw-data/agents/main/sessions"
-SKILLS_PATH="/sandbox/.openclaw-data/skills"
-# Writable workspace — NOT /sandbox/.openclaw/ which is immutable build-time config.
-WORKSPACE_PATH="/sandbox/.openclaw-data/workspace"
+SESSIONS_PATH="/sandbox/.openclaw/agents/main/sessions"
+SKILLS_PATH="/sandbox/.openclaw/skills"
+# Use the upstream logical paths. OpenClaw/OpenShell resolve these to the
+# mutable backing store where needed.
+WORKSPACE_PATH="/sandbox/.openclaw/workspace"
 
 # Additional workspace files not included in upstream backup-workspace.sh.
 # We download/upload these ourselves so backups are complete.

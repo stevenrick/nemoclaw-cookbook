@@ -4,8 +4,8 @@
 #
 # Usage: verify-deployment.sh [sandbox-name]
 #
-# Checks: sandbox ready, OpenClaw running, dashboard reachable, tools installed,
-# services running (if configured), workspace files present (if restored).
+# Checks: sandbox ready, OpenClaw running, dashboard reachable, services running
+# (if configured), workspace files present, and cookbook integrations.
 #
 # Exit code 0 = all checks passed, 1 = failures found.
 set -uo pipefail
@@ -85,45 +85,19 @@ else
   fail "OpenClaw not responding inside sandbox"
 fi
 
-# ── 5. Installed tools ───────────────────────────────────────────────
 # shellcheck source=/dev/null
 [ -f "$HOME/.env" ] && source "$HOME/.env"
-INSTALL_CLAUDE_CODE="${INSTALL_CLAUDE_CODE:-true}"
-INSTALL_CODEX="${INSTALL_CODEX:-true}"
 
-echo "Tools:"
-if [ "$INSTALL_CLAUDE_CODE" = "true" ]; then
-  CLAUDE_VER=$(sandbox_ssh 'claude --version 2>/dev/null' 2>/dev/null)
-  if [ -n "$CLAUDE_VER" ]; then
-    pass "Claude Code $CLAUDE_VER"
-  else
-    fail "Claude Code not found (INSTALL_CLAUDE_CODE=true but binary missing)"
-  fi
-fi
-
-if [ "$INSTALL_CODEX" = "true" ]; then
-  CODEX_VER=$(sandbox_ssh 'codex --version 2>/dev/null' 2>/dev/null | head -1)
-  if [ -n "$CODEX_VER" ]; then
-    pass "Codex $CODEX_VER"
-  else
-    fail "Codex not found (INSTALL_CODEX=true but binary missing)"
-  fi
-fi
-
-if [ "$INSTALL_CLAUDE_CODE" != "true" ] && [ "$INSTALL_CODEX" != "true" ]; then
-  pass "No tools configured (core-only deployment)"
-fi
-
-# ── 6. Workspace files ──────────────────────────────────────────────
+# ── 5. Workspace files ──────────────────────────────────────────────
 echo "Workspace:"
-SOUL_EXISTS=$(sandbox_ssh 'test -f /sandbox/.openclaw-data/workspace/SOUL.md && echo yes || echo no' 2>/dev/null)
+SOUL_EXISTS=$(sandbox_ssh 'test -f /sandbox/.openclaw/workspace/SOUL.md && echo yes || echo no' 2>/dev/null)
 if [ "$SOUL_EXISTS" = "yes" ]; then
   pass "SOUL.md present (workspace populated)"
 else
   warn "SOUL.md missing (fresh sandbox — no restore applied, or workspace empty)"
 fi
 
-# ── 7. Services ──────────────────────────────────────────────────────
+# ── 6. Services ──────────────────────────────────────────────────────
 echo "Services:"
 if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] || [ -n "${DISCORD_BOT_TOKEN:-}" ] || [ -n "${SLACK_BOT_TOKEN:-}" ]; then
   # Two separate things must be true for messaging to actually work:
@@ -139,7 +113,14 @@ if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] || [ -n "${DISCORD_BOT_TOKEN:-}" ] || [ -n "
   expected_providers=""
   [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && expected_providers="${expected_providers} ${SANDBOX}-telegram-bridge"
   [ -n "${DISCORD_BOT_TOKEN:-}" ] && expected_providers="${expected_providers} ${SANDBOX}-discord-bridge"
-  [ -n "${SLACK_BOT_TOKEN:-}" ] && expected_providers="${expected_providers} ${SANDBOX}-slack-bridge"
+  if [ -n "${SLACK_BOT_TOKEN:-}" ]; then
+    expected_providers="${expected_providers} ${SANDBOX}-slack-bridge"
+    if [ -n "${SLACK_APP_TOKEN:-}" ]; then
+      expected_providers="${expected_providers} ${SANDBOX}-slack-app"
+    else
+      warn "SLACK_BOT_TOKEN set but SLACK_APP_TOKEN missing; upstream Slack Socket Mode requires both"
+    fi
+  fi
   missing_providers=""
   for p in $expected_providers; do
     echo "$SANDBOX_PROVIDERS" | grep -q "$p" || missing_providers="${missing_providers} ${p}"
@@ -155,17 +136,22 @@ if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] || [ -n "${DISCORD_BOT_TOKEN:-}" ] || [ -n "
   else
     warn "Messaging providers exist but channels are not reporting configured (check 'openclaw channels list')"
   fi
-  # Check cloudflared tunnel (needed for Telegram webhooks)
-  if echo "$HOST_STATUS" | grep -qi "cloudflared"; then
-    pass "Cloudflare tunnel running"
+  # Cloudflare tunnel is optional host access, not the messaging channel
+  # registry itself. Only require it when the operator supplied a named tunnel.
+  if [ -n "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]; then
+    if echo "$HOST_STATUS" | grep -qi "cloudflared"; then
+      pass "Cloudflare tunnel running"
+    else
+      warn "CLOUDFLARE_TUNNEL_TOKEN set but cloudflared not detected (run 'nemoclaw tunnel start')"
+    fi
   else
-    warn "Cloudflare tunnel not detected (Telegram webhooks need it — run 'nemoclaw tunnel start')"
+    pass "No Cloudflare named tunnel configured"
   fi
 else
   pass "No messaging tokens configured (services not needed)"
 fi
 
-# ── 8. Infrastructure services ──────────────────────────────────────
+# ── 7. Infrastructure services ──────────────────────────────────────
 echo "Infrastructure:"
 # nginx
 if systemctl is-active --quiet nginx 2>/dev/null; then
@@ -225,7 +211,7 @@ if [ "$OPENAI_FLAG" = "1" ] || [ "$OPENAI_FLAG" = "true" ]; then
   fi
 fi
 
-# ── 9. Deployment manifest ──────────────────────────────────────────
+# ── 8. Deployment manifest ──────────────────────────────────────────
 echo "Manifest:"
 if [ -f "$HOME/.nemoclaw/cookbook-deployment.json" ]; then
   MANIFEST_NC=$(python3 -c "import json; print(json.load(open('$HOME/.nemoclaw/cookbook-deployment.json')).get('nemoclaw_commit',''))" 2>/dev/null)
@@ -239,7 +225,7 @@ else
   warn "No deployment manifest found (run write-manifest.sh)"
 fi
 
-# ── 10. Integration checks ───────────────────────────────────────────
+# ── 9. Integration checks ───────────────────────────────────────────
 # shellcheck source=/dev/null
 [ -f "$HOME/.env" ] && source "$HOME/.env"
 
