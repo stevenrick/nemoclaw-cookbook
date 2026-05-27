@@ -1,3 +1,0 @@
-# Install Codex CLI via npm
-RUN npm install -g @openai/codex@latest
-

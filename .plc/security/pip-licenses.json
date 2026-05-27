@@ -1,0 +1,13 @@
+{
+  "check": "license",
+  "missing_metadata": [],
+  "missing_metadata_count": 0,
+  "osrb_review": [],
+  "osrb_review_count": 0,
+  "packages": [],
+  "reason": "pip-licenses produced no rows",
+  "result": "skip",
+  "timestamp": "2026-05-27T05:20:04Z",
+  "tool": "pip-licenses",
+  "total_packages": 0
+}

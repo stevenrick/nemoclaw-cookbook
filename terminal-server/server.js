@@ -46,8 +46,14 @@ function loadExpectedToken() {
   );
   try {
     const url = fs.readFileSync(urlFile, "utf-8").trim();
-    const match = url.match(/#token=([0-9a-fA-F]+)/);
-    return match ? match[1] : null;
+    const parsed = new URL(url);
+    const hashParams = new URLSearchParams(parsed.hash.replace(/^#/, ""));
+    const hashToken = hashParams.get("token");
+    if (hashToken) return hashToken;
+    const queryToken = parsed.searchParams.get("token");
+    if (queryToken) return queryToken;
+    const fallback = url.match(/[?#&]token=([^&#\s]+)/);
+    return fallback ? decodeURIComponent(fallback[1]) : null;
   } catch {
     return null;
   }

@@ -1,198 +1,138 @@
 # NemoClaw Cookbook
 
-Deploy and customize [NemoClaw](https://github.com/NVIDIA/NemoClaw) in minutes. Agent skills (or do it yourself scripts) help handle setup, upgrades, and operations. This repo provides an opinionated patch overlay that accelerates how you explore and build with NemoClaw.
+Thin deployment and integration helpers for upstream [NemoClaw](https://github.com/NVIDIA/NemoClaw) and [OpenShell](https://github.com/NVIDIA/OpenShell).
 
-> **Note:** This is a community cookbook / reference implementation, not an official NVIDIA project. It is not endorsed by or supported by NVIDIA. For issues with NemoClaw or OpenShell themselves, please file issues in their respective repositories.
+> This is a community cookbook / reference implementation, not an official NVIDIA project. For NemoClaw or OpenShell issues, file upstream issues in those repositories.
 
-## Upstream-first
+## Upstream-First
 
-This cookbook accelerates deployment and customization of upstream [NemoClaw](https://github.com/NVIDIA/NemoClaw) and [OpenShell](https://github.com/NVIDIA/OpenShell) — it does not compete with them. Every fragment in `patches/fragments/` is a temporary scaffold: the goal is for each one to disappear as upstream absorbs the functionality, or as we discover it was never needed.
+This repo is not a fork and not a competing distribution. It exists to make NemoClaw easier to deploy while upstream support is still landing. Every patch should be temporary: when upstream absorbs a capability, this cookbook deletes its version.
 
-When we find a missing capability, we surface it upstream (issue, PR, or a cookbook patch that demonstrates the need). When upstream ships something we patched, we delete the patch. **The measure of success is the cookbook shrinking over time, not growing.** See [CONTRIBUTING.md § Working upstream](CONTRIBUTING.md#working-upstream) for the contribution workflow.
+The current upstream alignment notes are in [UPSTREAM.md](UPSTREAM.md).
+
+## Secret Hygiene
+
+Tokenized dashboard URLs, gateway tokens, API keys, and bot tokens are live credentials. The cookbook treats them as non-printable runtime values: scripts write them to files, pass them directly to browsers or clients, and redact them in status output. Do not paste tokenized URLs into issues, PRs, chat, shell transcripts, or shared logs.
 
 ## Prerequisites
 
-- A [Brev](https://brev.nvidia.com) instance with Docker
-- [Brev CLI](https://github.com/brevdev/brev-cli) installed and authenticated on your local machine
+- A [Brev](https://brev.nvidia.com) Ubuntu instance with Docker
+- [Brev CLI](https://github.com/brevdev/brev-cli) installed and authenticated locally
 - An NVIDIA API key from [https://build.nvidia.com/](https://build.nvidia.com/)
 
 ## Setup
 
-Both paths produce the same result. Choose whichever fits your workflow.
-
-### Option A: Let a coding agent do it
-
-Clone the repo locally and hand it off to your agent:
-
-```
-git clone https://github.com/stevenrick/nemoclaw-cookbook && cd nemoclaw-cookbook
-```
-
-**Claude Code:** run `/setup`. The agent will:
-1. Check prerequisites, port-forward, and verify Docker
-2. Check your `.env` in the cookbook repo (create from template if needed)
-3. Clone the cookbook on your Brev instance, copy `.env`, and run `setup.sh`
-4. Relay the Codex auth URL + code for you to enter in your browser
-5. Tell you to open `brev shell` for Claude Code TUI login + Codex plugin install (inside Claude Code)
-
-Your only involvement: provide API keys in `.env`, click auth URLs, and do one interactive Claude session.
-
-**Other agents:** point them at this repo and tell them to follow BUILD.md.
-
-### Option B: Do it yourself
-
-Everything runs on your Brev instance — you work from your local terminal.
+Create a local `.env`, copy it to the Brev instance, then run the cookbook setup script on the instance:
 
 ```bash
-# 1. Configure — create .env in the repo with your keys
 cp .env.example .env
-# Edit .env — NVIDIA_API_KEY is required, everything else is optional
+# Edit .env. NVIDIA_API_KEY is required.
 
-# 2. Deploy — clone on remote and run setup
 brev exec <instance> "git clone -b main https://github.com/stevenrick/nemoclaw-cookbook.git ~/nemoclaw-cookbook"
 brev copy .env <instance>:~/.env
 brev exec <instance> "cd ~/nemoclaw-cookbook && ./setup.sh"
-
-# 3. Connect — open the Web UI
-# If you set TUNNEL_FQDN in .env (Secure Link):
-brev exec <instance> "cat ~/openclaw-tunnel-url.txt"
-# Otherwise, use port-forward:
-brev port-forward <instance> -p 18789:18789
-brev exec <instance> "cat ~/openclaw-ui-url.txt"
-
-# 4–5. Authenticate coding agents (if installed — see INSTALL_CLAUDE_CODE / INSTALL_CODEX in .env)
-#
-# Examples use "my-assistant" — this is the default sandbox name.
-# If you chose a different name during setup, substitute it everywhere.
-# Run `nemoclaw list` to check.
-
-# Codex (works non-interactively)
-brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-  -o LogLevel=ERROR -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy \
-  --gateway-name nemoclaw --name my-assistant' sandbox@openshell-my-assistant \
-  'codex login --device-auth 2>&1'"
-# Opens a URL + code — enter in your browser
-
-# Claude Code + Codex plugin (interactive)
-brev shell <instance>
-nemoclaw my-assistant connect
-claude                # TUI — follow login prompts, then install Codex plugin inside Claude Code
 ```
 
-See [BUILD.md](BUILD.md) for the full step-by-step walkthrough with explanations.
+Connect after setup:
 
-## Access Your Deployment
+```bash
+# Secure Link, if TUNNEL_FQDN is set. Opens without printing the tokenized URL.
+URL=$(brev exec <instance> "sed -n '1p' ~/openclaw-tunnel-url.txt" | sed -n '/^https:/p' | head -1)
+open "$URL"
 
-| Endpoint | URL / Command | Purpose |
-|----------|--------------|---------|
-| **Web UI** | `https://<fqdn>/#token=<hex>` or `http://127.0.0.1:18789/#token=<hex>` | Dashboard — chat, skills, settings |
-| **Browser Terminal** | `https://<fqdn>/terminal#token=<hex>` or `http://127.0.0.1/terminal#token=<hex>` | Network policy approval |
-| **Telegram / Discord / Slack** | Your bot (set tokens in `.env`) | Messaging bridges |
-| **CLI** | `nemoclaw <sandbox> connect` → `openclaw tui` | Terminal UI |
+# Browser terminal on the same Secure Link.
+TERMINAL_URL=$(printf '%s' "$URL" | sed 's#/#/terminal#3')
+open "$TERMINAL_URL"
 
-Run `brev exec <instance> "cat ~/openclaw-tunnel-url.txt"` to get your tokenized URL. See [USE.md § Endpoints](USE.md#endpoints) for all access methods and troubleshooting.
+# Port-forward fallback
+brev port-forward <instance> -p 18789:18789
+URL=$(brev exec <instance> "sed -n '1p' ~/openclaw-ui-url.txt" | sed -n '/^http:/p' | head -1)
+open "$URL"
+```
+
+See [BUILD.md](BUILD.md) for the full setup walkthrough and [USE.md](USE.md) for day-to-day commands.
 
 ## What This Sets Up
 
-- **OpenShell** — sandboxed runtime with Landlock, seccomp, and network policy enforcement
-- **NemoClaw** — CLI stack running an OpenClaw AI assistant inside an OpenShell sandbox
-- **Claude Code** — installed via native installer (Codex plugin for Claude Code installed post-deploy)
-- **Codex CLI** — OpenAI's coding agent
-- **nginx reverse proxy** — port 80 → dashboard with Origin rewriting (no more `127.0.0.1 vs localhost` issues)
-- **systemd services** — nginx and terminal server auto-start on boot with crash recovery (the OpenShell gateway runs under upstream `nemoclaw`'s own lifecycle, not as a cookbook systemd unit)
-- **Browser terminal** — `openshell term` in the browser at `/terminal` for network policy management (optional)
-- **Secure Links** — set `TUNNEL_FQDN` in `.env` to access the Web UI via Brev Secure Link (no port-forward needed)
-- **Messaging bridges** — Telegram, Discord, and Slack (set tokens in `~/.env`)
-- **Web search** — Tavily (recommended) or Brave (add API key to `~/.env`)
-- **Inference** — NVIDIA Nemotron by default, configurable via `NEMOCLAW_MODEL` in `~/.env`
-- **OpenAI-compatible HTTP API** — opt-in (`NEMOCLAW_OPENAI_HTTP_ENABLED=1`); exposes `/v1/chat/completions`, `/v1/responses`, `/v1/models`, `/v1/embeddings` on the gateway with nginx CORS for browser clients
+- Upstream NemoClaw and OpenShell, using NemoClaw's own `scripts/install-openshell.sh`
+- An OpenClaw assistant inside an OpenShell sandbox
+- nginx reverse proxy for the dashboard, Secure Link origin handling, and optional `/v1/*` CORS
+- Optional browser terminal at `/terminal` for OpenShell policy approvals
+- Optional upstream messaging channels for Telegram, Discord, Slack, WeChat, and WhatsApp
+- Upstream sandbox resource profiles via `NEMOCLAW_RESOURCE_PROFILE`, `NEMOCLAW_CPU`, and `NEMOCLAW_RAM`
+- Web search:
+  - Brave Search is native upstream via `BRAVE_API_KEY`
+  - Tavily remains a small cookbook overlay via `TAVILY_API_KEY`
+- Optional OpenAI-compatible HTTP API on `/v1/*` via `NEMOCLAW_OPENAI_HTTP_ENABLED=1`
+- Backup, restore, validation, and deployment manifest scripts
 
 ## What the Patches Do
 
-Modular patch fragments in `patches/fragments/` customize upstream NemoClaw. Core fragments (git config) always apply. Claude Code and Codex are optional — set `INSTALL_CLAUDE_CODE=false` or `INSTALL_CODEX=false` in `.env` to exclude them.
+`scripts/apply-patches.sh` applies only environment-driven overlays:
 
-**Dockerfile** — adds Claude Code (native installer), Codex CLI, git HTTPS/SSL config, and correct sandbox user ownership
+| Overlay | Trigger | Purpose |
+|---------|---------|---------|
+| `patches/fragments/dockerfile-integrations` | `TAVILY_API_KEY` or `NEMOCLAW_OPENAI_HTTP_ENABLED=1` | Deep-merge cookbook-only OpenClaw config into `openclaw.json` before the upstream integrity hash is pinned |
+| `patches/fragments/policy-tavily.yaml` | `TAVILY_API_KEY` | Allow Tavily API egress |
+| `scripts/nemoclaw-start.sh` loader patch | `TAVILY_API_KEY` | Source `/sandbox/.env` so Tavily can read `process.env.TAVILY_API_KEY` |
 
-**Sandbox policy** — adds network endpoints for:
-- Claude Code SSO (`platform.claude.com`, `downloads.claude.ai`, `storage.googleapis.com`)
-- OpenAI/Codex (`api.openai.com`, `auth.openai.com`, `chatgpt.com`, `ab.chatgpt.com`)
-- GitHub access for Claude/Codex/Node binaries (`codeload.github.com`)
+There are no longer cookbook patches for sandbox-installed coding-agent tools, OpenShell version pinning, OpenClaw version overrides, or generic git/plugin setup. Those experiments were removed or delegated to upstream.
 
 ## When Upstream Changes
 
-See [UPSTREAM.md](UPSTREAM.md) for the upstream versions this cookbook was last validated against.
-
-Patch fragments in `patches/fragments/` are assembled and applied by `scripts/apply-patches.sh`, which handles minor upstream drift automatically. If patches break after an upstream NemoClaw update:
+Validate against current upstream before rebuilding a live sandbox:
 
 ```bash
-claude /refresh-patches    # Claude Code walks you through regenerating patches
+./scripts/validate-patches.sh
 ```
 
-Or see [BUILD.md § Refreshing Patches](BUILD.md#refreshing-patches-after-upstream-updates) for the manual process.
+If validation fails, inspect what changed upstream and update the smallest affected overlay. If upstream now provides the capability, delete the cookbook overlay instead of carrying it forward. Update [UPSTREAM.md](UPSTREAM.md) only after a revised cookbook has been verified with an end-to-end deployment.
 
-## Docs
-
-- [BUILD.md](BUILD.md) — step-by-step from-scratch setup with explanations
-- [USE.md](USE.md) — day-to-day reference for all commands and features
-
-## Backup & Restore
-
-**Claude Code users:** run `/backup` to snapshot workspace, chat history, and skills to your local machine. Run `/restore` to push a backup to any NemoClaw instance.
-
-**Manual (on the host):**
+## Backup and Restore
 
 ```bash
-~/nemoclaw-cookbook/scripts/backup-full.sh backup <sandbox>                  # back up
-~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox>                 # restore all (gateway not running)
-~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' workspace    # restore workspace only
-~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' sessions     # restore sessions only (after start)
-~/nemoclaw-cookbook/scripts/backup-full.sh list                              # list backups
+~/nemoclaw-cookbook/scripts/backup-full.sh backup <sandbox>
+~/nemoclaw-cookbook/scripts/backup-full.sh list
+~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox>
+~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' workspace
+~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' sessions
 ```
 
-Replace `<sandbox>` with your sandbox name (default: `my-assistant`).
+Replace `<sandbox>` with your sandbox name, usually `my-assistant`.
 
-Local backups are stored in `backups/` (gitignored). See [USE.md § Backup & Restore](USE.md#backup--restore) for details.
+## Upgrading
 
-## Upgrading & Rebuilding
+The safe manual flow is:
 
-**Claude Code users:** run `/upgrade` — it checks what's changed, backs up, applies patches safely, rebuilds only if needed, and restores. Host-only updates (CLI tools) don't require a rebuild.
+```bash
+~/nemoclaw-cookbook/scripts/backup-full.sh backup <sandbox>
+cd ~/nemoclaw-cookbook && git pull --ff-only
+./scripts/validate-patches.sh
+cd ~/nemoclaw-cookbook && ./setup.sh
+```
 
-**Manual rebuild** — see [USE.md § Updating OpenClaw](USE.md#updating-openclaw) for the full steps. The key safety rule: always validate patches apply *before* destroying the sandbox.
+`setup.sh` updates upstream NemoClaw, lets upstream install the matching OpenShell version, reapplies only required cookbook overlays, and forces a sandbox rebuild when the recorded NemoClaw commit changed.
 
 ## File Structure
 
-```
-.env.example          # Template for API keys and tokens
-setup.sh              # Automated setup script
-patches/
-  fragments/          # Modular patch fragments (Dockerfile, policy, etc.)
+```text
+.env.example          # Template for credentials and optional integrations
+setup.sh              # Automated deployment script
+patches/fragments/    # Small temporary overlays
 scripts/
-  validate-patches.sh # Check patches still apply against upstream
-  backup-full.sh      # Workspace, chat history, and skills backup/restore
-BUILD.md              # Detailed setup walkthrough
-USE.md                # Usage reference
-backups/              # Local backups (gitignored)
+  apply-patches.sh    # Applies only needed overlays to upstream NemoClaw
+  validate-patches.sh # Tests overlays against current upstream
+  install-services.sh # nginx and optional browser-terminal services
+  save-ui-url.sh      # Uses upstream URL/token commands; writes UI and /v1 client env files
+  backup-full.sh      # Workspace, sessions, and skills backup/restore
+BUILD.md              # From-scratch setup details
+USE.md                # Day-to-day reference
+UPSTREAM.md           # Current upstream compatibility and removal plan
 ```
-
-## Claude Code Skills
-
-If you use [Claude Code](https://claude.ai/code) in this repo, these slash commands are available:
-
-| Skill | What it does |
-|-------|-------------|
-| `/setup` | End-to-end deployment — env config, prerequisites, deploy, auth |
-| `/upgrade` | Check versions, update, rebuild if needed, backup/restore |
-| `/backup` | Snapshot workspace, sessions, and skills to local `backups/` |
-| `/restore` | Push a local backup to a remote sandbox |
-| `/brev` | Run commands on the remote instance |
-| `/dev` | Debug issues across the NemoClaw/OpenClaw/OpenShell stack |
-| `/refresh-patches` | Update patch fragments when upstream changes break them |
-
-See [USE.md § Claude Code Skills](USE.md#claude-code-skills) for details.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Start with [CONTRIBUTING.md](CONTRIBUTING.md). The short version: search upstream first, keep patches narrow, document the removal condition, and delete cookbook code when upstream closes the gap.
 
 ## License
 

@@ -1,591 +1,319 @@
-# BUILD: NemoClaw + OpenShell from Scratch
+# BUILD: NemoClaw + OpenShell From Scratch
 
-Reproducible steps to go from a clean Ubuntu machine to a fully operational NemoClaw sandbox with OpenClaw AI assistant, Claude Code, and messaging integrations.
-
-> **Note:** NVIDIA provides a quick-start installer (`curl -fsSL https://www.nvidia.com/nemoclaw.sh | bash`) that walks you through setup interactively. This cookbook's `setup.sh` does the same thing non-interactively (using env vars instead of prompts), then applies patches to add Claude Code, Codex, and extended network policies. If you already ran the interactive installer, you have a working NemoClaw — this cookbook adds the coding agent tooling on top.
+This walkthrough builds a NemoClaw sandbox using upstream NemoClaw as the owner of OpenShell installation, sandbox-base resolution, OpenClaw versioning, inference setup, and native Brave Search. The cookbook adds only the temporary overlays listed in [UPSTREAM.md](UPSTREAM.md).
 
 ## Prerequisites
 
-- A [Brev](https://brev.nvidia.com) instance (Ubuntu 22.04+, Docker pre-installed)
-- [Brev CLI](https://github.com/brevdev/brev-cli) installed and authenticated locally
-- An NVIDIA API key from https://integrate.api.nvidia.com
-- (Optional) Messaging tokens: Telegram (@BotFather), Discord, or Slack
+- A Brev Ubuntu instance with Docker
+- Brev CLI installed and authenticated locally
+- `NVIDIA_API_KEY` from https://build.nvidia.com/
+- Optional tokens or keys for Telegram, Discord, Slack, Brave, Tavily, or the OpenAI-compatible HTTP API
 
-## Step 1: Configure and deploy the cookbook
+## Step 1: Configure `.env`
 
-Create `.env` in the cookbook repo locally (it's gitignored):
+Create `.env` locally:
 
 ```bash
 cp .env.example .env
-# Edit .env — NVIDIA_API_KEY is required, everything else is optional
+# Edit .env. NVIDIA_API_KEY is required.
 ```
 
-See `.env.example` for all available options (inference providers, messaging tokens, integrations, policy presets).
-
-Clone the cookbook on the remote instance and copy your `.env`:
+Copy it to the Brev host:
 
 ```bash
-brev exec <instance> "git clone https://github.com/stevenrick/nemoclaw-cookbook.git ~/nemoclaw-cookbook"
 brev copy .env <instance>:~/.env
 ```
 
-## Step 2: Clone repos
+Never print real values from `.env`, tokenized dashboard URLs, gateway tokens, or generated client env files. Treat tokenized URLs as live credentials. When inspecting env files, mask values:
+
+```bash
+sed 's/=.*/=***/' ~/.env
+```
+
+When opening the dashboard from your laptop, pass the saved URL directly to the browser instead of printing it into a shell transcript.
+
+## Step 2: Clone the Cookbook on the Host
+
+```bash
+brev exec <instance> "git clone https://github.com/stevenrick/nemoclaw-cookbook.git ~/nemoclaw-cookbook"
+```
+
+If it already exists:
+
+```bash
+brev exec <instance> "cd ~/nemoclaw-cookbook && git pull --ff-only"
+```
+
+## Step 3: Run Setup
+
+```bash
+brev exec <instance> "cd ~/nemoclaw-cookbook && ./setup.sh"
+```
+
+`setup.sh` performs the deployment in this order:
+
+1. Clone or update upstream `~/NemoClaw`.
+2. Run upstream `~/NemoClaw/scripts/install-openshell.sh`.
+3. Reset upstream files that cookbook overlays may touch.
+4. Apply only the cookbook overlays required by your `.env`.
+5. Run upstream `bash install.sh --non-interactive`.
+6. Install host-side nginx and the optional browser terminal service.
+7. Save tokenized UI URLs and optional OpenAI-compatible client env.
+8. Register and inject cookbook-only integration secrets when needed.
+9. Start an optional Cloudflare named tunnel only when `CLOUDFLARE_TUNNEL_TOKEN` is set.
+10. Write the deployment manifest and run the cookbook verifier.
+
+## Manual Equivalent
+
+For debugging, the underlying host-side flow is:
 
 ```bash
 cd ~
-git clone https://github.com/NVIDIA/OpenShell
-git clone https://github.com/NVIDIA/NemoClaw
-```
-
-## Step 3: Install OpenShell
-
-NemoClaw's `blueprint.yaml` declares the supported OpenShell version range via `max_openshell_version`. OpenShell's `install.sh` defaults to the latest release, which may be above NemoClaw's validated max and fail the onboard preflight. `setup.sh` derives the install version from the blueprint; manual invocation should do the same:
-
-```bash
-cd ~/OpenShell
-OPENSHELL_VERSION=v$(awk -F'"' '/^max_openshell_version:/{print $2; exit}' ~/NemoClaw/nemoclaw-blueprint/blueprint.yaml) sh install.sh
-export PATH="$HOME/.local/bin:$PATH"
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-openshell --version
-```
-
-To override (e.g., to test a specific OpenShell release): set `OPENSHELL_VERSION` in `.env` before running `setup.sh`.
-
-## Step 4: Pull latest sandbox base image
-
-Ensures you get the latest OpenClaw version, not whatever was cached.
-
-```bash
-docker pull ghcr.io/nvidia/nemoclaw/sandbox-base:latest
-```
-
-## Step 5: Bake Claude Code into the sandbox image (optional)
-
-The cookbook uses modular patch fragments in `patches/fragments/` instead of monolithic patch files. The `scripts/apply-patches.sh` script reads `INSTALL_CLAUDE_CODE` and `INSTALL_CODEX` from `.env` (both default to `true`) and applies only the relevant fragments:
-
-| Fragment | Applied when | What it does |
-|----------|-------------|--------------|
-| `dockerfile-core` | Always | Git HTTPS/SSL config for sandbox |
-| `dockerfile-claude-code` | `INSTALL_CLAUDE_CODE=true` | Claude Code binary install + sandbox symlink |
-| `dockerfile-codex` | `INSTALL_CODEX=true` | Codex CLI via npm |
-| `policy-core.yaml` | Always | GitHub policy extensions (codeload.github.com) |
-| `policy-claude-code.yaml` | `INSTALL_CLAUDE_CODE=true` | Claude auth endpoints, claude binary in policies |
-| `policy-codex.yaml` | `INSTALL_CODEX=true` | OpenAI policy block, codex/node binaries |
-
-To apply:
-
-```bash
-scripts/apply-patches.sh ~/NemoClaw
-```
-
-To skip Codex (for example), set `INSTALL_CODEX=false` in `.env` before running the script.
-
-The Dockerfile fragments add git HTTPS config (so plugin/marketplace cloning works inside the sandbox), the Claude Code binary install (resolving the symlink chain from `/root/.local/` to `/usr/local/bin/`), and the Codex CLI. The policy fragments open the network endpoints needed for Claude Code's login flow, OpenAI auth, and GitHub release downloads — without them you'd need to manually approve endpoints in `openshell term`.
-
-All changes survive future rebuilds.
-
-### OpenClaw version override (experimental)
-
-The sandbox-base image from GHCR bundles a specific OpenClaw version (pinned by NemoClaw). If you need a different version (e.g. for bug fixes), set `OPENCLAW_VERSION` in `.env`:
-
-```
-OPENCLAW_VERSION=<version-tag>
-```
-
-When set, `apply-patches.sh` rebuilds the sandbox-base image locally with the specified version. This adds ~5-10 minutes to the first build (Docker caches subsequent runs). Everything stays in sync — config, UI, plugins, auth model — because the entire base image is rebuilt, not just the OpenClaw package.
-
-If not set, the upstream GHCR sandbox-base image is used unchanged.
-
-**Important:** Not all OpenClaw versions are compatible with every NemoClaw release. Version coupling between OpenClaw, its `pi-agent-core` dependency, and NemoClaw's plugin system means some combinations will break tool schemas, UI scopes, or plugin loading. You are responsible for validating your chosen version. See the `/dev` skill for diagnostic approaches. Check available versions at [github.com/openclaw/openclaw/releases](https://github.com/openclaw/openclaw/releases).
-
-## Step 6: Install NemoClaw
-
-```bash
+git clone https://github.com/NVIDIA/NemoClaw || true
 cd ~/NemoClaw
+git pull --ff-only
+
 source ~/.env
 export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 
+bash scripts/install-openshell.sh
+~/nemoclaw-cookbook/scripts/apply-patches.sh ~/NemoClaw
 bash install.sh --non-interactive
+~/nemoclaw-cookbook/scripts/install-services.sh
+~/nemoclaw-cookbook/scripts/save-ui-url.sh
+~/nemoclaw-cookbook/scripts/write-manifest.sh
+~/nemoclaw-cookbook/scripts/verify-deployment.sh
 ```
 
-Takes ~5 minutes. Installs Node.js via nvm, builds NemoClaw, creates the sandbox, configures inference and policies.
-
-Reload your shell after:
-
-```bash
-source ~/.bashrc
-```
-
-## Step 7: Verify
-
-> **Sandbox name:** Examples use `my-assistant`, the default. Run `nemoclaw list` to see your actual sandbox name and substitute it in all commands below.
-
-```bash
-openshell --version
-openshell status
-nemoclaw --version
-nemoclaw list
-nemoclaw my-assistant status
-openshell inference get
-```
-
-## Step 8: Authenticate Codex and Claude Code (if installed in Step 5)
-
-### Codex (can be scripted)
-
-Codex uses device-code auth that works non-interactively:
-
-```bash
-SANDBOX_SSH="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-  -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name my-assistant' \
-  sandbox@openshell-my-assistant"
-
-brev exec <instance> "$SANDBOX_SSH 'codex login --device-auth 2>&1'"
-```
-
-This prints a URL and a one-time code — open the URL in your browser and enter the code. The command prints "login successful" when done.
-
-### Claude Code + Codex plugin for Claude Code (interactive)
-
-Claude Code uses a full TUI for auth, and the Codex plugin is installed inside Claude Code's TUI. Do both in one interactive session:
-
-```bash
-brev shell <instance>
-nemoclaw my-assistant connect
-claude
-```
-
-Inside Claude Code's TUI:
-1. Follow the login prompts (it gives you a URL to open in your browser)
-2. Once logged in, install the Codex plugin for Claude Code:
-   ```
-   /plugin marketplace add openai/codex-plugin-cc
-   /plugin install codex@openai-codex
-   /reload-plugins
-   /codex:setup
-   ```
-
-SSO tokens persist across restarts but not sandbox rebuilds. The plugin must also be reinstalled after each rebuild.
-
-Once installed, Claude Code gains these Codex slash commands:
-- `/codex:review` — code review
-- `/codex:adversarial-review` — adversarial code review
-- `/codex:rescue` — rescue stuck tasks
-
-See https://github.com/openai/codex-plugin-cc for the full command list.
-
-## Step 9: Set up Telegram (optional)
-
-If you didn't add tokens in Step 1:
-
-1. Message **@BotFather** in Telegram, send `/newbot`, get the token
-2. Message **@userinfobot** to get your chat ID
-3. Add to `.env` in the cookbook repo (and re-copy to instance: `brev copy .env <instance>:~/.env`):
-   ```
-   TELEGRAM_BOT_TOKEN=your-bot-token
-   TELEGRAM_ALLOWED_IDS=your-chat-id
-   ```
-
-Start the bridge. `nemoclaw tunnel start` reads env vars directly from the process environment (no dotenv/file loading):
-
-```bash
-# If ~/.env exists and vars are there:
-source ~/.env
-export NVIDIA_API_KEY TELEGRAM_BOT_TOKEN TELEGRAM_ALLOWED_IDS
-nemoclaw tunnel start
-
-# Or pass inline (works without any .env file):
-NVIDIA_API_KEY=<key> TELEGRAM_BOT_TOKEN=<token> TELEGRAM_ALLOWED_IDS=<id> nemoclaw tunnel start
-```
-
-This starts a Cloudflare quick tunnel for the Telegram webhook URL. Note: `nemoclaw tunnel start` only manages the tunnel — the gateway and sandbox run continuously under systemd.
-
-## Step 9b: Infrastructure Services
-
-`setup.sh` automatically calls `scripts/install-services.sh` which deploys:
-
-| Component | Purpose | Managed by |
-|-----------|---------|-----------|
-| **nginx** | Reverse proxy: port 80 → dashboard (18789), Origin header rewriting for Secure Link | systemd |
-| **nemoclaw-terminal.service** | Browser terminal server at `/terminal` (optional) | systemd |
-
-These services start on boot. The script is idempotent — safe to re-run after config changes.
-
-The OpenShell gateway itself is *not* under cookbook systemd management. It runs as a host process under upstream `nemoclaw`'s own lifecycle. If it goes down after a host reboot, run `nemoclaw <sandbox> recover` to bring it back. `install-services.sh` removes any `openshell-gateway.service` unit it finds so the host converges on this model.
-
-To manage manually: `systemctl status|restart|stop <service-name>` for nginx and the terminal server. See USE.md § System Services for full commands.
-
-## Step 10: Tokenized UI URL
-
-`setup.sh` extracts the gateway auth token and writes:
-
-- **`~/openclaw-ui-url.txt`** — local access: `http://127.0.0.1:18789/#token=<hex>`
-- **`~/openclaw-tunnel-url.txt`** — Secure Link access (if `TUNNEL_FQDN` set): `https://<fqdn>/#token=<hex>`
-
-Both use the same token. It changes on every sandbox rebuild.
-
-If files are missing, regenerate: `~/nemoclaw-cookbook/scripts/save-ui-url.sh`
+Prefer `setup.sh` for normal use because it handles failed onboard sessions, detects upstream drift, passes the current upstream environment surface through to onboarding, and manages post-deploy ordering.
 
 ## Accessing the Web UI
 
-**Option A: Secure Link (recommended)** — no port forwarding needed:
-
-1. Go to Brev Settings → Secure Links → create a link for port 80 on your instance
-2. Set `TUNNEL_FQDN=your-link.brevlab.com` in `~/.env`
-3. Run `setup.sh` (or re-run `scripts/install-services.sh` + `scripts/save-ui-url.sh`)
-4. Open the URL from `~/openclaw-tunnel-url.txt` in your browser
-
-The nginx reverse proxy rewrites the Origin header so the sandbox CORS check passes regardless of your browser's domain.
-
-**Option B: Port forward (local-only fallback)**:
+Secure Link:
 
 ```bash
-brev port-forward <instance-name> -p 18789:18789
+URL=$(brev exec <instance> "sed -n '1p' ~/openclaw-tunnel-url.txt" | sed -n '/^https:/p' | head -1)
+open "$URL"
 ```
 
-Then open `http://127.0.0.1:18789/#token=<hex>` from `~/openclaw-ui-url.txt`. Use `127.0.0.1`, not `localhost`.
+Port-forward fallback:
 
-## Adding Integrations
+```bash
+brev port-forward <instance> -p 18789:18789
+URL=$(brev exec <instance> "sed -n '1p' ~/openclaw-ui-url.txt" | sed -n '/^http:/p' | head -1)
+open "$URL"
+```
 
-The cookbook supports optional integrations driven by `.env` flags. When a key or flag is present, `setup.sh` registers providers, applies policy fragments, and merges config into `openclaw.json` at build time.
+Browser terminal on the same Secure Link:
 
-### Web Search (Tavily or Brave)
+```bash
+TERMINAL_URL=$(printf '%s' "$URL" | sed 's#/#/terminal#3')
+open "$TERMINAL_URL"
+```
 
-Gives the agent web search capabilities. Tavily is recommended.
+The token changes when the sandbox is rebuilt. Avoid `cat` for these files in shared logs; use it only in a private terminal when you intentionally need to inspect the URL.
 
-1. Get an API key:
-   - **Tavily** (recommended): https://app.tavily.com/sign-in
-   - **Brave**: https://brave.com/search/api/
-2. Add to `~/.env`:
-   ```bash
-   TAVILY_API_KEY=tvly-your-key-here
-   # OR
-   BRAVE_API_KEY=BSA-your-key-here
-   ```
-3. Fresh install: `./setup.sh` handles everything.
-4. Existing sandbox: run `/upgrade` — it backs up, rebuilds, and restores.
+## Optional Integrations
 
-If both keys are set, Tavily takes priority.
+### Messaging
 
-### OpenAI-compatible HTTP API
+Set one or more of these in `~/.env` before setup:
 
-Set `NEMOCLAW_OPENAI_HTTP_ENABLED=1` in `~/.env` and redeploy to enable an OpenAI-compatible inference endpoint on the gateway. After rebuild, four paths become available:
+```bash
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_ALLOWED_IDS=...
+TELEGRAM_REQUIRE_MENTION=1
+DISCORD_BOT_TOKEN=...
+DISCORD_SERVER_ID=...
+DISCORD_ALLOWED_IDS=...
+DISCORD_REQUIRE_MENTION=1
+SLACK_BOT_TOKEN=...
+SLACK_APP_TOKEN=...
+SLACK_ALLOWED_USERS=...
+SLACK_ALLOWED_CHANNELS=...
+```
+
+`setup.sh` exports these for upstream onboard. Upstream NemoClaw owns channel credential validation, required policy preset merging, and rebuild-time channel configuration.
+
+Slack Socket Mode requires both `SLACK_BOT_TOKEN` (`xoxb-...`) and `SLACK_APP_TOKEN` (`xapp-...`). Upstream ignores malformed messaging tokens, so placeholder values do not enable a channel.
+
+### Resource Profiles
+
+Upstream NemoClaw exposes sandbox CPU/RAM profiles:
+
+```bash
+nemoclaw resources
+```
+
+Set one before setup when you want a scripted resource choice:
+
+```bash
+NEMOCLAW_RESOURCE_PROFILE=developer
+```
+
+Use `NEMOCLAW_CPU` or `NEMOCLAW_RAM` only when you need a direct override rather than a named upstream profile.
+
+### Web Search
+
+Brave Search is native upstream:
+
+```bash
+BRAVE_API_KEY=BSA-...
+```
+
+Tavily is cookbook-only until NemoClaw exposes it natively:
+
+```bash
+TAVILY_API_KEY=tvly-...
+```
+
+When Tavily is set, the cookbook:
+
+- enables the Tavily OpenClaw plugin in `openclaw.json`
+- adds Tavily egress policy
+- registers a generic OpenShell provider
+- writes `TAVILY_API_KEY` to `/sandbox/.env`
+- bounces the sandbox so the patched entrypoint sources that env file
+
+### OpenAI-Compatible HTTP API
+
+Set:
+
+```bash
+NEMOCLAW_OPENAI_HTTP_ENABLED=1
+```
+
+After deploy, client settings are written to:
+
+```bash
+source ~/openclaw-openai.env
+```
+
+The gateway exposes:
 
 - `POST /v1/chat/completions`
 - `POST /v1/responses`
 - `GET /v1/models`
 - `POST /v1/embeddings`
 
-The gateway token and base URL are written to `~/openclaw-openai.env` at the end of deploy. From the Brev host:
+By default, nginx allows `/v1/*` only from loopback. Use an SSH port-forward for programmatic clients:
 
 ```bash
-source ~/openclaw-openai.env
-python -c "from openai import OpenAI; print([m.id for m in OpenAI().models.list().data])"
+ssh -L 8080:127.0.0.1:80 <brev-host>
+OPENAI_BASE_URL=http://127.0.0.1:8080/v1 OPENAI_API_KEY=<gateway-token> python your_client.py
 ```
 
-**Exposing the API beyond the host — the FQDN shortcoming.**
-
-Brev's "Secure Link" (the cloudflared tunnel that gives you the `*.brevlab.com` FQDN) is gated by Cloudflare Access with SSO by default. Hitting the FQDN works fine for *browser* clients — Cloudflare Access authenticates the SSO session, sets a cookie, and subsequent navigation passes through. But **for programmatic clients (Python `openai`, curl, anything not in a logged-in browser), the FQDN does not work out of the box**: requests get a `302` to a Cloudflare Access login page before the gateway token is even evaluated. The endpoint isn't really "public" in that deployment — it's SSO-gated.
-
-This is a property of the *deployment* (Brev shared link → CF Access in front), not of the cookbook. Any tunnel that fronts an identity gate (Cloudflare Access, Zero Trust, Tailscale Funnel with auth, etc.) has the same shape. A tunnel *without* an identity gate would let the FQDN work for programmatic clients, with only the gateway token as auth — which is also the situation if you configure a CF Access bypass on `/v1/*`.
-
-Four options for non-browser callers, simplest first:
-
-1. **SSH port-forward (recommended for dev):**
-   ```bash
-   ssh -L 8080:127.0.0.1:80 <brev-host>
-   # Then on the laptop:
-   OPENAI_BASE_URL=http://127.0.0.1:8080/v1 OPENAI_API_KEY=<gateway-token> python …
-   ```
-   Bypasses the public tunnel entirely. No CF Access friction, no Cloudflare dashboard config. The gateway token still gates the endpoint, and SSH key auth gates the tunnel — strong defense in depth, nothing extra to configure.
-
-2. **Brev Secure Link → "Make Public" (simplest on Brev):** the link you created in Step 9b defaults to Cloudflare Access SSO. To open it for programmatic clients:
-
-   1. Brev dashboard → your instance → **Secure Links**
-   2. Find the link for port 80 (the one whose hostname you set as `TUNNEL_FQDN`)
-   3. **Edit Access** → toggle **Make Public** on, and save
-
-   The Cloudflare Access gate is now off for the entire hostname. The FQDN works directly for `curl`, the `openai` SDK, and any other programmatic client — no headers beyond `Authorization: Bearer <gateway-token>`. No need to set `NEMOCLAW_OPENAI_HTTP_TUNNEL=1`; cloudflared connects to nginx on the loopback interface, so the existing `allow 127.0.0.1` rule covers it whether the deny-all is rendered or not (verified empirically).
-
-   **Caveat:** this makes the *entire* hostname reachable without SSO, dashboard included. The gateway token is now the only thing standing between the public internet and operator-level access to your sandbox — anyone who learns the URL and token (a leaked log line, a screen-share, `~/openclaw-tunnel-url.txt` ending up in the wrong place) can drive your agent and burn your NVIDIA quota until you rotate the sandbox. Reasonable for a personal dev box during a testing session; not something to leave on indefinitely.
-
-3. **Cloudflare Access service token:** create one in the Brev/Cloudflare Access dashboard, then send `CF-Access-Client-Id` + `CF-Access-Client-Secret` headers alongside `Authorization`. Lets you use the FQDN directly with the dashboard still SSO-gated. Best when you have a fixed set of machines that need access and you want to manage them as identities.
-
-4. **Cloudflare Access bypass for `/v1/*` only:** add a bypass rule for the API paths in the Access dashboard. The API becomes effectively public, gated only by the gateway token, while the dashboard stays SSO-gated. Narrower blast radius than option (2) — only do this if you understand the trade-off and have rotation hygiene in place.
-
-**When `NEMOCLAW_OPENAI_HTTP_TUNNEL=1` actually matters.** This flag lifts the nginx `deny all;` rule on `/v1/*`, allowing non-loopback source IPs to reach the endpoint. It exists for one specific deployment shape: a self-hosted machine where nginx port 80 is exposed directly on the host's network interface (no cloudflared, no SSH port-forward, no fronting reverse proxy), and you want remote clients to hit `/v1/*` with only the gateway token as auth. In that shape, pair it with TLS termination and rate limiting at the network edge — once the IP allowlist is gone, the gateway token is the only thing standing between the open network and operator-level access.
-
-For the four options above, the flag is a no-op: cloudflared and SSH port-forward both connect to nginx on `127.0.0.1`, which `allow 127.0.0.1;` already permits regardless of the deny-all (verified empirically). Leave the flag unset unless you're running the direct-exposure shape it's designed for.
-
-**Security.** This endpoint grants operator-level access to the sandbox. The gateway token is treated like an owner credential — rotate it by bouncing the sandbox. With CF Access in front of the tunnel (Brev's default), external programmatic access requires *both* a valid Access identity and the gateway token, which is a meaningful defense-in-depth posture. Options (2) and (4) intentionally collapse that to a single factor; treat the token accordingly.
-
-**Browser clients.** Nginx terminates CORS for `/v1/*` because OpenClaw emits no `Access-Control-Allow-*` headers and returns 405 to `OPTIONS`. Tools like Open WebUI work via local nginx without further configuration.
-
-**Upstream gaps.** When NemoClaw exposes the equivalent of `NEMOCLAW_OPENAI_HTTP_ENABLED` natively (parallel to `NEMOCLAW_WEB_SEARCH_ENABLED`), the cookbook's `scripts/build-integrations-config.py` block retires alongside the `dockerfile-integrations` fragment. When OpenClaw ships native CORS for `/v1/*`, the nginx CORS termination collapses to a plain `proxy_pass`. Both are tracked as follow-ups, not blockers.
-
-### Adding other services
-
-To add a new API integration:
-
-1. Add the API key to `~/.env`
-2. Add a policy fragment to `patches/fragments/` for the service's endpoints
-3. If the integration needs openclaw.json config, add a block to `scripts/build-integrations-config.py` that reads its `.env` flag(s) and emits the merge keys. `apply-patches.sh` calls this helper automatically; setup.sh and `/upgrade` both pick it up after sourcing `~/.env`.
-4. Update `.env.example` with the new key
-5. Run `/upgrade` to apply to a running sandbox
-
-### Known limitations
-
-- **Image attachments require a vision-capable model.** OpenClaw strips image attachments when the model declares `input: ["text"]` only (e.g., Nemotron). To use images, configure a multimodal model as your primary inference model.
-- **Brave Search is handled by upstream.** NemoClaw onboard detects `BRAVE_API_KEY` automatically — the cookbook only adds Tavily support.
-
-### Why recreation is needed
-
-The sandbox image is built with integration config baked into `openclaw.json` (which is DAC-protected and integrity-hashed at runtime). Changing integrations requires rebuilding the image. The `/upgrade` skill automates the backup/rebuild/restore cycle.
-
-## Rebuilding the sandbox
-
-Any time you need to rebuild (update, config change, etc.). **Back up first** — Claude Code users can run `/backup` to snapshot to their local machine. Then run via `brev exec` or inside `brev shell`:
-
-```bash
-source ~/.env && export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
-
-# 1. Back up workspace, chat history, and skills (or use /backup from Claude Code)
-~/nemoclaw-cookbook/scripts/backup-full.sh backup my-assistant
-
-# 2. Stop services and destroy
-nemoclaw tunnel stop 2>/dev/null
-docker pull ghcr.io/nvidia/nemoclaw/sandbox-base:latest
-nemoclaw my-assistant destroy --yes
-
-# 3. Rebuild
-nemoclaw onboard
-
-# 4. Restore workspace + skills, start services, then restore sessions
-~/nemoclaw-cookbook/scripts/backup-full.sh restore my-assistant '' workspace
-nemoclaw tunnel start
-~/nemoclaw-cookbook/scripts/backup-full.sh restore my-assistant '' sessions
-```
-
-After rebuild:
-1. Re-authenticate: run `codex login --device-auth` then launch `claude` (login is forced on first launch) inside the sandbox (SSO tokens don't survive rebuilds)
-2. Reinstall the Codex plugin for Claude Code (`/plugin marketplace add openai/codex-plugin-cc`, etc.)
+Set `NEMOCLAW_OPENAI_HTTP_TUNNEL=1` only for a self-hosted deployment where nginx port 80 is directly exposed and the gateway token is the intended external auth boundary.
 
 ## Refreshing Patches After Upstream Updates
 
-The patch fragments in `patches/fragments/` are unified diffs generated against a specific version of NemoClaw. When NVIDIA updates the upstream files, some fragments may fail to apply.
-
-### Quick path (with Claude Code)
-
-```bash
-claude /refresh-patches
-```
-
-This skill walks Claude through diagnosing the conflict, understanding what changed upstream, and regenerating the fragments while preserving their intent.
-
-### Manual path
-
-1. Reset and inspect:
-   ```bash
-   cd ~/NemoClaw
-   git pull origin main
-   git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml
-   ```
-
-2. Try applying fragments:
-   ```bash
-   /path/to/nemoclaw-cookbook/scripts/apply-patches.sh ~/NemoClaw
-   ```
-
-3. If any fragments fail, inspect the failing fragment, resolve against the current upstream file, and regenerate the fragment diff.
-
-4. Reset and verify the round-trip:
-   ```bash
-   git checkout -- Dockerfile nemoclaw-blueprint/policies/openclaw-sandbox.yaml
-   /path/to/nemoclaw-cookbook/scripts/apply-patches.sh ~/NemoClaw
-   ```
-
-5. Update `UPSTREAM.md` with the current NemoClaw and OpenShell commits and sandbox-base image tag.
-
-### What to preserve
-
-The fragments add these logical pieces — if upstream restructures things, adapt the placement but keep the intent:
-
-- **Dockerfile**: git HTTPS config, Claude Code binary install (with sandbox user symlink), Codex CLI install, sandbox user ownership fixes
-- **Policy**: Claude auth endpoints, OpenAI policy block (with node binary), GitHub policy extensions (codeload.github.com + binaries)
-
-See the `/refresh-patches` skill for the full breakdown.
-
-### Automated validation
-
-To check if fragments still apply against the latest upstream (without modifying anything):
+Run:
 
 ```bash
 ./scripts/validate-patches.sh
 ```
 
-This clones upstream into a temp directory, tests each fragment, and reports pass/fail. Safe to run in CI on a schedule to catch upstream drift early.
+The validator clones current upstream NemoClaw, checks anchors, applies the remaining overlays with Tavily and OpenAI HTTP enabled, and audits whether upstream now appears to cover those gaps.
+
+If validation fails:
+
+1. Inspect the upstream file that changed.
+2. Preserve only the logical overlay that is still needed.
+3. Delete the overlay if upstream now owns the behavior.
+4. Re-run `./scripts/validate-patches.sh`.
+5. Deploy end-to-end on a Brev instance.
+6. Update [UPSTREAM.md](UPSTREAM.md) only after that deployment is verified.
+
+## Rebuilding or Upgrading a Sandbox
+
+Back up first:
+
+```bash
+~/nemoclaw-cookbook/scripts/backup-full.sh backup my-assistant
+```
+
+Then update and run setup again:
+
+```bash
+cd ~/nemoclaw-cookbook
+git pull --ff-only
+./scripts/validate-patches.sh
+./setup.sh
+```
+
+`setup.sh` records the upstream NemoClaw commit in `~/.nemoclaw/cookbook-deployment.json`. If that commit changes, it sets `NEMOCLAW_RECREATE_SANDBOX=1` so the sandbox image is rebuilt.
 
 ## Troubleshooting
 
 ### Docker-driver gateway blocked by UFW
 
-During onboarding, OpenShell's Docker-driver gateway must be reachable from sandbox containers at `host.openshell.internal:8080`. If setup prints:
-
-```text
-Sandbox containers cannot reach the gateway at host.openshell.internal:8080 (<gateway-ip>:8080).
-A host firewall may be blocking traffic from the OpenShell Docker bridge.
-```
-
-first restart Docker if it looks wedged, then retry setup once:
+If onboarding prints a gateway reachability error, retry once after restarting Docker:
 
 ```bash
 sudo systemctl restart docker
 cd ~/nemoclaw-cookbook && ./setup.sh
 ```
 
-If the same preflight fails again and UFW is active, follow the remediation printed by NemoClaw. Treat the installer output as the source of truth:
-
-```bash
-# Run the sudo ufw allow command printed by NemoClaw, then:
-cd ~/nemoclaw-cookbook && ./setup.sh
-```
-
-`setup.sh` detects the failed onboard session and sets `NEMOCLAW_FRESH=1` automatically on the rerun.
+If it repeats and UFW is active, run the exact `ufw allow` command printed by NemoClaw, then rerun setup.
 
 ### Commands not found after install
 
 ```bash
 source ~/.bashrc
-# Or manually:
-export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
+### Web UI URL missing
+
+```bash
+~/nemoclaw-cookbook/scripts/save-ui-url.sh
+```
+
+### Upstream pull blocked by local changes
+
+The cookbook modifies upstream working-tree files before building. Reset those files before pulling:
+
+```bash
+cd ~/NemoClaw
+git checkout -- Dockerfile Dockerfile.base nemoclaw-blueprint/policies/openclaw-sandbox.yaml scripts/nemoclaw-start.sh
+git pull --ff-only
+```
+
+`setup.sh` does this automatically.
+
 ## Environment Variables
 
-### Core
+Key variables are documented in [.env.example](.env.example). The most common are:
 
-| Variable | Purpose | When |
-|----------|---------|------|
-| `NVIDIA_API_KEY` | NVIDIA inference key (starts with `nvapi-`) | Install / onboard |
-| `NEMOCLAW_NON_INTERACTIVE=1` | Skip all interactive prompts | Install / onboard |
-| `NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1` | Accept third-party software notice | Install / onboard |
-| `NEMOCLAW_SANDBOX_NAME` | Custom sandbox name (default: `my-assistant`) | Install / onboard |
-| `NEMOCLAW_RECREATE_SANDBOX=1` | Force-recreate existing sandbox | Onboard |
-| `INSTALL_CLAUDE_CODE` | Install Claude Code in sandbox (default: `true`) | apply-patches.sh |
-| `INSTALL_CODEX` | Install Codex CLI in sandbox (default: `true`) | apply-patches.sh |
+| Variable | Purpose |
+|----------|---------|
+| `NVIDIA_API_KEY` | Required NVIDIA inference key |
+| `NEMOCLAW_MODEL` | Optional model override |
+| `NEMOCLAW_PROVIDER` | Optional provider override |
+| `NEMOCLAW_RESOURCE_PROFILE`, `NEMOCLAW_CPU`, `NEMOCLAW_RAM` | Optional upstream sandbox resource selection |
+| `TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TOKEN`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN` | Optional upstream messaging channels |
+| `BRAVE_API_KEY` | Native upstream Brave Search |
+| `TAVILY_API_KEY` | Cookbook Tavily overlay |
+| `NEMOCLAW_OPENAI_HTTP_ENABLED=1` | Cookbook `/v1/*` API enablement |
+| `TUNNEL_FQDN` | Secure Link hostname for browser access |
+| `CLOUDFLARE_TUNNEL_TOKEN` | Optional upstream Cloudflare named tunnel |
+| `NEMOCLAW_POLICY_TIER`, `NEMOCLAW_POLICY_PRESETS`, `NEMOCLAW_POLICY_MODE` | Upstream policy selection |
 
-### Inference
+## Security Model
 
-| Variable | Purpose | When |
-|----------|---------|------|
-| `NEMOCLAW_PROVIDER` | Provider type (see below) | Install / onboard |
-| `NEMOCLAW_MODEL` | Override inference model | Install / onboard |
-| `NEMOCLAW_ENDPOINT_URL` | Custom endpoint for custom/nim-local/vllm providers | Install / onboard |
-| `NEMOCLAW_EXPERIMENTAL=1` | Enable experimental providers (local NIM, vLLM) | Install / onboard |
-| `NEMOCLAW_GPU` | Brev GPU instance type for `nemoclaw deploy` | Deploy |
+The sandbox security model is upstream NemoClaw/OpenShell:
 
-Valid `NEMOCLAW_PROVIDER` values: `build` (NVIDIA cloud, default), `openai`, `anthropic`, `anthropicCompatible`, `gemini`, `ollama`, `custom`, `nim-local`, `vllm`
+- Landlock limits writable paths.
+- seccomp restricts syscalls.
+- network egress flows through OpenShell policy.
+- inference credentials stay host-side.
+- `openclaw.json` is integrity checked at sandbox startup.
 
-### Alternative provider API keys
-
-| Variable | Purpose | When |
-|----------|---------|------|
-| `OPENAI_API_KEY` | OpenAI API key (when `NEMOCLAW_PROVIDER=openai`) | Install / onboard |
-| `ANTHROPIC_API_KEY` | Anthropic API key (when `NEMOCLAW_PROVIDER=anthropic`) | Install / onboard |
-
-### Messaging integrations
-
-| Variable | Purpose | When |
-|----------|---------|------|
-| `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather | `nemoclaw tunnel start` / onboard |
-| `TELEGRAM_ALLOWED_IDS` | Comma-separated Telegram chat IDs | `nemoclaw tunnel start` |
-| `DISCORD_BOT_TOKEN` | Discord bot token | `nemoclaw tunnel start` / onboard |
-| `SLACK_BOT_TOKEN` | Slack bot token (`xoxb-...`) | `nemoclaw tunnel start` / onboard |
-
-When messaging tokens are set during onboard, NemoClaw auto-detects them and suggests the corresponding policy presets (telegram, discord, slack). During `nemoclaw tunnel start`, the tokens are passed into the bridge processes.
-
-### Tool integrations
-
-| Variable | Purpose | When |
-|----------|---------|------|
-| `BRAVE_API_KEY` | Brave Search API key (`BSA-...`) | Post-install (setup.sh Step 6) |
-
-### Policy
-
-| Variable | Purpose | When |
-|----------|---------|------|
-| `NEMOCLAW_POLICY_TIER` | `restricted`, `balanced` (default), `open` | Install / onboard |
-| `NEMOCLAW_POLICY_MODE` | `suggested` (default), `custom`, or `skip` | Install / onboard |
-| `NEMOCLAW_POLICY_PRESETS` | Comma-separated presets (overrides tier defaults) | Install / onboard |
-
-Available presets: `pypi`, `npm`, `telegram`, `discord`, `slack`, `brave`, `brew`, `docker`, `huggingface`, `jira`, `outlook`
-
-Tier defaults (upstream `nemoclaw-blueprint/policies/tiers.yaml`):
-- **restricted** — none (inference + core tooling only)
-- **balanced** — `npm, pypi, huggingface, brew, brave`
-- **open** — balanced + `slack, discord, telegram, jira, outlook`
-
-Upstream NemoClaw PR #1753 replaced credential-based preset auto-detection with this tier selector. The default `balanced` tier excludes messaging presets, so `TELEGRAM_BOT_TOKEN` (or Discord/Slack) no longer opens policy egress on its own. To keep setup seamless, `setup.sh` builds `NEMOCLAW_POLICY_PRESETS` from the credentials configured in `~/.env` (adding `telegram`, `discord`, `slack`, `brave` as applicable). Set `NEMOCLAW_POLICY_TIER` or `NEMOCLAW_POLICY_PRESETS` explicitly to override.
-
-## What Gets Installed Where
-
-| Component | Location |
-|-----------|----------|
-| OpenShell binary | `~/.local/bin/openshell` |
-| NemoClaw source | `~/.nemoclaw/source/` |
-| NemoClaw shim | `~/.local/bin/nemoclaw` |
-| Node.js (via nvm) | `~/.nvm/versions/node/v22.x.x/` |
-| Credentials | `~/.nemoclaw/credentials.json` |
-| Sandbox registry | `~/.nemoclaw/sandboxes.json` |
-| OpenShell gateway | Docker container (K3s cluster) |
-| Sandbox image | Inside gateway (~2.4 GB) |
-| Patch fragments | `nemoclaw-cookbook/patches/fragments/` |
-| Dockerfile customizations | `~/NemoClaw/Dockerfile` or `~/.nemoclaw/source/Dockerfile` |
-
-## Sandbox Security Model
-
-The sandbox enforces defense-in-depth via multiple kernel and container mechanisms:
-
-- **Landlock** — `/sandbox` is mounted read-only at the kernel level. The agent's writable state lives in `/sandbox/.openclaw-data/` (workspace, sessions, plugins). Even root cannot write outside the allowed paths.
-- **seccomp** — Restricts available syscalls to a safe subset.
-- **Network namespacing** — All egress is proxied through OpenShell's L7 policy engine. Only explicitly allowed endpoints are reachable.
-- **Immutable config** — `/sandbox/.openclaw/openclaw.json` is protected by `chattr +i` and verified via SHA-256 hash at startup.
-- **Privilege separation** — The gateway runs as a separate `gateway` user with `no-new-privileges`.
-
-This means workspace files in `/sandbox/.openclaw-data/workspace/` are writable, but `/sandbox/.openclaw/` is frozen at build time.
-
-## Advanced Onboarding Options
-
-### Custom sandbox images (`--from`)
-
-You can build from a custom Dockerfile instead of the stock sandbox-base image:
-
-```bash
-nemoclaw onboard --from /path/to/Dockerfile
-```
-
-This is useful for pre-baking additional tools or dependencies. The cookbook's patching workflow (apply-patches.sh) is still the recommended approach for Claude Code and Codex, but `--from` can be combined with it for further customization.
-
-### Interactive preset selection
-
-When running `nemoclaw onboard` interactively (without `NEMOCLAW_NON_INTERACTIVE=1`), the installer now presents a checkbox UI for selecting policy presets. It auto-detects configured credentials and pre-checks the relevant presets. The env var approach (`NEMOCLAW_POLICY_PRESETS`) still works for non-interactive installs.
-
-## Tearing Down
-
-```bash
-# Sandbox only
-nemoclaw my-assistant destroy --yes
-
-# Full uninstall
-nemoclaw uninstall
-# Flags: --yes  --keep-openshell  --delete-models
-```
+The cookbook does not weaken those controls. Its overlays either add explicit policy for a configured service or add host-side proxying around upstream endpoints.
 
 ## Resources
 
-- NemoClaw Docs: https://docs.nvidia.com/nemoclaw/latest/
-- OpenShell Docs: https://docs.nvidia.com/openshell/latest/
+- NemoClaw docs: https://docs.nvidia.com/nemoclaw/latest/
+- OpenShell docs: https://docs.nvidia.com/openshell/latest/
 - NemoClaw GitHub: https://github.com/NVIDIA/NemoClaw
 - OpenShell GitHub: https://github.com/NVIDIA/OpenShell
-- NemoClaw Discord: https://discord.gg/XFpfPv9Uvx
