@@ -112,11 +112,14 @@ Messaging channels and their required policy presets are handled by upstream onb
 Configure one provider in `~/.env`:
 
 ```bash
-BRAVE_API_KEY=BSA-...     # Native upstream
-TAVILY_API_KEY=tvly-...   # Cookbook overlay
+BRAVE_API_KEY=BSA-...
+
+# Or:
+NEMOCLAW_WEB_SEARCH_PROVIDER=tavily
+TAVILY_API_KEY=tvly-...
 ```
 
-If both are set, the cookbook config gives Tavily priority for OpenClaw web search. After changing web-search configuration, rerun:
+Web search is handled by upstream NemoClaw. If both keys are present, set `NEMOCLAW_WEB_SEARCH_PROVIDER` explicitly. After changing web-search configuration, rerun:
 
 ```bash
 cd ~/nemoclaw-cookbook && ./setup.sh

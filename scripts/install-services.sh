@@ -89,7 +89,9 @@ if [ "$ENABLE_TERMINAL_SERVER" = "true" ]; then
   fi
   cd "$COOKBOOK_DIR"
 
-  sudo cp "$COOKBOOK_DIR/config/systemd/nemoclaw-terminal.service" /etc/systemd/system/
+  sed -e "s|__COOKBOOK_DIR__|$COOKBOOK_DIR|g" \
+    "$COOKBOOK_DIR/config/systemd/nemoclaw-terminal.service" \
+    | sudo tee /etc/systemd/system/nemoclaw-terminal.service > /dev/null
   sudo systemctl daemon-reload
   sudo systemctl enable nemoclaw-terminal 2>/dev/null
   echo "  ✓ terminal server installed"

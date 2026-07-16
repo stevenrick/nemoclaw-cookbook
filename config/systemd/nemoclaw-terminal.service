@@ -8,7 +8,7 @@ After=network.target openshell-gateway.service
 [Service]
 Type=simple
 User=ubuntu
-WorkingDirectory=/home/ubuntu/nemoclaw-cookbook/terminal-server
+WorkingDirectory=__COOKBOOK_DIR__/terminal-server
 ExecStart=/bin/bash -c '. $HOME/.nvm/nvm.sh && node server.js --port 3001'
 Restart=on-failure
 RestartSec=3
