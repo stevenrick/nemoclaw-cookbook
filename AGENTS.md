@@ -7,10 +7,9 @@ This cookbook is a temporary scaffold for features upstream [NemoClaw](https://g
 ```
 setup.sh              # Automated setup — clones upstream, applies patches, installs
 patches/
-  fragments/          # Modular Dockerfile and policy YAML fragments
+  fragments/          # Modular Dockerfile/config fragments
 scripts/
   apply-patches.sh    # Applies fragments to upstream (replaces git apply)
-  merge-policy.py     # YAML-aware policy fragment merger
   validate-patches.sh # Check fragments still work against upstream
   install-services.sh # Installs nginx, systemd units, terminal server (called by setup.sh)
   save-ui-url.sh      # Uses upstream URL/token commands → UI URL and /v1 env files
@@ -43,7 +42,7 @@ CONTRIBUTING.md       # Contribution guidelines
 - **Preserve fragment intent, not exact lines.** If upstream restructures, adapt anchors but keep the logical additions.
 - **Don't add features beyond what's asked.** This is a cookbook — lean and opinionated.
 - **Secrets are non-printable runtime values.** `.env`, generated client env files, gateway tokens, and tokenized dashboard URLs must never be committed, printed, logged, pasted into chat, or displayed in shared terminals. Only confirm SET / NOT SET, pass tokenized URLs directly to browsers/clients, and use `sed 's/=.*/=***/'` or equivalent redaction when listing env vars.
-- **Test fragments round-trip:** reset target files, apply, verify before committing. Test no overlays, Tavily-only, OpenAI HTTP-only, and both overlays when patch logic changes.
+- **Test fragments round-trip:** reset target files, apply, verify before committing. Test no overlays and OpenAI HTTP-only when patch logic changes.
 - **Never guess external values.** Commit SHAs, version numbers, API signatures, URLs — if you're not certain, look it up (`git ls-remote`, docs, web search). Fabricated-but-plausible values waste more time than admitting you need to check.
 - **Check upstream overlap before adding to fragments.** If upstream already provides something, don't duplicate it. Run `scripts/validate-patches.sh` to audit.
 - **Only update UPSTREAM.md after deployment verification.** Source review and patch application are useful, but the compatibility table records the last verified end-to-end deployment.
