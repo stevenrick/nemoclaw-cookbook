@@ -51,16 +51,15 @@ When adding a new integration, check upstream first. NemoClaw onboard already ha
 
 The cookbook extends the sandbox image at build time:
 
-1. **Policy fragments** (`patches/fragments/policy-*.yaml`) — network egress rules merged into the sandbox policy by `merge-policy.py`
-2. **Dockerfile integration fragment** (`patches/fragments/dockerfile-integrations`) — deep-merges config into `openclaw.json` via a base64-encoded JSON payload
-3. **Config builder** (`scripts/build-integrations-config.py`) — reads `.env` flags from the environment and emits a base64-encoded JSON payload to stdout. `apply-patches.sh` invokes it automatically when `NEMOCLAW_INTEGRATIONS_B64` is unset, then bakes the result into the Dockerfile ARG default. Every caller gets the right payload by just sourcing `~/.env`.
-4. **Sandbox .env injection** — only for cookbook-only integrations that still read `process.env` (currently Tavily). Native upstream integrations should use NemoClaw/OpenShell provider placeholders instead.
+1. **Dockerfile integration fragment** (`patches/fragments/dockerfile-integrations`) — deep-merges config into `openclaw.json` via a base64-encoded JSON payload
+2. **Config builder** (`scripts/build-integrations-config.py`) — reads `.env` flags from the environment and emits a base64-encoded JSON payload to stdout. `apply-patches.sh` invokes it automatically when `NEMOCLAW_INTEGRATIONS_B64` is unset, then bakes the result into the Dockerfile ARG default. Every caller gets the right payload by just sourcing `~/.env`.
+3. **Upstream provider placeholders** — native upstream integrations should use NemoClaw/OpenShell provider placeholders such as `openshell:resolve:env:` instead of raw API key plumbing.
 
 ### Patterns to follow
 
 - **Dockerfile fragments with compound Python** must use `printf '%s\n' 'line1' 'line2' | python3`. The `python3 -c "..."` pattern with `\` continuations collapses to a single line, breaking `def`/`for`/`if`/`else`.
 - **The post-config Dockerfile anchor** (`# Pin config hash at build time so the entrypoint can verify integrity.`) is for fragments that read/modify `openclaw.json` — they need to run after all upstream config writes but before the integrity hash is computed. The pre-config anchor (`# Set up blueprint for local resolution`) runs before the config file exists.
-- **Avoid raw API key plumbing when upstream has a provider path.** The `openshell:resolve:env:` prefix is preferred for native channels/providers. Use sandbox `.env` injection only for temporary cookbook overlays that have no upstream provider path yet.
+- **Avoid raw API key plumbing when upstream has a provider path.** The `openshell:resolve:env:` prefix is preferred for native channels/providers. Do not add cookbook overlays for integrations upstream already supports.
 - **Custom build args** are not passed by `nemoclaw onboard`. Bake computed values into Dockerfile ARG defaults via sed in `apply-patches.sh`.
 
 ## CI Pipeline
