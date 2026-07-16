@@ -27,8 +27,17 @@ COOKBOOK_COMMIT=$(git -C "$COOKBOOK_DIR" rev-parse --short HEAD 2>/dev/null || e
 
 # Build integrations object
 INTEGRATIONS="{}"
-[ -n "${TAVILY_API_KEY:-}" ] && INTEGRATIONS=$(echo "$INTEGRATIONS" | python3 -c "import sys,json; d=json.load(sys.stdin); d['search']='tavily'; print(json.dumps(d))")
-[ -n "${BRAVE_API_KEY:-}" ] && [ -z "${TAVILY_API_KEY:-}" ] && INTEGRATIONS=$(echo "$INTEGRATIONS" | python3 -c "import sys,json; d=json.load(sys.stdin); d['search']='brave'; print(json.dumps(d))")
+WEB_SEARCH_PROVIDER="${NEMOCLAW_WEB_SEARCH_PROVIDER:-}"
+if [ -z "$WEB_SEARCH_PROVIDER" ]; then
+  if [ -n "${BRAVE_API_KEY:-}" ]; then
+    WEB_SEARCH_PROVIDER="brave"
+  elif [ -n "${TAVILY_API_KEY:-}" ]; then
+    WEB_SEARCH_PROVIDER="tavily"
+  fi
+fi
+if [ -n "$WEB_SEARCH_PROVIDER" ] && [ "$WEB_SEARCH_PROVIDER" != "none" ]; then
+  INTEGRATIONS=$(WEB_SEARCH_PROVIDER="$WEB_SEARCH_PROVIDER" python3 -c "import os,sys,json; d=json.load(sys.stdin); d['search']=os.environ['WEB_SEARCH_PROVIDER']; print(json.dumps(d))" <<< "$INTEGRATIONS")
+fi
 case "${NEMOCLAW_OPENAI_HTTP_ENABLED:-}" in
   1|true|yes) INTEGRATIONS=$(echo "$INTEGRATIONS" | python3 -c "import sys,json; d=json.load(sys.stdin); d['openai_http']=True; print(json.dumps(d))") ;;
 esac

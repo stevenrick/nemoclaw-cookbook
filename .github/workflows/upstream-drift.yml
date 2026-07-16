@@ -19,7 +19,6 @@ jobs:
       - name: Run patch validation
         id: validate
         run: |
-          pip3 install --quiet 'pyyaml>=6,<7'
           if ./scripts/validate-patches.sh 2>&1 | tee /tmp/validation.log; then
             echo "status=pass" >> "$GITHUB_OUTPUT"
           else

@@ -63,6 +63,7 @@ export NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 # Tool integrations
 [ -n "${BRAVE_API_KEY:-}" ] && export BRAVE_API_KEY
 [ -n "${TAVILY_API_KEY:-}" ] && export TAVILY_API_KEY
+[ -n "${NEMOCLAW_WEB_SEARCH_PROVIDER:-}" ] && export NEMOCLAW_WEB_SEARCH_PROVIDER
 [ -n "${NEMOCLAW_OPENAI_HTTP_ENABLED:-}" ] && export NEMOCLAW_OPENAI_HTTP_ENABLED
 [ -n "${NEMOCLAW_OPENAI_HTTP_TUNNEL:-}" ] && export NEMOCLAW_OPENAI_HTTP_TUNNEL
 [ -n "${CLOUDFLARE_TUNNEL_TOKEN:-}" ] && export CLOUDFLARE_TUNNEL_TOKEN
@@ -84,8 +85,8 @@ fi
 [ -n "${NEMOCLAW_CORS_ORIGIN:-}" ] && export NEMOCLAW_CORS_ORIGIN
 
 # Integration config payload (NEMOCLAW_INTEGRATIONS_B64) is computed by
-# apply-patches.sh from .env-driven flags (TAVILY_API_KEY,
-# NEMOCLAW_OPENAI_HTTP_ENABLED, etc.) via scripts/build-integrations-config.py.
+# apply-patches.sh from cookbook-only .env-driven flags such as
+# NEMOCLAW_OPENAI_HTTP_ENABLED via scripts/build-integrations-config.py.
 
 echo "=== Step 1: Clone / update repositories ==="
 cd "$HOME"
@@ -170,106 +171,16 @@ echo "=== Step 6: Save tokenized UI URL ==="
   POST_FAILURES=$((POST_FAILURES + 1))
 }
 
-echo "=== Step 7: Register cookbook integrations ==="
-
-register_provider() {
-  local name="$1" envkey="$2"
-  openshell provider create --name "$name" --type generic --credential "$envkey" 2>/dev/null \
-    || openshell provider update "$name" --credential "$envkey" 2>/dev/null \
-    || { echo "  Warning: could not configure $name provider"; return 1; }
-  echo "    ✓ $name"
-}
-
-# Brave Search is native upstream; NemoClaw handles provider registration when
-# BRAVE_API_KEY is exported during onboard. Tavily remains cookbook-only and
-# still needs a generic provider plus process.env inside the sandbox.
-if [ -n "${TAVILY_API_KEY:-}" ]; then
-  register_provider "${SANDBOX}-tavily" "TAVILY_API_KEY"
-fi
-
-# Inject the Tavily key into the sandbox workspace .env. The patched entrypoint
-# (see apply-patches.sh) sources /sandbox/.env into the gateway process env so
-# plugins that read process.env see their secrets. Bounce only when we actually
-# wrote .env.
-SANDBOX_ENV_LINES=""
-[ -n "${TAVILY_API_KEY:-}" ] && SANDBOX_ENV_LINES="${SANDBOX_ENV_LINES}TAVILY_API_KEY=${TAVILY_API_KEY}\n"
-SANDBOX_ENV_WRITTEN=0
-if [ -n "$SANDBOX_ENV_LINES" ]; then
-  echo "  Injecting integration keys into sandbox workspace..."
-  if printf "%b" "$SANDBOX_ENV_LINES" | openshell sandbox exec --name "$SANDBOX" -- \
-    sh -c 'cat > /sandbox/.env' 2>/dev/null; then
-    echo "  ✓ Sandbox .env written"
-    SANDBOX_ENV_WRITTEN=1
-  else
-    echo "  Warning: failed to write sandbox .env"
-    POST_FAILURES=$((POST_FAILURES + 1))
-  fi
-fi
-
-# Bounce the sandbox so the gateway re-launches with /sandbox/.env loaded into
-# its env. First boot happened before .env existed, so the gateway is
-# uncredentialed for Tavily. Remove this block when Tavily is upstreamed through
-# NemoClaw's provider/onboard flow.
-#
-# Driver-aware: v0.0.38 and earlier run a k3s cluster container
-# (`openshell-cluster-*`) and bounce via `kubectl delete pod`; v0.0.39+
-# uses docker-driver with a direct sandbox container
-# (`openshell-<sandbox>-*`) and bounces via `docker restart`. Either
-# path triggers the patched entrypoint which re-sources /sandbox/.env.
-if [ "$SANDBOX_ENV_WRITTEN" = "1" ] && [ -n "$SANDBOX" ]; then
-  GATEWAY_CONTAINER=$(docker ps --format '{{.Names}}' --filter "name=openshell-cluster" | head -1)
-  SANDBOX_CONTAINER=$(docker ps --format '{{.Names}}' --filter "name=openshell-${SANDBOX}-" | head -1)
-
-  if [ -n "$GATEWAY_CONTAINER" ]; then
-    echo "  Bouncing sandbox pod (k3s driver) so gateway reloads with new env..."
-    if docker exec "$GATEWAY_CONTAINER" kubectl delete pod "$SANDBOX" -n openshell --wait=false >/dev/null 2>&1; then
-      for _ in $(seq 1 30); do
-        STATUS=$(docker exec "$GATEWAY_CONTAINER" kubectl get pod "$SANDBOX" -n openshell --no-headers 2>/dev/null | awk '{print $2,$3}')
-        [ "$STATUS" = "1/1 Running" ] && { echo "  ✓ Sandbox restarted ($STATUS)"; break; }
-        sleep 2
-      done
-      [ "$STATUS" != "1/1 Running" ] && {
-        echo "  Warning: sandbox pod did not return Ready in 60s (last: $STATUS)"
-        POST_FAILURES=$((POST_FAILURES + 1))
-      }
-    else
-      echo "  Warning: failed to delete pod for restart — Tavily may not pick up new env"
-      POST_FAILURES=$((POST_FAILURES + 1))
-    fi
-  elif [ -n "$SANDBOX_CONTAINER" ]; then
-    echo "  Bouncing sandbox container (docker driver) so gateway reloads with new env..."
-    if docker restart "$SANDBOX_CONTAINER" >/dev/null 2>&1; then
-      for _ in $(seq 1 30); do
-        RUNNING=$(docker inspect -f '{{.State.Running}}' "$SANDBOX_CONTAINER" 2>/dev/null)
-        [ "$RUNNING" = "true" ] && { echo "  ✓ Sandbox container restarted"; break; }
-        sleep 2
-      done
-      [ "$RUNNING" != "true" ] && {
-        echo "  Warning: sandbox container did not return to running in 60s"
-        POST_FAILURES=$((POST_FAILURES + 1))
-      }
-    else
-      echo "  Warning: failed to restart sandbox container — Tavily may not pick up new env"
-      POST_FAILURES=$((POST_FAILURES + 1))
-    fi
-  else
-    echo "  Warning: no openshell-cluster or openshell-${SANDBOX}-* container found — skipping bounce."
-    echo "    Tavily may not pick up new env until the next sandbox restart."
-    POST_FAILURES=$((POST_FAILURES + 1))
-  fi
-fi
-
-echo "=== Step 8: Start services ==="
+echo "=== Step 7: Start services ==="
 # Reload env to pick up nvm
 export NVM_DIR="$HOME/.nvm"
 # shellcheck source=/dev/null
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 
-# Bounce the port forward. When the sandbox got bounced in Step 7 the pod
-# IP changed, so the existing forward points at a dead endpoint and nginx
-# returns 502. `nemoclaw <name> recover` rebuilds the forward in a single
-# step that knows how to wait for the new pod's gateway — more reliable than
-# raw `forward stop/start`, which races the gateway readiness.
+# Refresh the port forward after setup/rebuild. `nemoclaw <name> recover`
+# rebuilds the forward in a single step that knows how to wait for the
+# gateway — more reliable than raw `forward stop/start`, which races gateway
+# readiness.
 if [ -n "$SANDBOX" ]; then
   openshell forward stop 18789 "$SANDBOX" 2>/dev/null || true
   if nemoclaw "$SANDBOX" recover 2>/dev/null; then
@@ -298,13 +209,13 @@ else
   echo "  No CLOUDFLARE_TUNNEL_TOKEN set — skipping optional cloudflared tunnel."
 fi
 
-echo "=== Step 9: Write deployment manifest ==="
+echo "=== Step 8: Write deployment manifest ==="
 "${SCRIPT_DIR}/scripts/write-manifest.sh" || {
   echo "  Warning: manifest write failed"
   POST_FAILURES=$((POST_FAILURES + 1))
 }
 
-echo "=== Step 10: Verify deployment ==="
+echo "=== Step 9: Verify deployment ==="
 "${SCRIPT_DIR}/scripts/verify-deployment.sh" || echo "  Some checks failed — review above."
 
 set -e

@@ -232,10 +232,16 @@ fi
 echo "Integrations:"
 
 # Web search
-if [ -n "${TAVILY_API_KEY:-}" ]; then
-  pass "Web search configured (tavily)"
-elif [ -n "${BRAVE_API_KEY:-}" ]; then
-  pass "Web search configured (brave)"
+WEB_SEARCH_PROVIDER="${NEMOCLAW_WEB_SEARCH_PROVIDER:-}"
+if [ -z "$WEB_SEARCH_PROVIDER" ]; then
+  if [ -n "${BRAVE_API_KEY:-}" ]; then
+    WEB_SEARCH_PROVIDER="brave"
+  elif [ -n "${TAVILY_API_KEY:-}" ]; then
+    WEB_SEARCH_PROVIDER="tavily"
+  fi
+fi
+if [ -n "$WEB_SEARCH_PROVIDER" ] && [ "$WEB_SEARCH_PROVIDER" != "none" ]; then
+  pass "Web search configured by upstream NemoClaw ($WEB_SEARCH_PROVIDER)"
 fi
 
 # ── Summary ──────────────────────────────────────────────────────────

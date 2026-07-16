@@ -1,6 +1,6 @@
 # BUILD: NemoClaw + OpenShell From Scratch
 
-This walkthrough builds a NemoClaw sandbox using upstream NemoClaw as the owner of OpenShell installation, sandbox-base resolution, OpenClaw versioning, inference setup, and native Brave Search. The cookbook adds only the temporary overlays listed in [UPSTREAM.md](UPSTREAM.md).
+This walkthrough builds a NemoClaw sandbox using upstream NemoClaw as the owner of OpenShell installation, sandbox-base resolution, OpenClaw versioning, inference setup, and web search. The cookbook adds only the temporary overlays listed in [UPSTREAM.md](UPSTREAM.md).
 
 ## Prerequisites
 
@@ -59,9 +59,8 @@ brev exec <instance> "cd ~/nemoclaw-cookbook && ./setup.sh"
 5. Run upstream `bash install.sh --non-interactive`.
 6. Install host-side nginx and the optional browser terminal service.
 7. Save tokenized UI URLs and optional OpenAI-compatible client env.
-8. Register and inject cookbook-only integration secrets when needed.
-9. Start an optional Cloudflare named tunnel only when `CLOUDFLARE_TUNNEL_TOKEN` is set.
-10. Write the deployment manifest and run the cookbook verifier.
+8. Start an optional Cloudflare named tunnel only when `CLOUDFLARE_TUNNEL_TOKEN` is set.
+9. Write the deployment manifest and run the cookbook verifier.
 
 ## Manual Equivalent
 
@@ -155,25 +154,18 @@ Use `NEMOCLAW_CPU` or `NEMOCLAW_RAM` only when you need a direct override rather
 
 ### Web Search
 
-Brave Search is native upstream:
+Brave Search and Tavily Search are native upstream. Configure one provider:
 
 ```bash
 BRAVE_API_KEY=BSA-...
 ```
 
-Tavily is cookbook-only until NemoClaw exposes it natively:
-
 ```bash
+NEMOCLAW_WEB_SEARCH_PROVIDER=tavily
 TAVILY_API_KEY=tvly-...
 ```
 
-When Tavily is set, the cookbook:
-
-- enables the Tavily OpenClaw plugin in `openclaw.json`
-- adds Tavily egress policy
-- registers a generic OpenShell provider
-- writes `TAVILY_API_KEY` to `/sandbox/.env`
-- bounces the sandbox so the patched entrypoint sources that env file
+When both `BRAVE_API_KEY` and `TAVILY_API_KEY` are present, set `NEMOCLAW_WEB_SEARCH_PROVIDER` explicitly to avoid relying on upstream default precedence.
 
 ### OpenAI-Compatible HTTP API
 
@@ -213,7 +205,7 @@ Run:
 ./scripts/validate-patches.sh
 ```
 
-The validator clones current upstream NemoClaw, checks anchors, applies the remaining overlays with Tavily and OpenAI HTTP enabled, and audits whether upstream now appears to cover those gaps.
+The validator clones current upstream NemoClaw, checks anchors, applies the remaining OpenAI HTTP overlay, and audits whether upstream now appears to cover that gap.
 
 If validation fails:
 
@@ -292,8 +284,7 @@ Key variables are documented in [.env.example](.env.example). The most common ar
 | `NEMOCLAW_PROVIDER` | Optional provider override |
 | `NEMOCLAW_RESOURCE_PROFILE`, `NEMOCLAW_CPU`, `NEMOCLAW_RAM` | Optional upstream sandbox resource selection |
 | `TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TOKEN`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN` | Optional upstream messaging channels |
-| `BRAVE_API_KEY` | Native upstream Brave Search |
-| `TAVILY_API_KEY` | Cookbook Tavily overlay |
+| `NEMOCLAW_WEB_SEARCH_PROVIDER`, `BRAVE_API_KEY`, `TAVILY_API_KEY` | Optional upstream web-search selection |
 | `NEMOCLAW_OPENAI_HTTP_ENABLED=1` | Cookbook `/v1/*` API enablement |
 | `TUNNEL_FQDN` | Secure Link hostname for browser access |
 | `CLOUDFLARE_TUNNEL_TOKEN` | Optional upstream Cloudflare named tunnel |

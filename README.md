@@ -60,9 +60,7 @@ See [BUILD.md](BUILD.md) for the full setup walkthrough and [USE.md](USE.md) for
 - Optional browser terminal at `/terminal` for OpenShell policy approvals
 - Optional upstream messaging channels for Telegram, Discord, Slack, WeChat, and WhatsApp
 - Upstream sandbox resource profiles via `NEMOCLAW_RESOURCE_PROFILE`, `NEMOCLAW_CPU`, and `NEMOCLAW_RAM`
-- Web search:
-  - Brave Search is native upstream via `BRAVE_API_KEY`
-  - Tavily remains a small cookbook overlay via `TAVILY_API_KEY`
+- Native upstream web search via `NEMOCLAW_WEB_SEARCH_PROVIDER`, `BRAVE_API_KEY`, and `TAVILY_API_KEY`
 - Optional OpenAI-compatible HTTP API on `/v1/*` via `NEMOCLAW_OPENAI_HTTP_ENABLED=1`
 - Backup, restore, validation, and deployment manifest scripts
 
@@ -72,11 +70,9 @@ See [BUILD.md](BUILD.md) for the full setup walkthrough and [USE.md](USE.md) for
 
 | Overlay | Trigger | Purpose |
 |---------|---------|---------|
-| `patches/fragments/dockerfile-integrations` | `TAVILY_API_KEY` or `NEMOCLAW_OPENAI_HTTP_ENABLED=1` | Deep-merge cookbook-only OpenClaw config into `openclaw.json` before the upstream integrity hash is pinned |
-| `patches/fragments/policy-tavily.yaml` | `TAVILY_API_KEY` | Allow Tavily API egress |
-| `scripts/nemoclaw-start.sh` loader patch | `TAVILY_API_KEY` | Source `/sandbox/.env` so Tavily can read `process.env.TAVILY_API_KEY` |
+| `patches/fragments/dockerfile-integrations` | `NEMOCLAW_OPENAI_HTTP_ENABLED=1` | Deep-merge cookbook-only OpenAI-compatible HTTP config into `openclaw.json` before the upstream integrity hash is pinned |
 
-There are no longer cookbook patches for sandbox-installed coding-agent tools, OpenShell version pinning, OpenClaw version overrides, or generic git/plugin setup. Those experiments were removed or delegated to upstream.
+There are no longer cookbook patches for sandbox-installed coding-agent tools, OpenShell version pinning, OpenClaw version overrides, web search, or generic git/plugin setup. Those experiments were removed or delegated to upstream.
 
 ## When Upstream Changes
 

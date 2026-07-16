@@ -1,12 +1,11 @@
-# Integration config — merges web search (and future integrations) into openclaw.json.
+# Integration config — merges cookbook-owned integrations into openclaw.json.
 # NEMOCLAW_INTEGRATIONS_B64 is a base64-encoded JSON dict of config keys to merge.
 # When empty/unset, this is a no-op.
 #
-# Upstream's generate-openclaw-config.py writes a Brave web-search block when
-# NEMOCLAW_WEB_SEARCH_ENABLED=1. This fragment runs AFTER that script and deep-
-# merges additional providers (currently Tavily). Remove when upstream makes
-# web-search configuration provider-aware. See UPSTREAM.md for the full
-# inventory of cookbook scaffolds.
+# This fragment runs AFTER upstream openclaw.json generation and deep-merges
+# optional cookbook-owned config. Remove when upstream exposes native config
+# for the remaining overlays. See UPSTREAM.md for the full inventory of
+# cookbook scaffolds.
 ARG NEMOCLAW_INTEGRATIONS_B64=e30=
 ENV NEMOCLAW_INTEGRATIONS_B64=${NEMOCLAW_INTEGRATIONS_B64}
 RUN printf '%s\n' \
@@ -26,4 +25,3 @@ RUN printf '%s\n' \
   'deep_merge(config, integrations)' \
   'json.dump(config, open(path, "w"), indent=2)' \
   | python3
-

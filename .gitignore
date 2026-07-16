@@ -7,5 +7,5 @@ terminal-server/node_modules/
 .worktrees/
 docs/superpowers/
 __pycache__/
-.plc/tools/
+.plc/
 plc-evidence.jsonl

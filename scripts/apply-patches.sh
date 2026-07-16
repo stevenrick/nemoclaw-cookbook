@@ -4,8 +4,8 @@
 # Usage: apply-patches.sh <nemoclaw-dir>
 #
 # Reads cookbook-only integration flags from the environment. Upstream NemoClaw
-# owns core agent tooling, OpenShell installation, OpenClaw versioning, and Brave
-# Search. The cookbook only patches the gaps listed in UPSTREAM.md.
+# owns core agent tooling, OpenShell installation, OpenClaw versioning, and web
+# search. The cookbook only patches the gaps listed in UPSTREAM.md.
 #
 # Unlike git patches, this approach:
 #   - Only needs one anchor line per file (not 3 lines of context)
@@ -19,11 +19,9 @@ COOKBOOK_DIR="$(dirname "$SCRIPT_DIR")"
 FRAGMENTS_DIR="$COOKBOOK_DIR/patches/fragments"
 
 # Integration flags
-TAVILY_API_KEY="${TAVILY_API_KEY:-}"
 NEMOCLAW_OPENAI_HTTP_ENABLED="${NEMOCLAW_OPENAI_HTTP_ENABLED:-}"
 
 DOCKERFILE="$NEMOCLAW_DIR/Dockerfile"
-POLICY="$NEMOCLAW_DIR/nemoclaw-blueprint/policies/openclaw-sandbox.yaml"
 
 # ── Dockerfile modifications ────────────────────────────────────────
 # Post-config anchor: fragments inserted here run as root, AFTER all upstream
@@ -65,8 +63,8 @@ with open(sys.argv[3], 'w') as f:
 
 # Compute the integrations payload from env if not pre-set. This lets every
 # caller just `source ~/.env` and let apply-patches.sh handle the payload. The
-# helper reads TAVILY_API_KEY, NEMOCLAW_OPENAI_HTTP_ENABLED, etc. and emits
-# base64 JSON.
+# helper reads cookbook-owned flags such as NEMOCLAW_OPENAI_HTTP_ENABLED and
+# emits base64 JSON.
 if [ -z "${NEMOCLAW_INTEGRATIONS_B64:-}" ]; then
   NEMOCLAW_INTEGRATIONS_B64="$(python3 "$SCRIPT_DIR/build-integrations-config.py")"
 fi
@@ -101,67 +99,7 @@ with open(path, 'w') as f: f.write(data)
   echo "    ✓ integrations config baked into Dockerfile"
 fi
 
-# Entrypoint: make /sandbox/.env actually take effect for the cookbook-only
-# Tavily path. Upstream handles native Brave credentials through OpenShell
-# provider placeholders; Tavily still needs process.env until it is upstreamed.
-if [ -n "$TAVILY_API_KEY" ]; then
-  ENTRYPOINT_SH="$NEMOCLAW_DIR/scripts/nemoclaw-start.sh"
-  if [ -f "$ENTRYPOINT_SH" ]; then
-    python3 -c "
-import sys
-path = sys.argv[1]
-marker = '# COOKBOOK: source /sandbox/.env'
-with open(path) as f: data = f.read()
-if marker in data:
-    sys.exit(0)
-needle = '''if [ -f .env ]; then
-  if ! chmod 600 .env 2>/dev/null; then
-    echo \"[SECURITY WARNING] Could not restrict .env permissions — file may be world-readable (read-only filesystem)\" >&2
-  fi
-fi'''
-replacement = '''if [ -f .env ]; then
-  if ! chmod 600 .env 2>/dev/null; then
-    echo \"[SECURITY WARNING] Could not restrict .env permissions — file may be world-readable (read-only filesystem)\" >&2
-  fi
-  # COOKBOOK: source /sandbox/.env so plugin secrets (TAVILY_API_KEY, etc.)
-  # reach the gateway process env. Upstream only chmods; it never loads.
-  # shellcheck disable=SC1091
-  set -a; . ./.env 2>/dev/null || true; set +a
-fi'''
-if needle not in data:
-    print('WARNING: entrypoint .env block anchor not found — skipping env-loader patch', file=sys.stderr)
-    sys.exit(0)
-with open(path, 'w') as f: f.write(data.replace(needle, replacement, 1))
-print('  ✓ nemoclaw-start.sh patched to source /sandbox/.env')
-" "$ENTRYPOINT_SH"
-  fi
-fi
-
-# ── Policy modifications ────────────────────────────────────────────
-# Collect applicable policy fragments
-POLICY_FRAGMENTS=()
-
-# Web search policy
-if [ -n "$TAVILY_API_KEY" ]; then
-  POLICY_FRAGMENTS+=("$FRAGMENTS_DIR/policy-tavily.yaml")
-fi
-
-if [ "${#POLICY_FRAGMENTS[@]}" -gt 0 ]; then
-  echo "  Applying policy fragments..."
-
-  # Check python3 + PyYAML availability
-  if ! python3 -c "import yaml" 2>/dev/null; then
-    echo "  Installing PyYAML for policy merging..."
-    pip3 install --quiet 'pyyaml>=6,<7' 2>/dev/null || pip install --quiet 'pyyaml>=6,<7'
-  fi
-
-  python3 "$SCRIPT_DIR/merge-policy.py" "$POLICY" "${POLICY_FRAGMENTS[@]}"
-else
-  echo "  No policy fragments needed."
-fi
-
 TOOLS=""
-[ -n "$TAVILY_API_KEY" ] && TOOLS="$TOOLS + tavily"
 case "$NEMOCLAW_OPENAI_HTTP_ENABLED" in
   1|true|yes) TOOLS="$TOOLS + openai-http" ;;
 esac
