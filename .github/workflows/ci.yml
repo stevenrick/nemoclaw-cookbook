@@ -52,19 +52,56 @@ jobs:
         run: |
           mkdir -p terminal-server && touch terminal-server/terminal.html
           sudo rm -f /etc/nginx/sites-enabled/default
-          # Validate both __OPENAI_HTTP_DENY__ substitution states: the
-          # default (local-only, deny all on non-loopback) and the tunneled
-          # state (empty, nginx permits the tunnel through). The same
-          # mapping lives in scripts/install-services.sh, keyed off
-          # NEMOCLAW_OPENAI_HTTP_TUNNEL — CI checks both shapes parse.
-          for deny in "deny all;" ""; do
+          # Validate the nginx template shapes produced by
+          # scripts/install-services.sh: disabled OpenAI HTTP (404), enabled
+          # before tokens are written (503), and tokenized edge-auth configs in
+          # both local-only and tunneled exposure modes.
+          edge_token=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          gateway_token=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          access_client_id=cccccccccccccccccccccccccccccccc
+          access_client_secret=dddddddddddddddddddddddddddddddd
+          render_nginx() {
             sed -e "s|__COOKBOOK_DIR__|$PWD|g" \
-                -e "s|__OPENAI_HTTP_DENY__|${deny}|g" \
+                -e "s|__OPENAI_HTTP_DENY__|$1|g" \
+                -e "s|__OPENAI_HTTP_CORS_ORIGIN__|$2|g" \
+                -e "s|__OPENAI_HTTP_EDGE_AUTH__|$3|g" \
+                -e "s|__OPENAI_HTTP_ACCESS_AUTH__|$4|g" \
+                -e "s|__OPENAI_HTTP_AUTH_CHECK__|$5|g" \
+                -e "s|__OPENAI_HTTP_EXTERNAL_AUTH_CHECK__|$6|g" \
+                -e "s|__OPENAI_HTTP_UPSTREAM_AUTH__|$7|g" \
+                -e "s|__NGINX_LISTEN_ADDR__|127.0.0.1|g" \
                 config/nginx.conf.template \
               | sudo tee /etc/nginx/sites-available/nemoclaw > /dev/null
             sudo ln -sf /etc/nginx/sites-available/nemoclaw /etc/nginx/sites-enabled/nemoclaw
             sudo nginx -t
-          done
+          }
+
+          render_nginx "deny all;" "" "" "" "return 404;" "" ""
+          render_nginx "deny all;" "" "" "" "return 503;" "" ""
+          render_nginx \
+            "deny all;" \
+            '"~^https://example\.invalid$" $http_origin;' \
+            "\"Bearer ${edge_token}\" 1;" \
+            "" \
+            'if ($openai_edge_authorized = 0) { return 403; }' \
+            "" \
+            "proxy_set_header Authorization \"Bearer ${gateway_token}\";"
+          render_nginx \
+            "" \
+            '"~^https://example\.invalid$" $http_origin;' \
+            "\"Bearer ${edge_token}\" 1;" \
+            "" \
+            'if ($openai_edge_authorized = 0) { return 403; }' \
+            'if ($openai_external_authorized = 0) { return 503; }' \
+            "proxy_set_header Authorization \"Bearer ${gateway_token}\";"
+          render_nginx \
+            "" \
+            '"~^https://example\.invalid$" $http_origin;' \
+            "\"Bearer ${edge_token}\" 1;" \
+            "\"${access_client_id}:${access_client_secret}\" 1;" \
+            'if ($openai_edge_authorized = 0) { return 403; }' \
+            'if ($openai_external_authorized = 0) { return 403; }' \
+            "proxy_set_header Authorization \"Bearer ${gateway_token}\";"
 
   docker-build:
     name: Build patched sandbox image

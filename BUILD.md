@@ -88,7 +88,16 @@ Prefer `setup.sh` for normal use because it handles failed onboard sessions, det
 
 ## Accessing the Web UI
 
-Secure Link:
+For an external URL, create a Brev Secure Link / service endpoint to host port
+`80`, then set `TUNNEL_FQDN=<hostname>` in `~/.env`. There are two deployment
+shapes:
+
+- Loopback-style Secure Link/cloudflared: leave `NEMOCLAW_NGINX_LISTEN_ADDR`
+  unset; nginx binds `127.0.0.1:80`.
+- Brev `apps.run` service endpoint: set `NEMOCLAW_NGINX_LISTEN_ADDR=0.0.0.0`
+  because the platform ingress connects to the host network interface.
+
+Open the saved URL:
 
 ```bash
 URL=$(brev exec <instance> "sed -n '1p' ~/openclaw-tunnel-url.txt" | sed -n '/^https:/p' | head -1)
@@ -188,14 +197,49 @@ The gateway exposes:
 - `GET /v1/models`
 - `POST /v1/embeddings`
 
-By default, nginx allows `/v1/*` only from loopback. Use an SSH port-forward for programmatic clients:
+This API grants operator-level access to the sandbox. By default, nginx allows
+`/v1/*` only from loopback and CORS is limited to localhost origins plus the
+configured Secure Link origin. Use an SSH port-forward for programmatic clients:
 
 ```bash
 ssh -L 8080:127.0.0.1:80 <brev-host>
-OPENAI_BASE_URL=http://127.0.0.1:8080/v1 OPENAI_API_KEY=<gateway-token> python your_client.py
+OPENAI_BASE_URL=http://127.0.0.1:8080/v1 OPENAI_API_KEY=<edge-token-from-openclaw-openai.env> python your_client.py
 ```
 
-Set `NEMOCLAW_OPENAI_HTTP_TUNNEL=1` only for a self-hosted deployment where nginx port 80 is directly exposed and the gateway token is the intended external auth boundary.
+The generated `~/openclaw-openai.env` file reads the API key from the owner-only
+token file instead of storing the raw key inline. nginx validates that edge token
+and rewrites requests to the private OpenClaw gateway token upstream, so API
+token rotation does not require rebuilding or restarting the sandbox:
+
+```bash
+./scripts/rotate-openai-http-token.sh
+source ~/openclaw-openai.env
+```
+
+Do not expose `/v1/*` publicly with the API bearer as the only auth layer. Keep
+the default loopback-only mode and use SSH port-forwarding whenever possible.
+If non-loopback clients must use the endpoint, set `NEMOCLAW_OPENAI_HTTP_TUNNEL=1`
+and configure a second header credential:
+
+```bash
+NEMOCLAW_OPENAI_HTTP_TUNNEL=1
+NEMOCLAW_OPENAI_HTTP_ACCESS_CLIENT_ID=<client-id>
+NEMOCLAW_OPENAI_HTTP_ACCESS_CLIENT_SECRET=<client-secret>
+```
+
+nginx requires both the normal `Authorization: Bearer ...` API key and matching
+`CF-Access-Client-Id` / `CF-Access-Client-Secret` headers for non-loopback
+callers. If tunnel mode is enabled without those two variables, `/v1/*` fails
+closed for non-loopback clients. The dashboard URL still carries the gateway token for the Web UI; do not reuse that token for API clients.
+nginx also rate limits `/v1/*` by source IP at 120 requests per minute with a
+burst of 30 requests.
+
+For Brev `apps.run` service endpoints, expose host port `80` and set
+`NEMOCLAW_NGINX_LISTEN_ADDR=0.0.0.0` so the platform ingress can reach nginx.
+If `/v1/*` should be reachable through that endpoint, also configure the
+`NEMOCLAW_OPENAI_HTTP_TUNNEL` and `NEMOCLAW_OPENAI_HTTP_ACCESS_CLIENT_*`
+variables above; otherwise external dashboard and terminal work, but `/v1/*`
+stays loopback-guarded.
 
 ## Refreshing Patches After Upstream Updates
 
@@ -267,7 +311,7 @@ The cookbook modifies upstream working-tree files before building. Reset those f
 
 ```bash
 cd ~/NemoClaw
-git checkout -- Dockerfile Dockerfile.base nemoclaw-blueprint/policies/openclaw-sandbox.yaml scripts/nemoclaw-start.sh
+git checkout -- Dockerfile Dockerfile.base package-lock.json nemoclaw-blueprint/policies/openclaw-sandbox.yaml scripts/nemoclaw-start.sh
 git pull --ff-only
 ```
 
@@ -286,6 +330,10 @@ Key variables are documented in [.env.example](.env.example). The most common ar
 | `TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TOKEN`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN` | Optional upstream messaging channels |
 | `NEMOCLAW_WEB_SEARCH_PROVIDER`, `BRAVE_API_KEY`, `TAVILY_API_KEY` | Optional upstream web-search selection |
 | `NEMOCLAW_OPENAI_HTTP_ENABLED=1` | Cookbook `/v1/*` API enablement |
+| `NEMOCLAW_OPENAI_HTTP_TUNNEL=1` | Allows non-loopback `/v1/*` only when the second header credential below is also configured |
+| `NEMOCLAW_OPENAI_HTTP_ACCESS_CLIENT_ID` | Required `CF-Access-Client-Id` value for non-loopback `/v1/*` callers |
+| `NEMOCLAW_OPENAI_HTTP_ACCESS_CLIENT_SECRET` | Required `CF-Access-Client-Secret` value for non-loopback `/v1/*` callers |
+| `NEMOCLAW_NGINX_LISTEN_ADDR=0.0.0.0` | Bind nginx to the host network interface for Brev `apps.run` service endpoints |
 | `TUNNEL_FQDN` | Secure Link hostname for browser access |
 | `CLOUDFLARE_TUNNEL_TOKEN` | Optional upstream Cloudflare named tunnel |
 | `NEMOCLAW_POLICY_TIER`, `NEMOCLAW_POLICY_PRESETS`, `NEMOCLAW_POLICY_MODE` | Upstream policy selection |

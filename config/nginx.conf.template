@@ -14,13 +14,40 @@
 # the proxy layer solves this without patching the sandbox config (which is
 # Landlock read-only and integrity-hashed).
 
+map_hash_bucket_size 128;
+
 map $http_upgrade $connection_upgrade {
     default upgrade;
     ''      close;
 }
 
+map $http_origin $openai_cors_origin {
+    default "";
+    "~^https?://127\.0\.0\.1(:[0-9]+)?$" $http_origin;
+    "~^https?://localhost(:[0-9]+)?$" $http_origin;
+    __OPENAI_HTTP_CORS_ORIGIN__
+}
+
+map $http_authorization $openai_edge_authorized {
+    default 0;
+    __OPENAI_HTTP_EDGE_AUTH__
+}
+
+map "$http_cf_access_client_id:$http_cf_access_client_secret" $openai_access_authorized {
+    default 0;
+    __OPENAI_HTTP_ACCESS_AUTH__
+}
+
+map "$remote_addr:$openai_access_authorized" $openai_external_authorized {
+    default 0;
+    ~^127\.0\.0\.1: 1;
+    ~:1$ 1;
+}
+
+limit_req_zone $binary_remote_addr zone=openai_http_api:10m rate=120r/m;
+
 server {
-    listen 127.0.0.1:80 default_server;
+    listen __NGINX_LISTEN_ADDR__:80 default_server;
 
     # Terminal page — static HTML with xterm.js
     location = /terminal {
@@ -45,36 +72,49 @@ server {
     # Active only when NEMOCLAW_OPENAI_HTTP_ENABLED=1 baked the gateway config
     # (the block is always present; an inert gateway 404s /v1/* regardless).
     # OpenClaw emits no CORS headers and returns 405 to OPTIONS, so nginx
-    # terminates CORS here — without this, browser clients (open-webui) fail
-    # preflight against /v1/*. Retire when OpenClaw ships native CORS.
+    # terminates CORS here. CORS is restricted to localhost origins plus the
+    # configured Secure Link origin when TUNNEL_FQDN is set.
     #
-    # __OPENAI_HTTP_DENY__ is substituted by install-services.sh:
+    # Client Authorization is checked by nginx against a host-side edge token,
+    # then rewritten to the private OpenClaw gateway token upstream. The edge
+    # token is rotatable without rebuilding or restarting the sandbox.
+    #
+    # The deny rule is substituted by install-services.sh:
     # - NEMOCLAW_OPENAI_HTTP_TUNNEL unset: "deny all;" — only 127.0.0.1
     #   can reach /v1/* (this is the secure default; cloudflared and
     #   SSH port-forward still work because both surface as 127.0.0.1)
-    # - set: empty — any source IP can reach /v1/*; gateway token is
-    #   the only auth. Use only when nginx is exposed directly on the
-    #   host's network interface with no fronting proxy.
+    # - set: empty — non-loopback callers must also pass the configured
+    #   Cloudflare Access service-token headers. If those headers are not
+    #   configured, install-services.sh makes /v1/* fail closed.
     location ^~ /v1/ {
         if ($request_method = OPTIONS) {
-            add_header Access-Control-Allow-Origin $http_origin always;
+            add_header Access-Control-Allow-Origin $openai_cors_origin always;
             add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
-            add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
+            add_header Access-Control-Allow-Headers "Authorization, Content-Type, CF-Access-Client-Id, CF-Access-Client-Secret" always;
             add_header Access-Control-Max-Age 86400 always;
+            add_header Vary Origin always;
             add_header Content-Length 0;
             add_header Content-Type "text/plain charset=UTF-8";
             return 204;
         }
 
-        add_header Access-Control-Allow-Origin $http_origin always;
-        add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
+        add_header Access-Control-Allow-Origin $openai_cors_origin always;
+        add_header Access-Control-Allow-Headers "Authorization, Content-Type, CF-Access-Client-Id, CF-Access-Client-Secret" always;
+        add_header Vary Origin always;
+
+        __OPENAI_HTTP_AUTH_CHECK__
+        __OPENAI_HTTP_EXTERNAL_AUTH_CHECK__
 
         allow 127.0.0.1;
         __OPENAI_HTTP_DENY__
 
+        limit_req zone=openai_http_api burst=30 nodelay;
+        limit_req_status 429;
+
         proxy_pass http://127.0.0.1:18789;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
+        __OPENAI_HTTP_UPSTREAM_AUTH__
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;

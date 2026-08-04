@@ -196,8 +196,20 @@ if [ "$OPENAI_FLAG" = "1" ] || [ "$OPENAI_FLAG" = "true" ]; then
     # shellcheck source=/dev/null
     . "$HOME/openclaw-openai.env"
     OPENAI_VERIFY_TMP=$(mktemp)
+    OPENAI_CURL_HEADERS=(-H "Authorization: Bearer ${OPENAI_API_KEY}")
+    case "${OPENAI_BASE_URL:-}" in
+      http://127.0.0.1*|http://localhost*) ;;
+      *)
+        if [ -n "${NEMOCLAW_OPENAI_HTTP_ACCESS_CLIENT_ID:-}" ] && [ -n "${NEMOCLAW_OPENAI_HTTP_ACCESS_CLIENT_SECRET:-}" ]; then
+          OPENAI_CURL_HEADERS+=(
+            -H "CF-Access-Client-Id: ${NEMOCLAW_OPENAI_HTTP_ACCESS_CLIENT_ID}"
+            -H "CF-Access-Client-Secret: ${NEMOCLAW_OPENAI_HTTP_ACCESS_CLIENT_SECRET}"
+          )
+        fi
+        ;;
+    esac
     HTTP_CODE=$(curl -s -o "$OPENAI_VERIFY_TMP" -w '%{http_code}' --max-time 5 \
-      -H "Authorization: Bearer ${OPENAI_API_KEY}" \
+      "${OPENAI_CURL_HEADERS[@]}" \
       "${OPENAI_BASE_URL}/models" 2>/dev/null || echo "000")
     if [ "$HTTP_CODE" = "200" ] && grep -q '"data"' "$OPENAI_VERIFY_TMP" 2>/dev/null; then
       pass "OpenAI HTTP API reachable ($OPENAI_BASE_URL/models → 200)"
