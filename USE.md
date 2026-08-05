@@ -35,6 +35,10 @@ The sandbox is managed by OpenShell. Do not use `docker exec` as the normal acce
 | Telegram / Discord / Slack | Your configured bot or app | Async messaging |
 | OpenAI-compatible HTTP | `~/openclaw-openai.env` | Optional `/v1/*` client settings |
 
+External URLs should point at host port `80`. For Brev `apps.run`, set
+`NEMOCLAW_NGINX_LISTEN_ADDR=0.0.0.0` before setup; loopback Secure
+Link/cloudflared and SSH-forwarded access should leave it unset.
+
 Open URLs without printing the tokenized value:
 
 ```bash
@@ -183,10 +187,32 @@ For laptop clients, prefer an SSH port-forward:
 
 ```bash
 ssh -L 8080:127.0.0.1:80 <brev-host>
-OPENAI_BASE_URL=http://127.0.0.1:8080/v1 OPENAI_API_KEY=<gateway-token> python your_client.py
+OPENAI_BASE_URL=http://127.0.0.1:8080/v1 OPENAI_API_KEY=<edge-token-from-openclaw-openai.env> python your_client.py
 ```
 
-`NEMOCLAW_OPENAI_HTTP_TUNNEL=1` removes nginx's loopback-only guard for `/v1/*`. Use it only when nginx is intentionally exposed directly on the host network and the gateway token is the external auth boundary.
+`NEMOCLAW_OPENAI_HTTP_TUNNEL=1` can make `/v1/*` reachable by non-loopback
+clients, but it no longer permits bearer-only public exposure. Tunnel mode also
+requires `NEMOCLAW_OPENAI_HTTP_ACCESS_CLIENT_ID` and
+`NEMOCLAW_OPENAI_HTTP_ACCESS_CLIENT_SECRET`; nginx checks those values against
+the `CF-Access-Client-Id` and `CF-Access-Client-Secret` request headers before
+proxying non-loopback API requests. If either value is missing, `/v1/*` fails
+closed for non-loopback clients. CORS is restricted to localhost origins plus
+the configured Secure Link origin; it is not a replacement for token secrecy or
+edge authentication. nginx rate limits `/v1/*` by source IP at 120 requests per
+minute with a burst of 30 requests.
+
+Rotate the API edge token without rebuilding or restarting the sandbox:
+
+```bash
+./scripts/rotate-openai-http-token.sh
+source ~/openclaw-openai.env
+```
+
+Brev `apps.run` service endpoints should target host port `80` and set
+`NEMOCLAW_NGINX_LISTEN_ADDR=0.0.0.0`; loopback Secure Link/cloudflared and SSH
+port-forward modes should leave that unset. If `/v1/*` should be externally
+reachable through `apps.run`, also set `NEMOCLAW_OPENAI_HTTP_TUNNEL=1` and the
+`NEMOCLAW_OPENAI_HTTP_ACCESS_CLIENT_*` values.
 
 ## Sandbox Management
 
@@ -283,7 +309,7 @@ bash install.sh --non-interactive
 
 ```bash
 cd ~/NemoClaw
-git checkout -- Dockerfile Dockerfile.base nemoclaw-blueprint/policies/openclaw-sandbox.yaml scripts/nemoclaw-start.sh
+git checkout -- Dockerfile Dockerfile.base package-lock.json nemoclaw-blueprint/policies/openclaw-sandbox.yaml scripts/nemoclaw-start.sh
 git pull --ff-only
 ```
 
@@ -302,7 +328,7 @@ OpenClaw workspace files live under:
 /sandbox/.openclaw/workspace/
 ```
 
-Chat sessions live under OpenClaw's agent session directory. Use `scripts/backup-full.sh` rather than copying internal paths by hand when possible.
+Chat sessions live under OpenClaw's agent session directory. Use `scripts/backup-full.sh` rather than copying raw paths by hand when possible.
 
 ## Copy Files To or From the Sandbox
 
@@ -333,9 +359,11 @@ brev exec <instance> "rm -rf /tmp/sandbox-staging"
 | Path | Purpose |
 |------|---------|
 | `~/.env` | Host-side credentials and deployment options |
-| `~/openclaw-ui-url.txt` | Tokenized local Web UI URL |
-| `~/openclaw-tunnel-url.txt` | Tokenized Secure Link Web UI URL |
-| `~/openclaw-openai.env` | Optional `/v1/*` client settings |
+| `~/openclaw-ui-url.txt` | Tokenized local Web UI URL, written `0600` |
+| `~/openclaw-tunnel-url.txt` | Tokenized Secure Link Web UI URL, written `0600` |
+| `~/openclaw-openai.env` | Optional `/v1/*` client settings; loads the edge token from `~/.nemoclaw/openai-http-edge-token`, written `0600` |
+| `~/.nemoclaw/openai-http-edge-token` | Host-side `/v1/*` API token accepted by nginx, written `0600` |
+| `~/.nemoclaw/openai-http-gateway-token` | Private OpenClaw gateway token used only by nginx upstream, written `0600` |
 | `~/.nemoclaw/credentials.json` | Host-side inference credentials |
 | `~/.nemoclaw/sandboxes.json` | Sandbox registry |
 | `~/.nemoclaw/cookbook-deployment.json` | Cookbook deployment manifest |

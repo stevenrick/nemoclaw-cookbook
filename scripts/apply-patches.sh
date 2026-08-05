@@ -22,6 +22,8 @@ FRAGMENTS_DIR="$COOKBOOK_DIR/patches/fragments"
 NEMOCLAW_OPENAI_HTTP_ENABLED="${NEMOCLAW_OPENAI_HTTP_ENABLED:-}"
 
 DOCKERFILE="$NEMOCLAW_DIR/Dockerfile"
+REMOVED_TOOL_INSTALLS=0
+TAVILY_PLUGIN_PATCHED=0
 
 # ── Dockerfile modifications ────────────────────────────────────────
 # Post-config anchor: fragments inserted here run as root, AFTER all upstream
@@ -60,6 +62,134 @@ with open(sys.argv[3], 'w') as f:
 
   echo "    ✓ $name"
 }
+
+strip_disallowed_tool_installs() {
+  local file="$1"
+  local removed
+
+  removed="$(python3 - "$file" <<'PY'
+import re
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as f:
+    content = f.read()
+
+patterns = [
+    re.compile(r"(?m)^RUN\s+.*@openai/codex[^\n]*$"),
+    re.compile(r"(?m)^RUN\s+.*@anthropic-ai/claude-code[^\n]*$"),
+    re.compile(r"(?m)^RUN\s+.*https://claude\.ai/install\.sh\s*\|\s*(?:sudo\s+)?bash[^\n]*$"),
+]
+
+removed = 0
+for pattern in patterns:
+    content, count = pattern.subn(
+        "RUN echo 'NemoClaw cookbook: sandbox coding-agent install removed by policy'",
+        content,
+    )
+    removed += count
+
+remaining = []
+for line in content.splitlines():
+    stripped = line.lstrip()
+    if stripped.startswith("#"):
+        continue
+    if (
+        "@openai/codex" in line
+        or "@anthropic-ai/claude-code" in line
+        or "https://claude.ai/install.sh" in line
+    ):
+        remaining.append(line.strip())
+
+if remaining:
+    print(
+        "ERROR: unhandled disallowed sandbox coding-agent install pattern(s):",
+        file=sys.stderr,
+    )
+    for line in remaining:
+        print(f"  {line}", file=sys.stderr)
+    sys.exit(1)
+
+with open(path, "w", encoding="utf-8") as f:
+    f.write(content)
+
+print(removed)
+PY
+)"
+
+  if [ "$removed" -gt 0 ]; then
+    echo "  Removed upstream sandbox coding-agent install(s): $removed"
+  fi
+  REMOVED_TOOL_INSTALLS="$removed"
+}
+
+strip_disallowed_tool_installs "$DOCKERFILE"
+
+ensure_reviewed_tavily_plugin_install() {
+  local file="$1"
+  local patched
+
+  patched="$(python3 - "$file" <<'PY'
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as f:
+    content = f.read()
+
+if "@openclaw/tavily-plugin" in content:
+    print(0)
+    sys.exit(0)
+
+brave_pin = (
+    '            "@openclaw/brave-plugin@2026.7.1") '
+    'expected_integrity="$OPENCLAW_BRAVE_PLUGIN_2026_7_1_INTEGRITY"; '
+    'expected_tarball="https://registry.npmjs.org/@openclaw/brave-plugin/-/brave-plugin-2026.7.1.tgz" ;; \\'
+)
+tavily_pin = (
+    brave_pin
+    + '\n'
+    + '            "@openclaw/tavily-plugin@2026.7.1") '
+    + 'expected_integrity="sha512-JI9RIGmZVmtCnt8F+OwQb973pOTa7X0b/tDi7B8cIjYr5Ieq9IlzgLNTgnUBNZbSnJSh7p89QIaeUQ98LFVAHQ=="; '
+    + 'expected_tarball="https://registry.npmjs.org/@openclaw/tavily-plugin/-/tavily-plugin-2026.7.1.tgz" ;; \\'
+)
+tavily_inspect = (
+    '            tavily) \\\n'
+    '                openclaw plugins inspect tavily --json > /dev/null; \\\n'
+    '                TAVILY_API_KEY=openshell:resolve:env:TAVILY_API_KEY openclaw doctor --fix --non-interactive \\'
+)
+tavily_install = (
+    '            tavily) \\\n'
+    '                install_reviewed_openclaw_plugin "@openclaw/tavily-plugin"; \\\n'
+    '                TAVILY_API_KEY=openshell:resolve:env:TAVILY_API_KEY openclaw doctor --fix --non-interactive \\'
+)
+
+missing = []
+if brave_pin not in content:
+    missing.append("OpenClaw Brave plugin integrity pin")
+if tavily_inspect not in content:
+    missing.append("OpenClaw Tavily inspect-only branch")
+if missing:
+    for item in missing:
+        print(f"ERROR: expected upstream Dockerfile anchor not found: {item}", file=sys.stderr)
+    sys.exit(1)
+
+content = content.replace(brave_pin, tavily_pin, 1)
+content = content.replace(tavily_inspect, tavily_install, 1)
+
+with open(path, "w", encoding="utf-8") as f:
+    f.write(content)
+
+print(1)
+PY
+)"
+
+  if [ "$patched" = "1" ]; then
+    echo "  Added reviewed OpenClaw Tavily plugin install."
+  fi
+  TAVILY_PLUGIN_PATCHED="$patched"
+}
+
+ensure_reviewed_tavily_plugin_install "$DOCKERFILE"
 
 # Compute the integrations payload from env if not pre-set. This lets every
 # caller just `source ~/.env` and let apply-patches.sh handle the payload. The
@@ -103,6 +233,12 @@ TOOLS=""
 case "$NEMOCLAW_OPENAI_HTTP_ENABLED" in
   1|true|yes) TOOLS="$TOOLS + openai-http" ;;
 esac
+if [ "$REMOVED_TOOL_INSTALLS" -gt 0 ]; then
+  TOOLS="$TOOLS + remove-codex-claude"
+fi
+if [ "$TAVILY_PLUGIN_PATCHED" -gt 0 ]; then
+  TOOLS="$TOOLS + tavily-plugin"
+fi
 if [ -n "$TOOLS" ]; then
   echo "  Patches applied (${TOOLS# + })."
 else

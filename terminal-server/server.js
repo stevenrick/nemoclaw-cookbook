@@ -17,6 +17,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const WebSocket = require("ws");
 const pty = require("node-pty");
 
@@ -27,12 +28,21 @@ const PORT = parseInt(
   10,
 );
 
-// Hardcoded command — never accept commands from the client.
+const HOME_DIR = process.env.HOME || "/home/ubuntu";
+
+// Hardcoded command - never accept commands from the client.
 // Use full path since systemd services don't inherit the user's shell PATH.
-const SHELL_CMD = process.env.HOME
-  ? `${process.env.HOME}/.local/bin/openshell`
-  : "/home/ubuntu/.local/bin/openshell";
+const SHELL_CMD = `${HOME_DIR}/.local/bin/openshell`;
 const SHELL_ARGS = ["term"];
+const TERMINAL_ENV = Object.freeze({
+  HOME: HOME_DIR,
+  USER: "ubuntu",
+  LOGNAME: "ubuntu",
+  SHELL: "/bin/bash",
+  PATH: `${HOME_DIR}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`,
+  TERM: "xterm-256color",
+  LANG: process.env.LANG || "C.UTF-8",
+});
 
 // ── Token authentication ──────────────────────────────────────────────
 // Read the expected token from the local UI URL file. This is the same
@@ -41,7 +51,7 @@ const SHELL_ARGS = ["term"];
 
 function loadExpectedToken() {
   const urlFile = path.join(
-    process.env.HOME || "/home/ubuntu",
+    HOME_DIR,
     "openclaw-ui-url.txt",
   );
   try {
@@ -78,7 +88,7 @@ function authenticateRequest(req) {
   if (clientToken.length !== expectedToken.length) return false;
   const a = Buffer.from(clientToken, "utf-8");
   const b = Buffer.from(expectedToken, "utf-8");
-  return require("crypto").timingSafeEqual(a, b);
+  return crypto.timingSafeEqual(a, b);
 }
 
 // ── Server ────────────────────────────────────────────────────────────
@@ -110,11 +120,8 @@ wss.on("connection", (ws, req) => {
     name: "xterm-256color",
     cols: 120,
     rows: 40,
-    cwd: process.env.HOME || "/home/ubuntu",
-    env: {
-      ...process.env,
-      TERM: "xterm-256color",
-    },
+    cwd: HOME_DIR,
+    env: TERMINAL_ENV,
   });
 
   shell.onData((data) => {

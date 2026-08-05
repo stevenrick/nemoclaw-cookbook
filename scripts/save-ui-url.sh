@@ -8,6 +8,10 @@
 # Prefer upstream `dashboard-url` / `gateway-token` commands. Falls back to
 # downloading openclaw.json or parsing sandbox logs for older/broken installs.
 set -uo pipefail
+umask 077
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COOKBOOK_DIR="$(dirname "$SCRIPT_DIR")"
 
 export NVM_DIR="$HOME/.nvm"
 # shellcheck source=/dev/null
@@ -29,6 +33,59 @@ fi
 
 last_nonempty_line() {
   awk 'NF { line=$0 } END { if (line) print line }'
+}
+
+write_private_file() {
+  local path="$1"
+  local dir base tmp
+
+  dir="$(dirname "$path")"
+  base="$(basename "$path")"
+  mkdir -p "$dir"
+  tmp="$(mktemp "${dir}/.${base}.XXXXXX")"
+  cat > "$tmp"
+  chmod 600 "$tmp"
+  mv -f "$tmp" "$path"
+}
+
+generate_token() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+  else
+    python3 -c 'import secrets; print(secrets.token_hex(32))'
+  fi
+}
+
+ensure_openai_edge_token() {
+  local secret_dir="$HOME/.nemoclaw"
+  local token_file="$secret_dir/openai-http-edge-token"
+  local token=""
+
+  mkdir -p "$secret_dir"
+  chmod 700 "$secret_dir"
+  if [ -f "$token_file" ]; then
+    token="$(sed -n '1p' "$token_file")"
+  fi
+  case "$token" in
+    ""|*[!A-Za-z0-9._~+=/-]*)
+      token="$(generate_token)"
+      printf '%s\n' "$token" | write_private_file "$token_file"
+      ;;
+  esac
+  printf '%s\n' "$token"
+}
+
+refresh_openai_nginx() {
+  if [ ! -x "$COOKBOOK_DIR/scripts/install-services.sh" ]; then
+    echo "  ⚠ Could not refresh nginx for OpenAI HTTP API; install-services.sh missing"
+    return 1
+  fi
+  if "$COOKBOOK_DIR/scripts/install-services.sh" --nginx-only >/dev/null; then
+    echo "  ✓ nginx OpenAI HTTP auth refreshed"
+    return 0
+  fi
+  echo "  ⚠ Could not refresh nginx for OpenAI HTTP API; run scripts/install-services.sh --nginx-only"
+  return 1
 }
 
 append_token_fragment() {
@@ -58,11 +115,11 @@ write_urls() {
     local_url="http://127.0.0.1:18789/#token=${token}"
   fi
 
-  echo "$local_url" > "$HOME/openclaw-ui-url.txt"
+  printf '%s\n' "$local_url" | write_private_file "$HOME/openclaw-ui-url.txt"
   echo "  ✓ Local UI URL saved to ~/openclaw-ui-url.txt"
 
   if [ -n "$TUNNEL_FQDN" ]; then
-    append_token_fragment "https://${TUNNEL_FQDN}/" "$token" > "$HOME/openclaw-tunnel-url.txt"
+    append_token_fragment "https://${TUNNEL_FQDN}/" "$token" | write_private_file "$HOME/openclaw-tunnel-url.txt"
     echo "  ✓ Tunnel UI URL saved to ~/openclaw-tunnel-url.txt"
   fi
 
@@ -75,31 +132,31 @@ write_urls() {
   # four ways to make the tunnel URL programmatically reachable.
   local openai_flag="${NEMOCLAW_OPENAI_HTTP_ENABLED:-}"
   if [ "$openai_flag" = "1" ] || [ "$openai_flag" = "true" ]; then
+    ensure_openai_edge_token >/dev/null
+    printf '%s\n' "$token" | write_private_file "$HOME/.nemoclaw/openai-http-gateway-token"
     {
       echo "# OpenAI-compatible HTTP API on the NemoClaw gateway."
+      echo "# OPENAI_API_KEY is loaded from the owner-only edge-token file instead"
+      echo "# of being stored directly in this client env file. nginx rewrites it"
+      echo "# to the private OpenClaw gateway token upstream."
+      echo "# Rotate without rebuilding the sandbox: scripts/rotate-openai-http-token.sh"
       echo "# Default base URL: works from this Brev host directly, and from a"
       echo "# laptop via 'ssh -L 8080:127.0.0.1:80 <brev-host>' (then use"
       echo "# OPENAI_BASE_URL=http://127.0.0.1:8080/v1)."
-      echo "OPENAI_BASE_URL=http://127.0.0.1/v1"
-      echo "OPENAI_API_KEY=${token}"
+      echo "OPENAI_EDGE_TOKEN_FILE=\"\${OPENAI_EDGE_TOKEN_FILE:-\$HOME/.nemoclaw/openai-http-edge-token}\""
+      echo "OPENAI_BASE_URL=\"http://127.0.0.1/v1\""
+      echo "OPENAI_API_KEY=\"\$(sed -n '1p' \"\$OPENAI_EDGE_TOKEN_FILE\")\""
+      echo "export OPENAI_BASE_URL OPENAI_API_KEY"
       if [ -n "$TUNNEL_FQDN" ]; then
         echo ""
-        echo "# Alternative: tunnel URL. Brev's Secure Link defaults to"
-        echo "# Cloudflare Access SSO — programmatic clients need one of:"
-        echo "#   (a) Brev dashboard → Secure Links → this link → Edit Access"
-        echo "#       → toggle 'Make Public' on (simplest; exposes the entire"
-        echo "#       hostname incl. dashboard, gated only by the gateway token"
-        echo "#       below)"
-        echo "#   (b) CF Access service token + CF-Access-Client-Id / -Secret"
-        echo "#       headers alongside Authorization"
-        echo "#   (c) CF Access /v1/* bypass rule (API public, dashboard still"
-        echo "#       SSO-gated — narrowest blast radius)"
-        echo "# See BUILD.md (\"Exposing the API beyond the host\") for trade-offs."
+        echo "# Alternative: tunnel URL. Non-loopback /v1/* access requires"
+        echo "# NEMOCLAW_OPENAI_HTTP_TUNNEL=1 plus Cloudflare Access service-token"
+        echo "# headers configured on nginx and sent by the client."
         echo "# OPENAI_BASE_URL=https://${TUNNEL_FQDN}/v1"
       fi
-    } > "$HOME/openclaw-openai.env"
-    chmod 600 "$HOME/openclaw-openai.env"
+    } | write_private_file "$HOME/openclaw-openai.env"
     echo "  ✓ OpenAI HTTP API env saved to ~/openclaw-openai.env"
+    refresh_openai_nginx
   fi
 }
 
@@ -116,7 +173,7 @@ if [ -n "$GW_TOKEN" ]; then
   else
     LOCAL_URL=""
   fi
-  write_urls "$GW_TOKEN" "$LOCAL_URL"
+  write_urls "$GW_TOKEN" "$LOCAL_URL" || exit 1
   exit 0
 fi
 
@@ -142,7 +199,7 @@ PY
     else
       LOCAL_URL=""
     fi
-    write_urls "$GW_TOKEN" "$LOCAL_URL"
+    write_urls "$GW_TOKEN" "$LOCAL_URL" || exit 1
     exit 0
   fi
 fi
@@ -155,13 +212,13 @@ if [ -n "$GW_TOKEN" ]; then
   else
     LOCAL_URL=""
   fi
-  write_urls "$GW_TOKEN" "$LOCAL_URL"
+  write_urls "$GW_TOKEN" "$LOCAL_URL" || exit 1
   echo "  (token extracted from logs)"
   exit 0
 fi
 
 if [ -n "$UPSTREAM_URL" ]; then
-  echo "$UPSTREAM_URL" > "$HOME/openclaw-ui-url.txt"
+  printf '%s\n' "$UPSTREAM_URL" | write_private_file "$HOME/openclaw-ui-url.txt"
   echo "  ✓ Local UI URL saved to ~/openclaw-ui-url.txt"
   echo "  ⚠ Gateway token was not available; ~/openclaw-openai.env was not written."
   exit 0

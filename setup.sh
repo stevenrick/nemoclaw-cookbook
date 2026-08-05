@@ -6,9 +6,16 @@
 #   - Docker installed and running
 #   - ~/.env populated (copy from .env.example)
 set -euo pipefail
+umask 022
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${HOME}/.env"
+
+normalize_nemoclaw_source_modes() {
+  if [ -d "$HOME/NemoClaw" ]; then
+    find "$HOME/NemoClaw" -path "$HOME/NemoClaw/.git" -prune -o -perm /022 -exec chmod go-w {} +
+  fi
+}
 
 # ── Preflight ─────────────────────────────────────────────────────────
 if [ ! -f "$ENV_FILE" ]; then
@@ -92,11 +99,12 @@ echo "=== Step 1: Clone / update repositories ==="
 cd "$HOME"
 if [ -d NemoClaw ]; then
   echo "  NemoClaw exists, pulling latest..."
-  git -C NemoClaw checkout -- Dockerfile Dockerfile.base nemoclaw-blueprint/policies/openclaw-sandbox.yaml scripts/nemoclaw-start.sh 2>/dev/null || true
+  git -C NemoClaw checkout -- Dockerfile Dockerfile.base package-lock.json nemoclaw-blueprint/policies/openclaw-sandbox.yaml scripts/nemoclaw-start.sh 2>/dev/null || true
   git -C NemoClaw pull --ff-only || echo "  Warning: pull failed, continuing with existing checkout"
 else
   git clone https://github.com/NVIDIA/NemoClaw
 fi
+normalize_nemoclaw_source_modes
 
 echo "=== Step 2: Install OpenShell via upstream NemoClaw ==="
 cd "$HOME/NemoClaw"
@@ -112,7 +120,8 @@ echo "=== Step 3: Apply patches ==="
 # See UPSTREAM.md for the versions patches were last validated against.
 # Uses modular fragments (not git apply) for resilience to upstream changes.
 cd "$HOME/NemoClaw"
-git checkout -- Dockerfile Dockerfile.base nemoclaw-blueprint/policies/openclaw-sandbox.yaml scripts/nemoclaw-start.sh 2>/dev/null || true
+git checkout -- Dockerfile Dockerfile.base package-lock.json nemoclaw-blueprint/policies/openclaw-sandbox.yaml scripts/nemoclaw-start.sh 2>/dev/null || true
+normalize_nemoclaw_source_modes
 
 "${SCRIPT_DIR}/scripts/apply-patches.sh" "$HOME/NemoClaw"
 
@@ -236,12 +245,13 @@ if [ -f "$HOME/openclaw-tunnel-url.txt" ]; then
   echo "  Open the URL from that file — no port forwarding needed."
 else
   echo "Web UI: brev port-forward <instance> -p 18789:18789"
-  echo "  Then open: cat ~/openclaw-ui-url.txt"
+  echo "  Then open the URL saved in ~/openclaw-ui-url.txt."
   echo ""
   echo "  To use a Secure Link instead (no port-forward):"
-  echo "    1. Go to Brev Settings → Secure Links → add port 80"
+  echo "    1. Create a Brev Secure Link / service endpoint to host port 80"
   echo "    2. Set TUNNEL_FQDN=<your-link> in ~/.env"
-  echo "    3. Re-run setup.sh"
+  echo "    3. For Brev apps.run endpoints, also set NEMOCLAW_NGINX_LISTEN_ADDR=0.0.0.0"
+  echo "    4. Re-run setup.sh"
 fi
 echo ""
 echo "Next steps:"

@@ -36,7 +36,7 @@ brev exec <instance> "cd ~/nemoclaw-cookbook && ./setup.sh"
 Connect after setup:
 
 ```bash
-# Secure Link, if TUNNEL_FQDN is set. Opens without printing the tokenized URL.
+# Public/Secure Link, if TUNNEL_FQDN is set. Opens without printing the tokenized URL.
 URL=$(brev exec <instance> "sed -n '1p' ~/openclaw-tunnel-url.txt" | sed -n '/^https:/p' | head -1)
 open "$URL"
 
@@ -49,6 +49,19 @@ brev port-forward <instance> -p 18789:18789
 URL=$(brev exec <instance> "sed -n '1p' ~/openclaw-ui-url.txt" | sed -n '/^http:/p' | head -1)
 open "$URL"
 ```
+
+External endpoints should target host port `80`. If the platform endpoint can
+only reach the host network interface, such as Brev `apps.run`, set
+`NEMOCLAW_NGINX_LISTEN_ADDR=0.0.0.0` in `~/.env`; leave it unset for loopback
+Secure Link/cloudflared and SSH-forwarded access. Set
+`NEMOCLAW_OPENAI_HTTP_TUNNEL=1` only when `/v1/*` should be reachable through
+that external endpoint, and pair it with
+`NEMOCLAW_OPENAI_HTTP_ACCESS_CLIENT_ID` plus
+`NEMOCLAW_OPENAI_HTTP_ACCESS_CLIENT_SECRET`. Non-loopback API callers must send
+both those headers and the generated API bearer. Rotate the API bearer without
+rebuilding the sandbox with `scripts/rotate-openai-http-token.sh`. nginx rate
+limits `/v1/*` by source IP at 120 requests per minute with a burst of 30
+requests.
 
 See [BUILD.md](BUILD.md) for the full setup walkthrough and [USE.md](USE.md) for day-to-day commands.
 
