@@ -1,9 +1,10 @@
 # USE: NemoClaw Day-to-Day Reference
 
-Examples use the default sandbox name, `my-assistant`. If you set `NEMOCLAW_SANDBOX_NAME`, substitute your name. Check with:
+Use the sandbox name recorded by upstream NemoClaw. JSON output also identifies
+the agent and dynamically allocated dashboard port:
 
 ```bash
-nemoclaw list
+nemoclaw list --json
 ```
 
 ## Connect
@@ -12,15 +13,13 @@ Interactive:
 
 ```bash
 brev shell <instance>
-nemoclaw my-assistant connect
+nemoclaw <sandbox> connect
 ```
 
 Non-interactive command inside the sandbox:
 
 ```bash
-brev exec <instance> "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-  -o 'ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name my-assistant' \
-  sandbox@openshell-my-assistant '<command>'"
+brev exec <instance> "nemoclaw <sandbox> exec -- <command>"
 ```
 
 The sandbox is managed by OpenShell. Do not use `docker exec` as the normal access path.
@@ -29,11 +28,11 @@ The sandbox is managed by OpenShell. Do not use `docker exec` as the normal acce
 
 | Endpoint | URL / Command | Purpose |
 |----------|---------------|---------|
-| Web UI | `~/openclaw-tunnel-url.txt` or `~/openclaw-ui-url.txt` | Dashboard chat, skills, settings |
-| Browser terminal | `/terminal#token=<hex>` on the same host | OpenShell policy approval TUI |
-| CLI | `nemoclaw <sandbox> connect` | Terminal UI inside the sandbox |
+| Dashboard | `~/nemoclaw-tunnel-url.txt` or `~/nemoclaw-ui-url.txt` | OpenClaw and Hermes only |
+| Browser terminal | `~/nemoclaw-terminal-url.txt` | Agent-aware `nemoclaw launch`; all runtimes |
+| CLI | `nemoclaw launch <sandbox>` | OpenClaw TUI, Hermes, or `dcode` |
 | Telegram / Discord / Slack | Your configured bot or app | Async messaging |
-| OpenAI-compatible HTTP | `~/openclaw-openai.env` | Optional `/v1/*` client settings |
+| OpenAI-compatible HTTP | `~/nemoclaw-openai.env` | Hermes native API or optional OpenClaw `/v1/*`; not applicable to Deep Agents Code |
 
 External URLs should point at host port `80`. For Brev `apps.run`, set
 `NEMOCLAW_NGINX_LISTEN_ADDR=0.0.0.0` before setup; loopback Secure
@@ -43,46 +42,59 @@ Open URLs without printing the tokenized value:
 
 ```bash
 # Secure Link
-URL=$(brev exec <instance> "sed -n '1p' ~/openclaw-tunnel-url.txt" | sed -n '/^https:/p' | head -1)
+URL=$(brev exec <instance> "sed -n '1p' ~/nemoclaw-tunnel-url.txt" | sed -n '/^https:/p' | head -1)
 open "$URL"
 
 # Browser terminal on that Secure Link
-TERMINAL_URL=$(printf '%s' "$URL" | sed 's#/#/terminal#3')
+TERMINAL_URL=$(brev exec <instance> "sed -n '1p' ~/nemoclaw-terminal-url.txt" | sed -n '/^https:/p' | head -1)
 open "$TERMINAL_URL"
 ```
 
 Port-forward fallback:
 
 ```bash
-brev port-forward <instance> -p 18789:18789
-URL=$(brev exec <instance> "sed -n '1p' ~/openclaw-ui-url.txt" | sed -n '/^http:/p' | head -1)
+brev port-forward <instance> -p <dashboard-port>:<dashboard-port>
+URL=$(brev exec <instance> "sed -n '1p' ~/nemoclaw-ui-url.txt" | sed -n '/^http:/p' | head -1)
 open "$URL"
 ```
 
 If URL files are missing:
 
 ```bash
-brev exec <instance> "~/nemoclaw-cookbook/scripts/save-ui-url.sh"
+brev exec <instance> "~/nemoclaw-cookbook/scripts/save-ui-url.sh <sandbox>"
 ```
 
 Upstream NemoClaw can also expose the browser URL and raw gateway token for troubleshooting. Redact the URL and check only token length in shared logs:
 
 ```bash
-nemoclaw my-assistant dashboard-url --quiet | sed -E 's/#token=.*/#token=<redacted>/'
-nemoclaw my-assistant gateway-token --quiet | wc -c
+nemoclaw <sandbox> dashboard-url --quiet | sed -E 's/#token=.*/#token=<redacted>/'
+nemoclaw <sandbox> gateway-token --quiet | wc -c
 ```
 
-## OpenClaw Inside the Sandbox
+## Agent Harness Commands
 
 ```bash
+# OpenClaw
 openclaw tui
-openclaw agent --agent main --local -m "hello" --session-id test
-openclaw channels list
+
+# Hermes
+hermes
+hermes -z "hello"
+
+# LangChain Deep Agents Code
+dcode
+dcode -n "hello" -q --no-stream
 ```
+
+From the host, prefer `nemoclaw launch <sandbox>` and
+`nemoclaw <sandbox> exec -- <agent-command>` so automation does not assume a
+specific harness.
 
 ## Messaging
 
-Messaging is handled by upstream NemoClaw/OpenClaw. Configure tokens in `~/.env` before setup:
+Messaging is handled by upstream NemoClaw. OpenClaw and Hermes support
+agent-specific channel subsets; Deep Agents Code is terminal-only. Configure
+tokens in `~/.env` before setup:
 
 ```bash
 TELEGRAM_BOT_TOKEN=...
@@ -166,7 +178,15 @@ NEMOCLAW_RESOURCE_PROFILE=developer
 
 ## OpenAI-Compatible HTTP API
 
-Enable before setup:
+For Hermes, no feature flag is needed. Setup writes the native API's allocated
+port and owner-only bearer loader to:
+
+```bash
+source ~/nemoclaw-openai.env
+```
+
+Deep Agents Code has no HTTP service. For OpenClaw only, enable the cookbook
+overlay before setup:
 
 ```bash
 NEMOCLAW_OPENAI_HTTP_ENABLED=1
@@ -175,7 +195,7 @@ NEMOCLAW_OPENAI_HTTP_ENABLED=1
 Load client settings after deploy:
 
 ```bash
-source ~/openclaw-openai.env
+source ~/nemoclaw-openai.env
 ```
 
 Smoke test from the Brev host:
@@ -188,7 +208,7 @@ For laptop clients, prefer an SSH port-forward:
 
 ```bash
 ssh -L 8080:127.0.0.1:80 <brev-host>
-OPENAI_BASE_URL=http://127.0.0.1:8080/v1 OPENAI_API_KEY=<edge-token-from-openclaw-openai.env> python your_client.py
+OPENAI_BASE_URL=http://127.0.0.1:8080/v1 OPENAI_API_KEY=<edge-token-from-nemoclaw-openai.env> python your_client.py
 ```
 
 `NEMOCLAW_OPENAI_HTTP_TUNNEL=1` can make `/v1/*` reachable by non-loopback
@@ -206,7 +226,7 @@ Rotate the API edge token without rebuilding or restarting the sandbox:
 
 ```bash
 ./scripts/rotate-openai-http-token.sh
-source ~/openclaw-openai.env
+source ~/nemoclaw-openai.env
 ```
 
 Brev `apps.run` service endpoints should target host port `80` and set
@@ -219,11 +239,11 @@ reachable through `apps.run`, also set `NEMOCLAW_OPENAI_HTTP_TUNNEL=1` and the
 
 ```bash
 nemoclaw list
-nemoclaw my-assistant status
-nemoclaw my-assistant logs --follow
-nemoclaw my-assistant connect
-nemoclaw my-assistant recover
-nemoclaw my-assistant destroy --yes
+nemoclaw <sandbox> status
+nemoclaw <sandbox> logs --follow
+nemoclaw launch <sandbox>
+nemoclaw <sandbox> recover
+nemoclaw <sandbox> destroy --yes
 ```
 
 Back up before destroy or rebuild.
@@ -239,38 +259,39 @@ journalctl -u nemoclaw-terminal -n 50
 sudo tail -f /var/log/nginx/error.log
 sudo systemctl restart nginx
 
-nemoclaw my-assistant recover
+nemoclaw <sandbox> recover
 tail -f ~/.local/state/nemoclaw/openshell-docker-gateway/openshell-gateway.log
 ```
 
 ## Network Policies
 
 ```bash
-nemoclaw my-assistant policy-list
-nemoclaw my-assistant policy-add
-openshell term
+nemoclaw <sandbox> policy-list
+nemoclaw <sandbox> policy-add
+nemoclaw launch <sandbox>
 ```
 
 Use the browser terminal at `/terminal#token=<hex>` when you want policy approvals without an SSH session.
 
 ## Backup and Restore
 
-The backup script snapshots workspace files, chat sessions, and installed skills. It does not back up credentials, Docker images, nginx, or systemd units.
+The backup script delegates to upstream's selected-agent manifest. It preserves
+that runtime's declared sessions, workspace, and installed skills while
+excluding credential-bearing files, Docker images, nginx, and systemd units.
 
 ```bash
-~/nemoclaw-cookbook/scripts/backup-full.sh backup my-assistant
-~/nemoclaw-cookbook/scripts/backup-full.sh list
-~/nemoclaw-cookbook/scripts/backup-full.sh restore my-assistant
-~/nemoclaw-cookbook/scripts/backup-full.sh restore my-assistant '' workspace
-~/nemoclaw-cookbook/scripts/backup-full.sh restore my-assistant '' sessions
+~/nemoclaw-cookbook/scripts/backup-full.sh backup <sandbox> before-change
+~/nemoclaw-cookbook/scripts/backup-full.sh list <sandbox>
+~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> before-change
 ```
 
-After a rebuild, restore workspace before restarting tunnels, then restore sessions after channels reconnect.
+Snapshot restore is atomic at the upstream agent-state boundary; there are no
+cookbook-specific workspace/session phases.
 
 ## Upgrade Flow
 
 ```bash
-~/nemoclaw-cookbook/scripts/backup-full.sh backup my-assistant
+~/nemoclaw-cookbook/scripts/backup-full.sh backup <sandbox> before-upgrade
 
 cd ~/nemoclaw-cookbook
 git pull --ff-only
@@ -292,11 +313,10 @@ openshell status
 
 ## Troubleshooting
 
-### Web UI unreachable after rebuild
+### Dashboard unreachable after rebuild
 
 ```bash
-openshell forward start 18789 my-assistant --background
-nemoclaw my-assistant recover
+nemoclaw <sandbox> recover
 ```
 
 ### `nemoclaw` crashes after upstream pull
@@ -321,22 +341,20 @@ export NEMOCLAW_RECREATE_SANDBOX=1
 cd ~/nemoclaw-cookbook && ./setup.sh
 ```
 
-## Agent Workspace
+## Agent State and Skills
 
-OpenClaw workspace files live under:
-
-```text
-/sandbox/.openclaw/workspace/
-```
-
-Chat sessions live under OpenClaw's agent session directory. Use `scripts/backup-full.sh` rather than copying raw paths by hand when possible.
+Do not build backup automation around private harness paths. Upstream manifests
+currently preserve OpenClaw's workspace/skills/sessions, Hermes' `.hermes`
+state including skills and sessions, and Deep Agents Code's `.state`, `skills`,
+and `agent/skills`. Use `scripts/backup-full.sh` so future upstream layout
+changes remain transparent.
 
 ## Copy Files To or From the Sandbox
 
 Download:
 
 ```bash
-openshell sandbox download my-assistant /sandbox/path/file.md /tmp/sandbox-staging/
+openshell sandbox download <sandbox> /sandbox/path/file.md /tmp/sandbox-staging/
 cp /tmp/sandbox-staging/file.md ./file.md
 rm -rf /tmp/sandbox-staging
 ```
@@ -344,13 +362,13 @@ rm -rf /tmp/sandbox-staging
 Upload:
 
 ```bash
-openshell sandbox upload my-assistant ./file.md /sandbox/path/
+openshell sandbox upload <sandbox> ./file.md /sandbox/path/
 ```
 
 From a local machine through Brev:
 
 ```bash
-brev exec <instance> "openshell sandbox download my-assistant /sandbox/path/file.md /tmp/sandbox-staging/"
+brev exec <instance> "openshell sandbox download <sandbox> /sandbox/path/file.md /tmp/sandbox-staging/"
 brev copy <instance>:/tmp/sandbox-staging/file.md ./file.md
 brev exec <instance> "rm -rf /tmp/sandbox-staging"
 ```
@@ -360,15 +378,17 @@ brev exec <instance> "rm -rf /tmp/sandbox-staging"
 | Path | Purpose |
 |------|---------|
 | `~/.env` | Host-side credentials and deployment options |
-| `~/openclaw-ui-url.txt` | Tokenized local Web UI URL, written `0600` |
-| `~/openclaw-tunnel-url.txt` | Tokenized Secure Link Web UI URL, written `0600` |
-| `~/openclaw-openai.env` | Optional `/v1/*` client settings; loads the edge token from `~/.nemoclaw/openai-http-edge-token`, written `0600` |
+| `~/nemoclaw-ui-url.txt` | Selected gateway agent's local dashboard URL, written `0600` |
+| `~/nemoclaw-tunnel-url.txt` | Selected gateway agent's Secure Link dashboard URL, written `0600` |
+| `~/nemoclaw-terminal-url.txt` | Independent agent-aware browser-terminal URL, written `0600` |
+| `~/nemoclaw-openai.env` | Hermes native or optional OpenClaw API client settings; loads an owner-only token file |
+| `~/.nemoclaw/terminal-access-token` | Browser-terminal credential, kept separate from agent gateway/API tokens |
 | `~/.nemoclaw/openai-http-edge-token` | Host-side `/v1/*` API token accepted by nginx, written `0600` |
 | `~/.nemoclaw/openai-http-gateway-token` | Private OpenClaw gateway token used only by nginx upstream, written `0600` |
 | `~/.nemoclaw/credentials.json` | Host-side inference credentials |
 | `~/.nemoclaw/sandboxes.json` | Sandbox registry |
 | `~/.nemoclaw/cookbook-deployment.json` | Cookbook deployment manifest |
-| `~/NemoClaw/Dockerfile` | Upstream Dockerfile after any active cookbook overlays |
+| `~/NemoClaw/Dockerfile` | Upstream OpenClaw Dockerfile after any active cookbook overlays; other agent images are unchanged |
 
 ## Resources
 

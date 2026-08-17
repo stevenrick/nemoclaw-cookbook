@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// WebSocket terminal server — spawns an openshell terminal session and bridges
-// it to a WebSocket client (xterm.js in the browser).
+// WebSocket terminal server — launches the selected sandbox through NemoClaw
+// and bridges the agent-aware terminal session to xterm.js in the browser.
 //
 // Security:
 //   - Binds to 127.0.0.1 only (loopback) — not reachable from outside the host
-//   - Requires a valid gateway auth token as ?token= query parameter
-//   - Token is read from ~/openclaw-ui-url.txt at startup (same token the UI uses)
-//   - The spawned command is hardcoded to "openshell term" — callers cannot choose
+//   - Requires an independent host terminal token as ?token= query parameter
+//   - Token is read from ~/.nemoclaw/terminal-access-token at startup
+//   - The command is hardcoded to `nemoclaw launch <configured-sandbox>`
 //
 // Nginx proxies /ws/terminal?token=<hex> to this server. External access is
 // authenticated by Brev Secure Links (Cloudflare Access) before reaching nginx.
@@ -32,8 +32,12 @@ const HOME_DIR = process.env.HOME || "/home/ubuntu";
 
 // Hardcoded command - never accept commands from the client.
 // Use full path since systemd services don't inherit the user's shell PATH.
-const SHELL_CMD = `${HOME_DIR}/.local/bin/openshell`;
-const SHELL_ARGS = ["term"];
+const SANDBOX_NAME = process.env.NEMOCLAW_SANDBOX_NAME || "";
+if (SANDBOX_NAME && !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(SANDBOX_NAME)) {
+  throw new Error("invalid NEMOCLAW_SANDBOX_NAME");
+}
+const SHELL_CMD = `${HOME_DIR}/.local/bin/nemoclaw`;
+const SHELL_ARGS = SANDBOX_NAME ? ["launch", SANDBOX_NAME] : ["launch"];
 const TERMINAL_ENV = Object.freeze({
   HOME: HOME_DIR,
   USER: "ubuntu",
@@ -42,28 +46,19 @@ const TERMINAL_ENV = Object.freeze({
   PATH: `${HOME_DIR}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`,
   TERM: "xterm-256color",
   LANG: process.env.LANG || "C.UTF-8",
+  ...(SANDBOX_NAME ? { NEMOCLAW_SANDBOX_NAME: SANDBOX_NAME } : {}),
 });
 
 // ── Token authentication ──────────────────────────────────────────────
-// Read the expected token from the local UI URL file. This is the same
-// token the browser uses for the OpenClaw dashboard, so it's already
-// known to authenticated users.
+// Keep browser-terminal authorization separate from any agent dashboard or API
+// token. That makes the terminal available to gateway and terminal runtimes
+// without reusing a more privileged agent credential.
 
 function loadExpectedToken() {
-  const urlFile = path.join(
-    HOME_DIR,
-    "openclaw-ui-url.txt",
-  );
+  const tokenFile = path.join(HOME_DIR, ".nemoclaw", "terminal-access-token");
   try {
-    const url = fs.readFileSync(urlFile, "utf-8").trim();
-    const parsed = new URL(url);
-    const hashParams = new URLSearchParams(parsed.hash.replace(/^#/, ""));
-    const hashToken = hashParams.get("token");
-    if (hashToken) return hashToken;
-    const queryToken = parsed.searchParams.get("token");
-    if (queryToken) return queryToken;
-    const fallback = url.match(/[?#&]token=([^&#\s]+)/);
-    return fallback ? decodeURIComponent(fallback[1]) : null;
+    const token = fs.readFileSync(tokenFile, "utf-8").trim();
+    return /^[A-Za-z0-9._~+=/-]+$/.test(token) ? token : null;
   } catch {
     return null;
   }
@@ -103,7 +98,7 @@ if (expectedToken) {
   console.log("[terminal-server] token authentication enabled");
 } else {
   console.log(
-    "[terminal-server] WARNING: no token found — all connections will be rejected until ~/openclaw-ui-url.txt exists",
+    "[terminal-server] WARNING: no token found — all connections will be rejected until ~/.nemoclaw/terminal-access-token exists",
   );
 }
 

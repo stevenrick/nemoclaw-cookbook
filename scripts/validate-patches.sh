@@ -8,8 +8,10 @@
 #   3. No-overlay patch application is a no-op
 #   4. OpenAI HTTP-only patch application does not add Tavily
 #   5. Tavily-only patch application adds the reviewed offline archive and install
-#   6. All remaining overlays compose successfully
-#   7. Upstream overlap audit flags patches that may now be native
+#   6. Hermes and Deep Agents Code paths leave upstream images unchanged
+#   7. OpenClaw-only flags fail closed for non-OpenClaw agents
+#   8. All remaining overlays compose successfully
+#   9. Upstream overlap audit flags patches that may now be native
 #
 # Usage: ./scripts/validate-patches.sh
 set -euo pipefail
@@ -51,6 +53,7 @@ if env \
     -u NEMOCLAW_WEB_SEARCH_PROVIDER \
     -u BRAVE_API_KEY \
     -u TAVILY_API_KEY \
+    NEMOCLAW_AGENT=openclaw \
     "$COOKBOOK_DIR/scripts/apply-patches.sh" "$TMPDIR/NemoClaw" 2>&1 \
     && git diff --quiet -- Dockerfile; then
   echo "  ✓ No-overlay path leaves the Dockerfile unchanged"
@@ -66,6 +69,7 @@ if env \
     -u NEMOCLAW_WEB_SEARCH_PROVIDER \
     -u BRAVE_API_KEY \
     -u TAVILY_API_KEY \
+    NEMOCLAW_AGENT=openclaw \
     NEMOCLAW_OPENAI_HTTP_ENABLED=1 \
     "$COOKBOOK_DIR/scripts/apply-patches.sh" "$TMPDIR/NemoClaw" 2>&1 \
     && ! git diff -- Dockerfile | grep -qF '@openclaw/tavily-plugin'; then
@@ -82,6 +86,7 @@ if env \
     -u NEMOCLAW_OPENAI_HTTP_ENABLED \
     -u BRAVE_API_KEY \
     -u TAVILY_API_KEY \
+    NEMOCLAW_AGENT=openclaw \
     NEMOCLAW_WEB_SEARCH_PROVIDER=tavily \
     "$COOKBOOK_DIR/scripts/apply-patches.sh" "$TMPDIR/NemoClaw" 2>&1 \
     && grep -qF -- '--checksum=sha256:c8d7c2fb40b0c6a3f8ad99e927c1851ef501bef89ce049e88ab79083ff6dcb09' Dockerfile \
@@ -93,12 +98,49 @@ else
   FAILED=1
 fi
 
+for agent in hermes langchain-deepagents-code; do
+  echo "Testing upstream-only $agent patch path..."
+  reset_upstream_dockerfile
+  if env \
+      -u NEMOCLAW_INTEGRATIONS_B64 \
+      -u NEMOCLAW_OPENAI_HTTP_ENABLED \
+      -u BRAVE_API_KEY \
+      NEMOCLAW_AGENT="$agent" \
+      NEMOCLAW_WEB_SEARCH_PROVIDER=tavily \
+      TAVILY_API_KEY=test-not-a-secret \
+      "$COOKBOOK_DIR/scripts/apply-patches.sh" "$TMPDIR/NemoClaw" 2>&1 \
+      && git diff --quiet -- Dockerfile; then
+    echo "  ✓ $agent uses the unchanged upstream image"
+  else
+    echo "  ✗ $agent patch path changed the OpenClaw Dockerfile or failed"
+    FAILED=1
+  fi
+done
+
+echo "Testing OpenClaw-only overlay rejection for Hermes..."
+reset_upstream_dockerfile
+if ! env \
+    -u NEMOCLAW_INTEGRATIONS_B64 \
+    -u NEMOCLAW_WEB_SEARCH_PROVIDER \
+    -u BRAVE_API_KEY \
+    -u TAVILY_API_KEY \
+    NEMOCLAW_AGENT=hermes \
+    NEMOCLAW_OPENAI_HTTP_ENABLED=1 \
+    "$COOKBOOK_DIR/scripts/apply-patches.sh" "$TMPDIR/NemoClaw" >/dev/null 2>&1 \
+    && git diff --quiet -- Dockerfile; then
+  echo "  ✓ Hermes rejects the OpenClaw-only HTTP overlay without changing upstream"
+else
+  echo "  ✗ Hermes accepted an OpenClaw-only overlay or changed upstream"
+  FAILED=1
+fi
+
 echo "Testing all remaining cookbook overlays together..."
 reset_upstream_dockerfile
 if env \
     -u NEMOCLAW_INTEGRATIONS_B64 \
     -u BRAVE_API_KEY \
     -u TAVILY_API_KEY \
+    NEMOCLAW_AGENT=openclaw \
     NEMOCLAW_OPENAI_HTTP_ENABLED=1 \
     NEMOCLAW_WEB_SEARCH_PROVIDER=tavily \
     "$COOKBOOK_DIR/scripts/apply-patches.sh" "$TMPDIR/NemoClaw" 2>&1; then

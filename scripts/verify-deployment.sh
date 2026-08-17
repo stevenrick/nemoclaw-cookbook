@@ -1,271 +1,218 @@
 #!/usr/bin/env bash
-# Verify a NemoClaw deployment is fully operational.
-# Run on the Brev instance (not locally).
-#
+# Read-only deployment verification for every upstream NemoClaw agent runtime.
 # Usage: verify-deployment.sh [sandbox-name]
-#
-# Checks: sandbox ready, OpenClaw running, dashboard reachable, services running
-# (if configured), workspace files present, and cookbook integrations.
-#
-# Exit code 0 = all checks passed, 1 = failures found.
 set -uo pipefail
 
-export NVM_DIR="$HOME/.nvm"
-# shellcheck source=/dev/null
-[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-export PATH="$HOME/.local/bin:$PATH"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib/agent-runtime.sh
+source "$SCRIPT_DIR/lib/agent-runtime.sh"
 
-# Discover sandbox name
-SANDBOX="${1:-$(nemoclaw list 2>/dev/null | awk '/\*/{print $1}' | head -1)}"
-if [ -z "$SANDBOX" ]; then
-  echo "  ✗ No sandbox found"
+export PATH="$HOME/.local/bin:$PATH"
+# shellcheck source=/dev/null
+[ -f "$HOME/.env" ] && source "$HOME/.env"
+
+SANDBOX="$(cookbook_discover_sandbox "${1:-}")"
+if [ -z "$SANDBOX" ] || ! cookbook_load_runtime "$SANDBOX"; then
+  echo "  ✗ No readable registered sandbox found"
   exit 1
 fi
 
 FAILED=0
 WARNINGS=0
-
 pass() { echo "  ✓ $1"; }
 fail() { echo "  ✗ $1"; FAILED=$((FAILED + 1)); }
 warn() { echo "  ⚠ $1"; WARNINGS=$((WARNINGS + 1)); }
 
-echo "Verifying deployment (sandbox: $SANDBOX)..."
+echo "Verifying deployment (sandbox: $SANDBOX, agent: $COOKBOOK_AGENT_DISPLAY)..."
 echo ""
 
-# ── 1. Gateway health ────────────────────────────────────────────────
-echo "Gateway:"
+echo "Control plane:"
 if openshell status 2>&1 | grep -q "Connected"; then
   pass "OpenShell gateway connected"
 else
   fail "OpenShell gateway not connected"
 fi
-
-# ── 2. Sandbox status ────────────────────────────────────────────────
-echo "Sandbox:"
-SANDBOX_PHASE=$(openshell sandbox get "$SANDBOX" 2>/dev/null | grep -i phase | awk '{print $NF}')
-if [ "$SANDBOX_PHASE" = "Ready" ]; then
-  pass "Sandbox '$SANDBOX' is Ready"
+if [ "$COOKBOOK_PHASE" = "Ready" ]; then
+  pass "Sandbox is Ready"
 else
-  fail "Sandbox '$SANDBOX' phase: ${SANDBOX_PHASE:-unknown}"
+  fail "Sandbox phase is ${COOKBOOK_PHASE:-unknown}"
 fi
-
-# ── 3. Dashboard / Web UI reachable ──────────────────────────────────
-echo "Dashboard:"
-HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:18789/ 2>/dev/null || echo "000")
-if [ "$HTTP_CODE" = "200" ]; then
-  pass "Web UI reachable on port 18789 (HTTP $HTTP_CODE)"
+if [ "$COOKBOOK_INFERENCE_OK" = "true" ]; then
+  pass "Inference route health passed"
 else
-  fail "Web UI NOT reachable on port 18789 (HTTP $HTTP_CODE)"
-  # Try to restart the forward
-  echo "       Attempting to restart port forward..."
-  openshell forward start 18789 "$SANDBOX" --background 2>/dev/null
-  sleep 3
-  HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:18789/ 2>/dev/null || echo "000")
-  if [ "$HTTP_CODE" = "200" ]; then
-    pass "Web UI recovered after forward restart (HTTP $HTTP_CODE)"
-    FAILED=$((FAILED - 1))
+  fail "Inference route health did not pass"
+fi
+if [ "$COOKBOOK_RUNTIME" = "terminal" ]; then
+  if [ "$COOKBOOK_TERMINAL_HEALTH" = "ok" ]; then
+    pass "Terminal runtime health passed"
   else
-    echo "       Forward restart did not help. May need manual intervention."
+    fail "Terminal runtime health is ${COOKBOOK_TERMINAL_HEALTH:-unknown}"
   fi
 fi
 
-# ── 4. OpenClaw running inside sandbox ───────────────────────────────
-echo "OpenClaw:"
-sandbox_ssh() {
-  ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-    -o LogLevel=ERROR -o ConnectTimeout=10 \
-    -o "ProxyCommand=/home/ubuntu/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name $SANDBOX" \
-    "sandbox@openshell-$SANDBOX" "$@"
-}
-
-OPENCLAW_VER=$(sandbox_ssh 'openclaw --version 2>/dev/null' 2>/dev/null)
-if [ -n "$OPENCLAW_VER" ]; then
-  pass "OpenClaw $OPENCLAW_VER"
+echo "Agent runtime:"
+AGENT_COMMAND="$(cookbook_agent_command "$COOKBOOK_AGENT" || true)"
+if [ -n "$AGENT_COMMAND" ] && nemoclaw "$SANDBOX" exec -- "$AGENT_COMMAND" --version >/dev/null 2>&1; then
+  pass "$COOKBOOK_AGENT_DISPLAY CLI responds"
 else
-  fail "OpenClaw not responding inside sandbox"
+  fail "$COOKBOOK_AGENT_DISPLAY CLI does not respond"
+fi
+SKILL_ROOT="$(cookbook_skill_root "$COOKBOOK_AGENT" || true)"
+if [ -n "$SKILL_ROOT" ] && nemoclaw "$SANDBOX" exec -- test -d "$SKILL_ROOT" >/dev/null 2>&1; then
+  pass "Agent skill root exists ($SKILL_ROOT)"
+else
+  warn "Agent skill root is not initialized yet"
+fi
+if nemoclaw "$SANDBOX" snapshot list >/dev/null 2>&1; then
+  pass "Agent-aware snapshot interface responds"
+else
+  fail "Agent-aware snapshot interface failed"
 fi
 
-# shellcheck source=/dev/null
-[ -f "$HOME/.env" ] && source "$HOME/.env"
-
-# ── 5. Workspace files ──────────────────────────────────────────────
-echo "Workspace:"
-SOUL_EXISTS=$(sandbox_ssh 'test -f /sandbox/.openclaw/workspace/SOUL.md && echo yes || echo no' 2>/dev/null)
-if [ "$SOUL_EXISTS" = "yes" ]; then
-  pass "SOUL.md present (workspace populated)"
-else
-  warn "SOUL.md missing (fresh sandbox — no restore applied, or workspace empty)"
-fi
-
-# ── 6. Services ──────────────────────────────────────────────────────
-echo "Services:"
-if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] || [ -n "${DISCORD_BOT_TOKEN:-}" ] || [ -n "${SLACK_BOT_TOKEN:-}" ]; then
-  # Two separate things must be true for messaging to actually work:
-  #   1. Gateway provider exists (created during `nemoclaw onboard` when the token
-  #      was in the environment — not just in ~/.env)
-  #   2. Channel is configured in /sandbox/.openclaw/openclaw.json (baked at
-  #      build time; empty means onboard didn't see the token)
-  # "tokens in .env" is NOT sufficient — onboard has to read them at run time.
-  SANDBOX_PROVIDERS=$(openshell provider list 2>/dev/null)
-  CHANNEL_STATUS=$(sandbox_ssh 'openclaw channels list 2>/dev/null | grep -i "configured\|enabled\|ok"' 2>/dev/null)
-  HOST_STATUS=$(nemoclaw status 2>/dev/null)
-
-  expected_providers=""
-  [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && expected_providers="${expected_providers} ${SANDBOX}-telegram-bridge"
-  [ -n "${DISCORD_BOT_TOKEN:-}" ] && expected_providers="${expected_providers} ${SANDBOX}-discord-bridge"
-  if [ -n "${SLACK_BOT_TOKEN:-}" ]; then
-    expected_providers="${expected_providers} ${SANDBOX}-slack-bridge"
-    if [ -n "${SLACK_APP_TOKEN:-}" ]; then
-      expected_providers="${expected_providers} ${SANDBOX}-slack-app"
+echo "Access surfaces:"
+if [ "$COOKBOOK_RUNTIME" = "gateway" ]; then
+  DASHBOARD_URL="$(cookbook_dashboard_url "$SANDBOX")"
+  if [ -z "$DASHBOARD_URL" ] || [ -z "$COOKBOOK_DASHBOARD_PORT" ]; then
+    fail "Gateway runtime did not expose a dashboard URL and port"
+  else
+    HTTP_CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
+      "http://127.0.0.1:${COOKBOOK_DASHBOARD_PORT}/" 2>/dev/null || printf '000')"
+    if [ "$HTTP_CODE" = "200" ]; then
+      pass "Dashboard reachable on allocated port $COOKBOOK_DASHBOARD_PORT"
     else
-      warn "SLACK_BOT_TOKEN set but SLACK_APP_TOKEN missing; upstream Slack Socket Mode requires both"
+      fail "Dashboard returned HTTP $HTTP_CODE on allocated port $COOKBOOK_DASHBOARD_PORT"
     fi
   fi
-  missing_providers=""
-  for p in $expected_providers; do
-    echo "$SANDBOX_PROVIDERS" | grep -q "$p" || missing_providers="${missing_providers} ${p}"
-  done
-
-  if [ -n "$missing_providers" ]; then
-    warn "Messaging tokens in .env but gateway provider(s) missing:${missing_providers}"
-    warn "  Sandbox was built without these tokens. Export them and re-onboard (set -a; source ~/.env; set +a)."
-  elif [ -n "$CHANNEL_STATUS" ]; then
-    pass "Native messaging channels configured"
-  elif echo "$HOST_STATUS" | grep -qi "running\|bridge"; then
-    pass "Host messaging services running"
-  else
-    warn "Messaging providers exist but channels are not reporting configured (check 'openclaw channels list')"
-  fi
-  # Cloudflare tunnel is optional host access, not the messaging channel
-  # registry itself. Only require it when the operator supplied a named tunnel.
-  if [ -n "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]; then
-    if echo "$HOST_STATUS" | grep -qi "cloudflared"; then
-      pass "Cloudflare tunnel running"
-    else
-      warn "CLOUDFLARE_TUNNEL_TOKEN set but cloudflared not detected (run 'nemoclaw tunnel start')"
-    fi
-  else
-    pass "No Cloudflare named tunnel configured"
-  fi
 else
-  pass "No messaging tokens configured (services not needed)"
+  pass "Dashboard correctly not applicable to terminal runtime"
 fi
 
-# ── 7. Infrastructure services ──────────────────────────────────────
-echo "Infrastructure:"
-# nginx
+if [ "$COOKBOOK_AGENT" = "hermes" ]; then
+  HERMES_TOKEN="$(nemoclaw "$SANDBOX" gateway-token --quiet 2>/dev/null | cookbook_last_nonempty_line)"
+  if [ -n "$HERMES_TOKEN" ] && [ -n "$COOKBOOK_HERMES_API_PORT" ]; then
+    HERMES_API_CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
+      -H "Authorization: Bearer ${HERMES_TOKEN}" \
+      "http://127.0.0.1:${COOKBOOK_HERMES_API_PORT}/v1/models" 2>/dev/null || printf '000')"
+    if [ "$HERMES_API_CODE" = "200" ]; then
+      pass "Hermes native OpenAI-compatible API reachable"
+    else
+      fail "Hermes native API returned HTTP $HERMES_API_CODE"
+    fi
+  else
+    fail "Hermes API token or allocated port unavailable"
+  fi
+fi
+
+echo "Host services:"
 if systemctl is-active --quiet nginx 2>/dev/null; then
-  NGINX_HTTP=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 http://127.0.0.1:80/ 2>/dev/null || echo "000")
-  if [ "$NGINX_HTTP" = "200" ]; then
-    pass "nginx proxy active (port 80 → 18789)"
+  NGINX_HEADERS="$(mktemp)"
+  NGINX_HTTP="$(curl -s -D "$NGINX_HEADERS" -o /dev/null -w '%{http_code}' --max-time 3 \
+    http://127.0.0.1:80/ 2>/dev/null || printf '000')"
+  if [ "$COOKBOOK_RUNTIME" = "gateway" ] \
+      && [ "$NGINX_HTTP" = "200" ] \
+      && grep -qF "proxy_pass http://127.0.0.1:${COOKBOOK_DASHBOARD_PORT};" \
+        /etc/nginx/sites-enabled/nemoclaw 2>/dev/null; then
+    pass "nginx proxies the selected dashboard"
+  elif [ "$COOKBOOK_RUNTIME" = "terminal" ] \
+      && printf '%s' "$NGINX_HTTP" | grep -Eq '^30[1278]$' \
+      && grep -Eqi '^Location: (https?://[^/]+)?/terminal/?' "$NGINX_HEADERS"; then
+    pass "nginx redirects terminal runtime to /terminal"
   else
-    warn "nginx running but proxy returning HTTP $NGINX_HTTP"
+    warn "nginx is active but its root route does not match the selected runtime (HTTP $NGINX_HTTP)"
   fi
+  rm -f "$NGINX_HEADERS"
 else
-  warn "nginx not running (install with: ~/nemoclaw-cookbook/scripts/install-services.sh)"
+  warn "nginx not running"
 fi
 
-# Terminal server
-ENABLE_TERMINAL_SERVER="${ENABLE_TERMINAL_SERVER:-true}"
-if [ "$ENABLE_TERMINAL_SERVER" = "true" ]; then
+if [ "${ENABLE_TERMINAL_SERVER:-true}" = "true" ]; then
   if systemctl is-active --quiet nemoclaw-terminal 2>/dev/null; then
-    pass "Terminal WebSocket server running"
+    pass "Agent-aware browser terminal service running"
   else
-    warn "Terminal server enabled but not running (check: systemctl status nemoclaw-terminal)"
+    warn "Browser terminal enabled but service is not running"
+  fi
+fi
+if [ -n "${TUNNEL_FQDN:-}" ]; then
+  if [ "$COOKBOOK_RUNTIME" = "gateway" ] && [ -f "$HOME/nemoclaw-tunnel-url.txt" ]; then
+    pass "Secure Link dashboard access file present"
+  elif [ "$COOKBOOK_RUNTIME" = "terminal" ] && [ -f "$HOME/nemoclaw-terminal-url.txt" ]; then
+    pass "Secure Link browser-terminal access file present"
+  else
+    warn "Secure Link configured but its agent-appropriate access file is missing"
   fi
 fi
 
-# Tunnel / access mode
-TUNNEL_FQDN="${TUNNEL_FQDN:-}"
-TUNNEL_FQDN="${TUNNEL_FQDN#https://}"
-TUNNEL_FQDN="${TUNNEL_FQDN#http://}"
-if [ -n "$TUNNEL_FQDN" ]; then
-  if [ -f "$HOME/openclaw-tunnel-url.txt" ]; then
-    pass "Secure Link configured ($TUNNEL_FQDN)"
+if [ "$COOKBOOK_RUNTIME" = "terminal" ]; then
+  if [ -e "$HOME/nemoclaw-ui-url.txt" ] \
+      || [ -e "$HOME/nemoclaw-tunnel-url.txt" ] \
+      || [ -e "$HOME/nemoclaw-openai.env" ]; then
+    fail "Terminal-only runtime has stale generic dashboard or API access files"
   else
-    warn "TUNNEL_FQDN set but tokenized URL not saved (run save-ui-url.sh)"
+    pass "Terminal-only runtime has no stale dashboard or API access files"
   fi
-else
-  pass "Access mode: port-forward (no TUNNEL_FQDN set)"
 fi
 
-# OpenAI HTTP API (if enabled)
-OPENAI_FLAG="${NEMOCLAW_OPENAI_HTTP_ENABLED:-}"
-if [ "$OPENAI_FLAG" = "1" ] || [ "$OPENAI_FLAG" = "true" ]; then
-  if [ -f "$HOME/openclaw-openai.env" ]; then
-    # shellcheck source=/dev/null
-    . "$HOME/openclaw-openai.env"
-    OPENAI_VERIFY_TMP=$(mktemp)
-    OPENAI_CURL_HEADERS=(-H "Authorization: Bearer ${OPENAI_API_KEY}")
-    case "${OPENAI_BASE_URL:-}" in
-      http://127.0.0.1*|http://localhost*) ;;
-      *)
-        if [ -n "${NEMOCLAW_OPENAI_HTTP_ACCESS_CLIENT_ID:-}" ] && [ -n "${NEMOCLAW_OPENAI_HTTP_ACCESS_CLIENT_SECRET:-}" ]; then
-          OPENAI_CURL_HEADERS+=(
-            -H "CF-Access-Client-Id: ${NEMOCLAW_OPENAI_HTTP_ACCESS_CLIENT_ID}"
-            -H "CF-Access-Client-Secret: ${NEMOCLAW_OPENAI_HTTP_ACCESS_CLIENT_SECRET}"
-          )
-        fi
-        ;;
-    esac
-    HTTP_CODE=$(curl -s -o "$OPENAI_VERIFY_TMP" -w '%{http_code}' --max-time 5 \
-      "${OPENAI_CURL_HEADERS[@]}" \
-      "${OPENAI_BASE_URL}/models" 2>/dev/null || echo "000")
-    if [ "$HTTP_CODE" = "200" ] && grep -q '"data"' "$OPENAI_VERIFY_TMP" 2>/dev/null; then
-      pass "OpenAI HTTP API reachable ($OPENAI_BASE_URL/models → 200)"
+case "${NEMOCLAW_OPENAI_HTTP_ENABLED:-}" in
+  1|true|yes)
+    if [ "$COOKBOOK_AGENT" != "openclaw" ]; then
+      pass "Ambient OpenClaw HTTP overlay is not applied to $COOKBOOK_AGENT_DISPLAY"
+    elif [ -f "$HOME/nemoclaw-openai.env" ]; then
+      # shellcheck source=/dev/null
+      . "$HOME/nemoclaw-openai.env"
+      OPENAI_HTTP_CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
+        -H "Authorization: Bearer ${OPENAI_API_KEY}" \
+        "${OPENAI_BASE_URL}/models" 2>/dev/null || printf '000')"
+      if [ "$OPENAI_HTTP_CODE" = "200" ]; then
+        pass "Cookbook OpenClaw HTTP API reachable"
+      else
+        fail "Cookbook OpenClaw HTTP API returned HTTP $OPENAI_HTTP_CODE"
+      fi
     else
-      fail "OpenAI HTTP API check failed ($OPENAI_BASE_URL/models → HTTP $HTTP_CODE)"
-      echo "       Response: $(head -c 200 "$OPENAI_VERIFY_TMP")"
+      fail "OpenClaw HTTP API enabled but ~/nemoclaw-openai.env is missing"
     fi
-    rm -f "$OPENAI_VERIFY_TMP"
+    ;;
+esac
+
+if [ -n "${TELEGRAM_BOT_TOKEN:-}${DISCORD_BOT_TOKEN:-}${SLACK_BOT_TOKEN:-}" ]; then
+  CHANNEL_STATUS_TMP="$(mktemp)"
+  if nemoclaw "$SANDBOX" channels status --json >"$CHANNEL_STATUS_TMP" 2>&1; then
+    pass "Upstream messaging channel status passed"
   else
-    fail "NEMOCLAW_OPENAI_HTTP_ENABLED=1 but ~/openclaw-openai.env missing (save-ui-url.sh skipped?)"
+    warn "Configured messaging tokens did not produce a healthy upstream channel status"
   fi
+  rm -f "$CHANNEL_STATUS_TMP"
+else
+  pass "No messaging tokens configured"
 fi
 
-# ── 8. Deployment manifest ──────────────────────────────────────────
 echo "Manifest:"
 if [ -f "$HOME/.nemoclaw/cookbook-deployment.json" ]; then
-  MANIFEST_NC=$(python3 -c "import json; print(json.load(open('$HOME/.nemoclaw/cookbook-deployment.json')).get('nemoclaw_commit',''))" 2>/dev/null)
-  ACTUAL_NC=$(git -C "$HOME/NemoClaw" rev-parse --short HEAD 2>/dev/null)
-  if [ "$MANIFEST_NC" = "$ACTUAL_NC" ]; then
-    pass "Manifest matches running state ($ACTUAL_NC)"
+  MANIFEST_MATCH="$(SANDBOX_NAME="$SANDBOX" AGENT_NAME="$COOKBOOK_AGENT" python3 -c '
+import json, os
+try:
+    data = json.load(open(os.path.expanduser("~/.nemoclaw/cookbook-deployment.json")))
+except Exception:
+    print("false")
+else:
+    print(str(data.get("sandbox_name") == os.environ["SANDBOX_NAME"] and data.get("agent") == os.environ["AGENT_NAME"]).lower())
+' 2>/dev/null)"
+  if [ "$MANIFEST_MATCH" = "true" ]; then
+    pass "Manifest identifies the selected sandbox and agent"
   else
-    warn "Manifest drift: manifest=$MANIFEST_NC actual=$ACTUAL_NC (run write-manifest.sh)"
+    warn "Manifest does not match the selected sandbox and agent"
   fi
 else
-  warn "No deployment manifest found (run write-manifest.sh)"
+  warn "No deployment manifest found"
 fi
 
-# ── 9. Integration checks ───────────────────────────────────────────
-# shellcheck source=/dev/null
-[ -f "$HOME/.env" ] && source "$HOME/.env"
-
-echo "Integrations:"
-
-# Web search
-WEB_SEARCH_PROVIDER="${NEMOCLAW_WEB_SEARCH_PROVIDER:-}"
-if [ -z "$WEB_SEARCH_PROVIDER" ]; then
-  if [ -n "${BRAVE_API_KEY:-}" ]; then
-    WEB_SEARCH_PROVIDER="brave"
-  elif [ -n "${TAVILY_API_KEY:-}" ]; then
-    WEB_SEARCH_PROVIDER="tavily"
-  fi
-fi
-if [ -n "$WEB_SEARCH_PROVIDER" ] && [ "$WEB_SEARCH_PROVIDER" != "none" ]; then
-  pass "Web search configured by upstream NemoClaw ($WEB_SEARCH_PROVIDER)"
-fi
-
-# ── Summary ──────────────────────────────────────────────────────────
 echo ""
 if [ "$FAILED" -eq 0 ]; then
   if [ "$WARNINGS" -gt 0 ]; then
-    echo "All checks passed ($WARNINGS warning(s))."
+    echo "All required checks passed ($WARNINGS warning(s))."
   else
     echo "All checks passed."
   fi
   exit 0
-else
-  echo "FAILED: $FAILED check(s) failed, $WARNINGS warning(s)."
-  exit 1
 fi
+echo "FAILED: $FAILED check(s) failed, $WARNINGS warning(s)."
+exit 1

@@ -26,7 +26,8 @@ Create a local `.env`, copy it to the Brev instance, then run the cookbook setup
 
 ```bash
 cp .env.example .env
-# Edit .env. NVIDIA_API_KEY is required.
+# Edit .env. NVIDIA_INFERENCE_API_KEY is required. Select NEMOCLAW_AGENT if
+# you do not want the default OpenClaw harness.
 
 brev exec <instance> "git clone -b main https://github.com/stevenrick/nemoclaw-cookbook.git ~/nemoclaw-cookbook"
 brev copy .env <instance>:~/.env
@@ -37,16 +38,17 @@ Connect after setup:
 
 ```bash
 # Public/Secure Link, if TUNNEL_FQDN is set. Opens without printing the tokenized URL.
-URL=$(brev exec <instance> "sed -n '1p' ~/openclaw-tunnel-url.txt" | sed -n '/^https:/p' | head -1)
+URL=$(brev exec <instance> "sed -n '1p' ~/nemoclaw-tunnel-url.txt" | sed -n '/^https:/p' | head -1)
 open "$URL"
 
-# Browser terminal on the same Secure Link.
-TERMINAL_URL=$(printf '%s' "$URL" | sed 's#/#/terminal#3')
+# Browser terminal (works for all three agent runtimes).
+TERMINAL_URL=$(brev exec <instance> "sed -n '1p' ~/nemoclaw-terminal-url.txt" | sed -n '/^https:/p' | head -1)
 open "$TERMINAL_URL"
 
-# Port-forward fallback
-brev port-forward <instance> -p 18789:18789
-URL=$(brev exec <instance> "sed -n '1p' ~/openclaw-ui-url.txt" | sed -n '/^http:/p' | head -1)
+# Port-forward fallback for OpenClaw or Hermes: get the allocated dashboard
+# port from `nemoclaw list --json`, then forward that same host/local port.
+brev port-forward <instance> -p <dashboard-port>:<dashboard-port>
+URL=$(brev exec <instance> "sed -n '1p' ~/nemoclaw-ui-url.txt" | sed -n '/^http:/p' | head -1)
 open "$URL"
 ```
 
@@ -65,21 +67,34 @@ requests.
 
 See [BUILD.md](BUILD.md) for the full setup walkthrough and [USE.md](USE.md) for day-to-day commands.
 
+## Supported Agent Runtimes
+
+| `NEMOCLAW_AGENT` | Runtime | Browser surface | OpenAI-compatible API |
+|-------------------|---------|-----------------|-----------------------|
+| `openclaw` (default) | Gateway | Upstream dashboard plus cookbook browser terminal | Optional cookbook `/v1/*` overlay |
+| `hermes` | Gateway | Upstream Hermes dashboard plus cookbook browser terminal | Native Hermes API on its allocated `8642`–`8652` port |
+| `langchain-deepagents-code` | Terminal | Cookbook browser terminal launches `dcode`; no dashboard | Not applicable |
+
+NemoClaw remains the source of truth for each runtime's image, lifecycle,
+ports, sessions, and skill directories. Cookbook scripts discover the selected
+agent from `nemoclaw status --json`; they do not infer it from OpenClaw paths.
+
 ## What This Sets Up
 
 - Upstream NemoClaw and OpenShell, using NemoClaw's own `scripts/install-openshell.sh`
-- An OpenClaw assistant inside an OpenShell sandbox
-- nginx reverse proxy for the dashboard, Secure Link origin handling, and optional `/v1/*` CORS
-- Optional browser terminal at `/terminal` for OpenShell policy approvals
+- The selected upstream OpenClaw, Hermes, or LangChain Deep Agents Code harness inside OpenShell
+- nginx reverse proxy for gateway dashboards (or a `/terminal` redirect for Deep Agents Code), Secure Link origin handling, and optional OpenClaw `/v1/*` CORS
+- Optional agent-aware browser terminal at `/terminal`, launched through `nemoclaw launch`
 - Optional upstream messaging channels for Telegram, Discord, Slack, WeChat, and WhatsApp
 - Upstream sandbox resource profiles via `NEMOCLAW_RESOURCE_PROFILE`, `NEMOCLAW_CPU`, and `NEMOCLAW_RAM`
 - Native upstream web search via `NEMOCLAW_WEB_SEARCH_PROVIDER`, `BRAVE_API_KEY`, and `TAVILY_API_KEY`
-- Optional OpenAI-compatible HTTP API on `/v1/*` via `NEMOCLAW_OPENAI_HTTP_ENABLED=1`
-- Backup, restore, validation, and deployment manifest scripts
+- Optional OpenClaw HTTP API on `/v1/*`; Hermes uses its native upstream API
+- Manifest-driven upstream snapshot/restore, validation, and deployment manifest scripts
 
 ## What the Patches Do
 
-`scripts/apply-patches.sh` applies only environment-driven overlays:
+`scripts/apply-patches.sh` applies only environment-driven OpenClaw overlays.
+Hermes and Deep Agents Code use their upstream images unchanged:
 
 | Overlay | Trigger | Purpose |
 |---------|---------|---------|
@@ -101,14 +116,13 @@ If validation fails, inspect what changed upstream and update the smallest affec
 ## Backup and Restore
 
 ```bash
-~/nemoclaw-cookbook/scripts/backup-full.sh backup <sandbox>
-~/nemoclaw-cookbook/scripts/backup-full.sh list
-~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox>
-~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' workspace
-~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> '' sessions
+~/nemoclaw-cookbook/scripts/backup-full.sh backup <sandbox> before-change
+~/nemoclaw-cookbook/scripts/backup-full.sh list <sandbox>
+~/nemoclaw-cookbook/scripts/backup-full.sh restore <sandbox> before-change
 ```
 
-Replace `<sandbox>` with your sandbox name, usually `my-assistant`.
+This is a thin wrapper over upstream agent manifests. It preserves the selected
+runtime's declared sessions, workspace, and skills and excludes credentials.
 
 ## Upgrading
 
@@ -133,8 +147,9 @@ scripts/
   apply-patches.sh    # Applies only needed overlays to upstream NemoClaw
   validate-patches.sh # Tests overlays against current upstream
   install-services.sh # nginx and optional browser-terminal services
-  save-ui-url.sh      # Uses upstream URL/token commands; writes UI and /v1 client env files
-  backup-full.sh      # Workspace, sessions, and skills backup/restore
+  lib/agent-runtime.sh # Discovers sandbox, agent, runtime, and allocated ports from upstream
+  save-ui-url.sh      # Writes agent-appropriate UI, terminal, and API client files
+  backup-full.sh      # Wraps upstream manifest-driven snapshots
 BUILD.md              # From-scratch setup details
 USE.md                # Day-to-day reference
 UPSTREAM.md           # Current upstream compatibility and removal plan
