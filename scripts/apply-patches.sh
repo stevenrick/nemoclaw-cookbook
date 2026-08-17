@@ -20,6 +20,9 @@ FRAGMENTS_DIR="$COOKBOOK_DIR/patches/fragments"
 
 # Integration flags
 NEMOCLAW_OPENAI_HTTP_ENABLED="${NEMOCLAW_OPENAI_HTTP_ENABLED:-}"
+NEMOCLAW_WEB_SEARCH_PROVIDER="${NEMOCLAW_WEB_SEARCH_PROVIDER:-}"
+BRAVE_API_KEY="${BRAVE_API_KEY:-}"
+TAVILY_API_KEY="${TAVILY_API_KEY:-}"
 
 DOCKERFILE="$NEMOCLAW_DIR/Dockerfile"
 REMOVED_TOOL_INSTALLS=0
@@ -140,17 +143,33 @@ if "@openclaw/tavily-plugin" in content:
     print(0)
     sys.exit(0)
 
+brave_archive = (
+    'ADD --chmod=0444 '
+    '--checksum=sha256:f5198ea18ea0adebc376c669b8e5e1100781f07ec2d9e24e86c90cb82acb039c '
+    'https://registry.npmjs.org/@openclaw/brave-plugin/-/brave-plugin-2026.7.1.tgz '
+    '/brave-plugin-2026.7.1.tgz'
+)
+tavily_archive = (
+    brave_archive
+    + '\n'
+    + 'ADD --chmod=0444 '
+    + '--checksum=sha256:c8d7c2fb40b0c6a3f8ad99e927c1851ef501bef89ce049e88ab79083ff6dcb09 '
+    + 'https://registry.npmjs.org/@openclaw/tavily-plugin/-/tavily-plugin-2026.7.1.tgz '
+    + '/tavily-plugin-2026.7.1.tgz'
+)
 brave_pin = (
     '            "@openclaw/brave-plugin@2026.7.1") '
     'expected_integrity="$OPENCLAW_BRAVE_PLUGIN_2026_7_1_INTEGRITY"; '
-    'expected_tarball="https://registry.npmjs.org/@openclaw/brave-plugin/-/brave-plugin-2026.7.1.tgz" ;; \\'
+    'expected_tarball="https://registry.npmjs.org/@openclaw/brave-plugin/-/brave-plugin-2026.7.1.tgz"; '
+    'archive_name="brave-plugin-2026.7.1.tgz" ;; \\'
 )
 tavily_pin = (
     brave_pin
     + '\n'
     + '            "@openclaw/tavily-plugin@2026.7.1") '
     + 'expected_integrity="sha512-JI9RIGmZVmtCnt8F+OwQb973pOTa7X0b/tDi7B8cIjYr5Ieq9IlzgLNTgnUBNZbSnJSh7p89QIaeUQ98LFVAHQ=="; '
-    + 'expected_tarball="https://registry.npmjs.org/@openclaw/tavily-plugin/-/tavily-plugin-2026.7.1.tgz" ;; \\'
+    + 'expected_tarball="https://registry.npmjs.org/@openclaw/tavily-plugin/-/tavily-plugin-2026.7.1.tgz"; '
+    + 'archive_name="tavily-plugin-2026.7.1.tgz" ;; \\'
 )
 tavily_inspect = (
     '            tavily) \\\n'
@@ -164,6 +183,8 @@ tavily_install = (
 )
 
 missing = []
+if brave_archive not in content:
+    missing.append("OpenClaw Brave plugin archive")
 if brave_pin not in content:
     missing.append("OpenClaw Brave plugin integrity pin")
 if tavily_inspect not in content:
@@ -173,6 +194,7 @@ if missing:
         print(f"ERROR: expected upstream Dockerfile anchor not found: {item}", file=sys.stderr)
     sys.exit(1)
 
+content = content.replace(brave_archive, tavily_archive, 1)
 content = content.replace(brave_pin, tavily_pin, 1)
 content = content.replace(tavily_inspect, tavily_install, 1)
 
@@ -189,7 +211,19 @@ PY
   TAVILY_PLUGIN_PATCHED="$patched"
 }
 
-ensure_reviewed_tavily_plugin_install "$DOCKERFILE"
+TAVILY_PLUGIN_REQUIRED=0
+case "$NEMOCLAW_WEB_SEARCH_PROVIDER" in
+  tavily) TAVILY_PLUGIN_REQUIRED=1 ;;
+  "")
+    if [ -n "$TAVILY_API_KEY" ] && [ -z "$BRAVE_API_KEY" ]; then
+      TAVILY_PLUGIN_REQUIRED=1
+    fi
+    ;;
+esac
+
+if [ "$TAVILY_PLUGIN_REQUIRED" -eq 1 ]; then
+  ensure_reviewed_tavily_plugin_install "$DOCKERFILE"
+fi
 
 # Compute the integrations payload from env if not pre-set. This lets every
 # caller just `source ~/.env` and let apply-patches.sh handle the payload. The

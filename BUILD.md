@@ -131,6 +131,7 @@ Set one or more of these in `~/.env` before setup:
 TELEGRAM_BOT_TOKEN=...
 TELEGRAM_ALLOWED_IDS=...
 TELEGRAM_REQUIRE_MENTION=1
+TELEGRAM_GROUP_POLICY=allowlist
 DISCORD_BOT_TOKEN=...
 DISCORD_SERVER_ID=...
 DISCORD_ALLOWED_IDS=...
@@ -141,7 +142,7 @@ SLACK_ALLOWED_USERS=...
 SLACK_ALLOWED_CHANNELS=...
 ```
 
-`setup.sh` exports these for upstream onboard. Upstream NemoClaw owns channel credential validation, required policy preset merging, and rebuild-time channel configuration.
+`setup.sh` exports these for upstream onboard. Upstream NemoClaw owns channel credential validation, required policy preset merging, and rebuild-time channel configuration. OpenClaw defaults Telegram group access to `open`; use `allowlist` to require explicit group entries or `disabled` to turn off group access. Until upstream preserves this value across a forced sandbox recreate, the cookbook reapplies the selected policy afterward through the supported `openclaw config set` command.
 
 Slack Socket Mode requires both `SLACK_BOT_TOKEN` (`xoxb-...`) and `SLACK_APP_TOKEN` (`xapp-...`). Upstream ignores malformed messaging tokens, so placeholder values do not enable a channel.
 
@@ -249,7 +250,7 @@ Run:
 ./scripts/validate-patches.sh
 ```
 
-The validator clones current upstream NemoClaw, checks anchors, applies the remaining OpenAI HTTP overlay, and audits whether upstream now appears to cover that gap.
+The validator clones current upstream NemoClaw; checks anchors; exercises no-overlay, OpenAI HTTP-only, Tavily-only, and combined patch paths; and audits whether upstream now appears to cover either remaining gap.
 
 If validation fails:
 
@@ -327,7 +328,7 @@ Key variables are documented in [.env.example](.env.example). The most common ar
 | `NEMOCLAW_MODEL` | Optional model override |
 | `NEMOCLAW_PROVIDER` | Optional provider override |
 | `NEMOCLAW_RESOURCE_PROFILE`, `NEMOCLAW_CPU`, `NEMOCLAW_RAM` | Optional upstream sandbox resource selection |
-| `TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TOKEN`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN` | Optional upstream messaging channels |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_IDS`, `TELEGRAM_REQUIRE_MENTION`, `TELEGRAM_GROUP_POLICY`, `DISCORD_BOT_TOKEN`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN` | Optional upstream messaging channels and Telegram access controls |
 | `NEMOCLAW_WEB_SEARCH_PROVIDER`, `BRAVE_API_KEY`, `TAVILY_API_KEY` | Optional upstream web-search selection |
 | `NEMOCLAW_OPENAI_HTTP_ENABLED=1` | Cookbook `/v1/*` API enablement |
 | `NEMOCLAW_OPENAI_HTTP_TUNNEL=1` | Allows non-loopback `/v1/*` only when the second header credential below is also configured |
