@@ -4,8 +4,9 @@
 # Usage: apply-patches.sh <nemoclaw-dir>
 #
 # Reads cookbook-only integration flags from the environment. Upstream NemoClaw
-# owns core agent tooling, OpenShell installation, OpenClaw versioning, and web
-# search. The cookbook only patches the gaps listed in UPSTREAM.md.
+# owns core agent tooling, OpenShell installation, agent versioning, and web
+# search. The cookbook only patches the OpenClaw-specific gaps listed in
+# UPSTREAM.md; Hermes and Deep Agents Code use their upstream images unchanged.
 #
 # Unlike git patches, this approach:
 #   - Only needs one anchor line per file (not 3 lines of context)
@@ -17,12 +18,34 @@ NEMOCLAW_DIR="${1:?Usage: apply-patches.sh NEMOCLAW_DIR}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COOKBOOK_DIR="$(dirname "$SCRIPT_DIR")"
 FRAGMENTS_DIR="$COOKBOOK_DIR/patches/fragments"
+# shellcheck source=scripts/lib/agent-runtime.sh
+source "$SCRIPT_DIR/lib/agent-runtime.sh"
 
 # Integration flags
+REQUESTED_AGENT="${NEMOCLAW_AGENT:-openclaw}"
+if ! ACTIVE_AGENT="$(cookbook_normalize_agent "$REQUESTED_AGENT")"; then
+  echo "ERROR: Unsupported NEMOCLAW_AGENT '$REQUESTED_AGENT'." >&2
+  echo "Expected openclaw, hermes, or langchain-deepagents-code." >&2
+  exit 1
+fi
 NEMOCLAW_OPENAI_HTTP_ENABLED="${NEMOCLAW_OPENAI_HTTP_ENABLED:-}"
 NEMOCLAW_WEB_SEARCH_PROVIDER="${NEMOCLAW_WEB_SEARCH_PROVIDER:-}"
 BRAVE_API_KEY="${BRAVE_API_KEY:-}"
 TAVILY_API_KEY="${TAVILY_API_KEY:-}"
+
+if [ "$ACTIVE_AGENT" != "openclaw" ]; then
+  case "$NEMOCLAW_OPENAI_HTTP_ENABLED" in
+    1|true|yes)
+      echo "ERROR: NEMOCLAW_OPENAI_HTTP_ENABLED is an OpenClaw-only cookbook overlay." >&2
+      if [ "$ACTIVE_AGENT" = "hermes" ]; then
+        echo "Hermes already exposes its upstream OpenAI-compatible API; leave this flag unset." >&2
+      fi
+      exit 1
+      ;;
+  esac
+  echo "  No cookbook image patches needed for $ACTIVE_AGENT; using the upstream agent image unchanged."
+  exit 0
+fi
 
 DOCKERFILE="$NEMOCLAW_DIR/Dockerfile"
 REMOVED_TOOL_INSTALLS=0

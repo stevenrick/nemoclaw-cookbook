@@ -1,44 +1,36 @@
 #!/usr/bin/env bash
-# Extract the gateway auth token from the running sandbox and write
-# tokenized Web UI URLs to ~/openclaw-ui-url.txt (local) and
-# ~/openclaw-tunnel-url.txt (Secure Link, if TUNNEL_FQDN is set).
+# Save private access files for the selected NemoClaw agent runtime.
 #
-# Usage: save-ui-url.sh [sandbox-name]
-#
-# Prefer upstream `dashboard-url` / `gateway-token` commands. Falls back to
-# downloading openclaw.json or parsing sandbox logs for older/broken installs.
+# Gateway agents get a dashboard URL. Hermes also gets a client env for its
+# native OpenAI-compatible API. OpenClaw gets the cookbook API env only when
+# NEMOCLAW_OPENAI_HTTP_ENABLED is enabled. Terminal-only agents intentionally
+# have no dashboard or API file. Every agent can use the independent browser
+# terminal URL when the terminal service is enabled.
 set -uo pipefail
 umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COOKBOOK_DIR="$(dirname "$SCRIPT_DIR")"
+# shellcheck source=scripts/lib/agent-runtime.sh
+source "$SCRIPT_DIR/lib/agent-runtime.sh"
 
-export NVM_DIR="$HOME/.nvm"
-# shellcheck source=/dev/null
-[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 export PATH="$HOME/.local/bin:$PATH"
-
-# Source .env for TUNNEL_FQDN
 # shellcheck source=/dev/null
 [ -f "$HOME/.env" ] && source "$HOME/.env"
+
 TUNNEL_FQDN="${TUNNEL_FQDN:-}"
 TUNNEL_FQDN="${TUNNEL_FQDN#https://}"
 TUNNEL_FQDN="${TUNNEL_FQDN#http://}"
 
-SANDBOX="${1:-$(nemoclaw list 2>/dev/null | awk '/\*/{print $1}' | head -1)}"
-if [ -z "$SANDBOX" ]; then
-  echo "  ⚠ No active sandbox found — skipping URL extraction"
+SANDBOX="$(cookbook_discover_sandbox "${1:-}")"
+if [ -z "$SANDBOX" ] || ! cookbook_load_runtime "$SANDBOX"; then
+  echo "  ⚠ No healthy registered sandbox found — skipping access-file generation"
   exit 1
 fi
-
-last_nonempty_line() {
-  awk 'NF { line=$0 } END { if (line) print line }'
-}
 
 write_private_file() {
   local path="$1"
   local dir base tmp
-
   dir="$(dirname "$path")"
   base="$(basename "$path")"
   mkdir -p "$dir"
@@ -46,6 +38,14 @@ write_private_file() {
   cat > "$tmp"
   chmod 600 "$tmp"
   mv -f "$tmp" "$path"
+}
+
+remove_generated_file() {
+  local path="$1"
+  if [ -e "$path" ]; then
+    rm -f -- "$path"
+    echo "  ✓ Removed stale generated file ~/${path#"$HOME"/}"
+  fi
 }
 
 generate_token() {
@@ -56,16 +56,12 @@ generate_token() {
   fi
 }
 
-ensure_openai_edge_token() {
-  local secret_dir="$HOME/.nemoclaw"
-  local token_file="$secret_dir/openai-http-edge-token"
+ensure_private_token() {
+  local token_file="$1"
   local token=""
-
-  mkdir -p "$secret_dir"
-  chmod 700 "$secret_dir"
-  if [ -f "$token_file" ]; then
-    token="$(sed -n '1p' "$token_file")"
-  fi
+  mkdir -p "$(dirname "$token_file")"
+  chmod 700 "$(dirname "$token_file")"
+  [ -f "$token_file" ] && token="$(sed -n '1p' "$token_file")"
   case "$token" in
     ""|*[!A-Za-z0-9._~+=/-]*)
       token="$(generate_token)"
@@ -75,154 +71,123 @@ ensure_openai_edge_token() {
   printf '%s\n' "$token"
 }
 
-refresh_openai_nginx() {
-  if [ ! -x "$COOKBOOK_DIR/scripts/install-services.sh" ]; then
-    echo "  ⚠ Could not refresh nginx for OpenAI HTTP API; install-services.sh missing"
-    return 1
-  fi
-  if "$COOKBOOK_DIR/scripts/install-services.sh" --nginx-only >/dev/null; then
-    echo "  ✓ nginx OpenAI HTTP auth refreshed"
-    return 0
-  fi
-  echo "  ⚠ Could not refresh nginx for OpenAI HTTP API; run scripts/install-services.sh --nginx-only"
-  return 1
-}
-
 append_token_fragment() {
   local url="$1"
   local token="$2"
-
-  if [ -z "$url" ]; then
-    return 1
-  fi
-  if [ -z "$token" ] || printf '%s' "$url" | grep -q '#token='; then
+  if [ -z "$token" ] || printf '%s' "$url" | grep -q '[#?&]token='; then
     printf '%s\n' "$url"
-    return 0
-  fi
-
-  if printf '%s' "$url" | grep -q '#'; then
+  elif printf '%s' "$url" | grep -q '#'; then
     printf '%s&token=%s\n' "$url" "$token"
   else
     printf '%s/#token=%s\n' "${url%/}" "$token"
   fi
 }
 
-write_urls() {
-  local token="$1"
-  local local_url="${2:-}"
-
-  if [ -z "$local_url" ]; then
-    local_url="http://127.0.0.1:18789/#token=${token}"
-  fi
-
-  printf '%s\n' "$local_url" | write_private_file "$HOME/openclaw-ui-url.txt"
-  echo "  ✓ Local UI URL saved to ~/openclaw-ui-url.txt"
-
-  if [ -n "$TUNNEL_FQDN" ]; then
-    append_token_fragment "https://${TUNNEL_FQDN}/" "$token" | write_private_file "$HOME/openclaw-tunnel-url.txt"
-    echo "  ✓ Tunnel UI URL saved to ~/openclaw-tunnel-url.txt"
-  fi
-
-  # OpenAI-compatible HTTP API env file (when integration is enabled).
-  # Defaults to http://127.0.0.1/v1 — works from the Brev host directly and
-  # from a laptop via SSH port-forward. The tunnel URL is written as a
-  # commented alternative because Brev's Secure Link is gated by Cloudflare
-  # Access with SSO by default, so programmatic clients get redirected to a
-  # login page until that gate is removed or bypassed. See BUILD.md for the
-  # four ways to make the tunnel URL programmatically reachable.
-  local openai_flag="${NEMOCLAW_OPENAI_HTTP_ENABLED:-}"
-  if [ "$openai_flag" = "1" ] || [ "$openai_flag" = "true" ]; then
-    ensure_openai_edge_token >/dev/null
-    printf '%s\n' "$token" | write_private_file "$HOME/.nemoclaw/openai-http-gateway-token"
-    {
-      echo "# OpenAI-compatible HTTP API on the NemoClaw gateway."
-      echo "# OPENAI_API_KEY is loaded from the owner-only edge-token file instead"
-      echo "# of being stored directly in this client env file. nginx rewrites it"
-      echo "# to the private OpenClaw gateway token upstream."
-      echo "# Rotate without rebuilding the sandbox: scripts/rotate-openai-http-token.sh"
-      echo "# Default base URL: works from this Brev host directly, and from a"
-      echo "# laptop via 'ssh -L 8080:127.0.0.1:80 <brev-host>' (then use"
-      echo "# OPENAI_BASE_URL=http://127.0.0.1:8080/v1)."
-      echo "OPENAI_EDGE_TOKEN_FILE=\"\${OPENAI_EDGE_TOKEN_FILE:-\$HOME/.nemoclaw/openai-http-edge-token}\""
-      echo "OPENAI_BASE_URL=\"http://127.0.0.1/v1\""
-      echo "OPENAI_API_KEY=\"\$(sed -n '1p' \"\$OPENAI_EDGE_TOKEN_FILE\")\""
-      echo "export OPENAI_BASE_URL OPENAI_API_KEY"
-      if [ -n "$TUNNEL_FQDN" ]; then
-        echo ""
-        echo "# Alternative: tunnel URL. Non-loopback /v1/* access requires"
-        echo "# NEMOCLAW_OPENAI_HTTP_TUNNEL=1 plus Cloudflare Access service-token"
-        echo "# headers configured on nginx and sent by the client."
-        echo "# OPENAI_BASE_URL=https://${TUNNEL_FQDN}/v1"
-      fi
-    } | write_private_file "$HOME/openclaw-openai.env"
-    echo "  ✓ OpenAI HTTP API env saved to ~/openclaw-openai.env"
-    refresh_openai_nginx
+refresh_openai_nginx() {
+  if "$COOKBOOK_DIR/scripts/install-services.sh" --nginx-only --sandbox "$SANDBOX" >/dev/null; then
+    echo "  ✓ nginx OpenAI HTTP auth refreshed"
+  else
+    echo "  ⚠ Could not refresh nginx OpenAI HTTP auth"
+    return 1
   fi
 }
 
-TMPDIR_TOKEN=$(mktemp -d)
-trap 'rm -rf "$TMPDIR_TOKEN"' EXIT
+write_openai_env() {
+  local path="$1"
+  local base_url="$2"
+  local token_file="$3"
+  {
+    echo "# OpenAI-compatible API for NemoClaw sandbox '$SANDBOX' ($COOKBOOK_AGENT_DISPLAY)."
+    echo "# The credential remains in an owner-only token file."
+    echo "NEMOCLAW_API_TOKEN_FILE=\"\${NEMOCLAW_API_TOKEN_FILE:-$token_file}\""
+    echo "OPENAI_BASE_URL=\"$base_url\""
+    echo "OPENAI_API_KEY=\"\$(sed -n '1p' \"\$NEMOCLAW_API_TOKEN_FILE\")\""
+    echo "export OPENAI_BASE_URL OPENAI_API_KEY"
+  } | write_private_file "$path"
+}
 
-# Primary: use upstream commands.
-UPSTREAM_URL=$(nemoclaw "$SANDBOX" dashboard-url --quiet 2>/dev/null | last_nonempty_line)
-GW_TOKEN=$(nemoclaw "$SANDBOX" gateway-token --quiet 2>/dev/null | last_nonempty_line)
-
-if [ -n "$GW_TOKEN" ]; then
-  if [ -n "$UPSTREAM_URL" ]; then
-    LOCAL_URL=$(append_token_fragment "$UPSTREAM_URL" "$GW_TOKEN")
+# The browser terminal has an independent token so it never reuses an agent's
+# dashboard or API credential.
+if [ "${ENABLE_TERMINAL_SERVER:-true}" = "true" ]; then
+  TERMINAL_TOKEN_FILE="$HOME/.nemoclaw/terminal-access-token"
+  TERMINAL_TOKEN="$(ensure_private_token "$TERMINAL_TOKEN_FILE")"
+  if [ -n "$TUNNEL_FQDN" ]; then
+    TERMINAL_URL="https://${TUNNEL_FQDN}/terminal#token=${TERMINAL_TOKEN}"
   else
-    LOCAL_URL=""
+    TERMINAL_URL="http://127.0.0.1/terminal#token=${TERMINAL_TOKEN}"
   fi
-  write_urls "$GW_TOKEN" "$LOCAL_URL" || exit 1
+  printf '%s\n' "$TERMINAL_URL" | write_private_file "$HOME/nemoclaw-terminal-url.txt"
+  echo "  ✓ Browser terminal URL saved to ~/nemoclaw-terminal-url.txt"
+fi
+
+if [ "$COOKBOOK_RUNTIME" != "gateway" ]; then
+  remove_generated_file "$HOME/nemoclaw-ui-url.txt"
+  remove_generated_file "$HOME/nemoclaw-tunnel-url.txt"
+  remove_generated_file "$HOME/nemoclaw-openai.env"
+  echo "  ⊘ $COOKBOOK_AGENT_DISPLAY is terminal-only; no dashboard or HTTP API URL to save"
   exit 0
 fi
 
-# Fallback: download openclaw.json from sandbox and extract the token.
-if openshell sandbox download "$SANDBOX" /sandbox/.openclaw/openclaw.json "$TMPDIR_TOKEN" 2>/dev/null; then
-  GW_TOKEN=$(python3 - "$TMPDIR_TOKEN" <<'PY' 2>/dev/null
-import json
-import pathlib
-import sys
-
-root = pathlib.Path(sys.argv[1])
-for path in root.rglob("openclaw.json"):
-    cfg = json.load(path.open())
-    token = cfg.get("gateway", {}).get("auth", {}).get("token", "")
-    if token:
-        print(token)
-        break
-PY
-)
-  if [ -n "$GW_TOKEN" ]; then
-    if [ -n "$UPSTREAM_URL" ]; then
-      LOCAL_URL=$(append_token_fragment "$UPSTREAM_URL" "$GW_TOKEN")
-    else
-      LOCAL_URL=""
-    fi
-    write_urls "$GW_TOKEN" "$LOCAL_URL" || exit 1
-    exit 0
-  fi
+UPSTREAM_URL="$(cookbook_dashboard_url "$SANDBOX")"
+GW_TOKEN="$(nemoclaw "$SANDBOX" gateway-token --quiet 2>/dev/null | cookbook_last_nonempty_line)"
+if [ -z "$UPSTREAM_URL" ]; then
+  echo "  ⚠ Upstream did not return a dashboard URL for '$SANDBOX'"
+  exit 1
 fi
 
-# Fallback: parse sandbox logs for the gateway startup line
-GW_TOKEN=$(nemoclaw "$SANDBOX" logs 2>/dev/null | sed -n 's/.*Local UI: http:\/\/127\.0\.0\.1:18789\/#token=\([^[:space:]]*\).*/\1/p' | tail -1)
-if [ -n "$GW_TOKEN" ]; then
-  if [ -n "$UPSTREAM_URL" ]; then
-    LOCAL_URL=$(append_token_fragment "$UPSTREAM_URL" "$GW_TOKEN")
+LOCAL_URL="$UPSTREAM_URL"
+if [ "$COOKBOOK_AGENT" = "openclaw" ]; then
+  LOCAL_URL="$(append_token_fragment "$UPSTREAM_URL" "$GW_TOKEN")"
+fi
+printf '%s\n' "$LOCAL_URL" | write_private_file "$HOME/nemoclaw-ui-url.txt"
+echo "  ✓ Dashboard URL saved to ~/nemoclaw-ui-url.txt"
+
+if [ -n "$TUNNEL_FQDN" ]; then
+  TUNNEL_URL="https://${TUNNEL_FQDN}/"
+  if [ "$COOKBOOK_AGENT" = "openclaw" ]; then
+    TUNNEL_URL="$(append_token_fragment "$TUNNEL_URL" "$GW_TOKEN")"
+  fi
+  printf '%s\n' "$TUNNEL_URL" | write_private_file "$HOME/nemoclaw-tunnel-url.txt"
+  echo "  ✓ Secure Link dashboard URL saved to ~/nemoclaw-tunnel-url.txt"
+else
+  remove_generated_file "$HOME/nemoclaw-tunnel-url.txt"
+fi
+
+if [ "$COOKBOOK_AGENT" = "openclaw" ]; then
+  # Preserve established filenames for existing OpenClaw deployments.
+  printf '%s\n' "$LOCAL_URL" | write_private_file "$HOME/openclaw-ui-url.txt"
+  if [ -n "${TUNNEL_URL:-}" ]; then
+    printf '%s\n' "$TUNNEL_URL" | write_private_file "$HOME/openclaw-tunnel-url.txt"
+  fi
+
+  case "${NEMOCLAW_OPENAI_HTTP_ENABLED:-}" in
+    1|true|yes)
+      if [ -z "$GW_TOKEN" ]; then
+        echo "  ⚠ OpenClaw gateway token unavailable; API client env was not written"
+        exit 1
+      fi
+      EDGE_TOKEN_FILE="$HOME/.nemoclaw/openai-http-edge-token"
+      ensure_private_token "$EDGE_TOKEN_FILE" >/dev/null
+      printf '%s\n' "$GW_TOKEN" | write_private_file "$HOME/.nemoclaw/openai-http-gateway-token"
+      write_openai_env "$HOME/nemoclaw-openai.env" "http://127.0.0.1/v1" "$EDGE_TOKEN_FILE"
+      write_openai_env "$HOME/openclaw-openai.env" "http://127.0.0.1/v1" "$EDGE_TOKEN_FILE"
+      echo "  ✓ OpenClaw API client env saved to ~/nemoclaw-openai.env"
+      refresh_openai_nginx
+      ;;
+    *)
+      remove_generated_file "$HOME/nemoclaw-openai.env"
+      remove_generated_file "$HOME/openclaw-openai.env"
+      ;;
+  esac
+elif [ "$COOKBOOK_AGENT" = "hermes" ]; then
+  if [ -n "$GW_TOKEN" ] && [ -n "$COOKBOOK_HERMES_API_PORT" ]; then
+    HERMES_TOKEN_FILE="$HOME/.nemoclaw/${SANDBOX}-gateway-token"
+    printf '%s\n' "$GW_TOKEN" | write_private_file "$HERMES_TOKEN_FILE"
+    write_openai_env "$HOME/nemoclaw-openai.env" \
+      "http://127.0.0.1:${COOKBOOK_HERMES_API_PORT}/v1" "$HERMES_TOKEN_FILE"
+    echo "  ✓ Hermes native API client env saved to ~/nemoclaw-openai.env"
   else
-    LOCAL_URL=""
+    remove_generated_file "$HOME/nemoclaw-openai.env"
+    echo "  ⚠ Hermes API token or forwarded API port unavailable; client env was not written"
   fi
-  write_urls "$GW_TOKEN" "$LOCAL_URL" || exit 1
-  echo "  (token extracted from logs)"
-  exit 0
 fi
-
-if [ -n "$UPSTREAM_URL" ]; then
-  printf '%s\n' "$UPSTREAM_URL" | write_private_file "$HOME/openclaw-ui-url.txt"
-  echo "  ✓ Local UI URL saved to ~/openclaw-ui-url.txt"
-  echo "  ⚠ Gateway token was not available; ~/openclaw-openai.env was not written."
-  exit 0
-fi
-
-echo "  ⚠ Could not extract UI URL — retrieve manually: nemoclaw $SANDBOX dashboard-url --quiet"
-exit 1

@@ -3,7 +3,7 @@
 
 [Unit]
 Description=NemoClaw Terminal WebSocket Server
-After=network.target openshell-gateway.service
+After=network.target
 
 [Service]
 Type=simple
@@ -13,6 +13,7 @@ ExecStart=/bin/bash -c '. $HOME/.nvm/nvm.sh && node server.js --port 3001'
 Restart=on-failure
 RestartSec=3
 Environment=HOME=/home/ubuntu
+Environment=NEMOCLAW_SANDBOX_NAME=__SANDBOX_NAME__
 
 [Install]
 WantedBy=multi-user.target

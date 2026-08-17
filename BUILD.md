@@ -1,12 +1,16 @@
-# BUILD: NemoClaw + OpenShell From Scratch
+# BUILD: NemoClaw Agent Runtimes on OpenShell
 
-This walkthrough builds a NemoClaw sandbox using upstream NemoClaw as the owner of OpenShell installation, sandbox-base resolution, OpenClaw versioning, inference setup, and web search. The cookbook adds only the temporary overlays listed in [UPSTREAM.md](UPSTREAM.md).
+This walkthrough builds an OpenClaw, Hermes, or LangChain Deep Agents Code
+sandbox. Upstream NemoClaw owns OpenShell installation, agent images and
+versions, inference, lifecycle state, and web search. The cookbook adds only
+the temporary OpenClaw overlays listed in [UPSTREAM.md](UPSTREAM.md) plus
+agent-aware Brev host access helpers.
 
 ## Prerequisites
 
 - A Brev Ubuntu instance with Docker
 - Brev CLI installed and authenticated locally
-- `NVIDIA_API_KEY` from https://build.nvidia.com/
+- `NVIDIA_INFERENCE_API_KEY` from https://build.nvidia.com/
 - Optional tokens or keys for Telegram, Discord, Slack, Brave, Tavily, or the OpenAI-compatible HTTP API
 
 ## Step 1: Configure `.env`
@@ -15,7 +19,7 @@ Create `.env` locally:
 
 ```bash
 cp .env.example .env
-# Edit .env. NVIDIA_API_KEY is required.
+# Edit .env. Select NEMOCLAW_AGENT and set NVIDIA_INFERENCE_API_KEY.
 ```
 
 Copy it to the Brev host:
@@ -55,10 +59,11 @@ brev exec <instance> "cd ~/nemoclaw-cookbook && ./setup.sh"
 1. Clone or update upstream `~/NemoClaw`.
 2. Run upstream `~/NemoClaw/scripts/install-openshell.sh`.
 3. Reset upstream files that cookbook overlays may touch.
-4. Apply only the cookbook overlays required by your `.env`.
+4. Apply only the OpenClaw cookbook overlays required by your `.env`; Hermes
+   and Deep Agents Code images remain unchanged.
 5. Run upstream `bash install.sh --non-interactive`.
 6. Install host-side nginx and the optional browser terminal service.
-7. Save tokenized UI URLs and optional OpenAI-compatible client env.
+7. Save agent-appropriate dashboard, browser-terminal, and API client files.
 8. Start an optional Cloudflare named tunnel only when `CLOUDFLARE_TUNNEL_TOKEN` is set.
 9. Write the deployment manifest and run the cookbook verifier.
 
@@ -73,7 +78,8 @@ cd ~/NemoClaw
 git pull --ff-only
 
 source ~/.env
-export NVIDIA_API_KEY NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
+export NVIDIA_INFERENCE_API_KEY NEMOCLAW_AGENT NEMOCLAW_SANDBOX_NAME
+export NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 
 bash scripts/install-openshell.sh
 ~/nemoclaw-cookbook/scripts/apply-patches.sh ~/NemoClaw
@@ -86,7 +92,23 @@ bash install.sh --non-interactive
 
 Prefer `setup.sh` for normal use because it handles failed onboard sessions, detects upstream drift, passes the current upstream environment surface through to onboarding, and manages post-deploy ordering.
 
-## Accessing the Web UI
+## Selecting an Agent
+
+Set one canonical upstream identifier before setup:
+
+```bash
+NEMOCLAW_AGENT=openclaw                    # default gateway runtime
+NEMOCLAW_AGENT=hermes                      # gateway + native API
+NEMOCLAW_AGENT=langchain-deepagents-code   # terminal-only dcode runtime
+NEMOCLAW_SANDBOX_NAME=my-assistant
+```
+
+Hermes sandbox names are limited to 19 characters. Upstream dynamically
+allocates dashboard ports from `18789`–`18799`; Hermes also allocates its API
+port from `8642`–`8652`. Do not hardcode those ports in automation—use
+`nemoclaw list --json`, `dashboard-url --quiet`, or the generated client file.
+
+## Accessing the Dashboard and Browser Terminal
 
 For an external URL, create a Brev Secure Link / service endpoint to host port
 `80`, then set `TUNNEL_FQDN=<hostname>` in `~/.env`. There are two deployment
@@ -97,29 +119,32 @@ shapes:
 - Brev `apps.run` service endpoint: set `NEMOCLAW_NGINX_LISTEN_ADDR=0.0.0.0`
   because the platform ingress connects to the host network interface.
 
-Open the saved URL:
+Open the saved dashboard URL for OpenClaw or Hermes:
 
 ```bash
-URL=$(brev exec <instance> "sed -n '1p' ~/openclaw-tunnel-url.txt" | sed -n '/^https:/p' | head -1)
+URL=$(brev exec <instance> "sed -n '1p' ~/nemoclaw-tunnel-url.txt" | sed -n '/^https:/p' | head -1)
 open "$URL"
 ```
 
 Port-forward fallback:
 
 ```bash
-brev port-forward <instance> -p 18789:18789
-URL=$(brev exec <instance> "sed -n '1p' ~/openclaw-ui-url.txt" | sed -n '/^http:/p' | head -1)
+brev port-forward <instance> -p <dashboard-port>:<dashboard-port>
+URL=$(brev exec <instance> "sed -n '1p' ~/nemoclaw-ui-url.txt" | sed -n '/^http:/p' | head -1)
 open "$URL"
 ```
 
 Browser terminal on the same Secure Link:
 
 ```bash
-TERMINAL_URL=$(printf '%s' "$URL" | sed 's#/#/terminal#3')
+TERMINAL_URL=$(brev exec <instance> "sed -n '1p' ~/nemoclaw-terminal-url.txt" | sed -n '/^https:/p' | head -1)
 open "$TERMINAL_URL"
 ```
 
-The token changes when the sandbox is rebuilt. Avoid `cat` for these files in shared logs; use it only in a private terminal when you intentionally need to inspect the URL.
+The browser terminal is available for all three agents and runs
+`nemoclaw launch <sandbox>`, so Deep Agents Code opens directly in `dcode`.
+Dashboard and terminal credentials are separate. Avoid `cat` for these files
+in shared logs; pass each saved URL directly to the browser.
 
 ## Optional Integrations
 
@@ -142,7 +167,11 @@ SLACK_ALLOWED_USERS=...
 SLACK_ALLOWED_CHANNELS=...
 ```
 
-`setup.sh` exports these for upstream onboard. Upstream NemoClaw owns channel credential validation, required policy preset merging, and rebuild-time channel configuration. OpenClaw defaults Telegram group access to `open`; use `allowlist` to require explicit group entries or `disabled` to turn off group access. Until upstream preserves this value across a forced sandbox recreate, the cookbook reapplies the selected policy afterward through the supported `openclaw config set` command.
+`setup.sh` exports these for upstream onboard. Upstream NemoClaw owns agent
+channel availability, credential validation, required policy preset merging,
+and rebuild-time configuration. OpenClaw and Hermes support messaging subsets;
+Deep Agents Code is terminal-only. The Telegram group-policy reapply workaround
+is gated to OpenClaw.
 
 Slack Socket Mode requires both `SLACK_BOT_TOKEN` (`xoxb-...`) and `SLACK_APP_TOKEN` (`xapp-...`). Upstream ignores malformed messaging tokens, so placeholder values do not enable a channel.
 
@@ -179,7 +208,12 @@ When both `BRAVE_API_KEY` and `TAVILY_API_KEY` are present, set `NEMOCLAW_WEB_SE
 
 ### OpenAI-Compatible HTTP API
 
-Set:
+Hermes exposes this API natively. After Hermes setup, source the generated
+`~/nemoclaw-openai.env`; it uses the allocated Hermes API port and loads the
+bearer from an owner-only file. No cookbook image patch or nginx `/v1` route is
+involved. Deep Agents Code has no HTTP API.
+
+The remaining section is the optional **OpenClaw-only** cookbook overlay. Set:
 
 ```bash
 NEMOCLAW_OPENAI_HTTP_ENABLED=1
@@ -188,7 +222,7 @@ NEMOCLAW_OPENAI_HTTP_ENABLED=1
 After deploy, client settings are written to:
 
 ```bash
-source ~/openclaw-openai.env
+source ~/nemoclaw-openai.env
 ```
 
 The gateway exposes:
@@ -204,17 +238,17 @@ configured Secure Link origin. Use an SSH port-forward for programmatic clients:
 
 ```bash
 ssh -L 8080:127.0.0.1:80 <brev-host>
-OPENAI_BASE_URL=http://127.0.0.1:8080/v1 OPENAI_API_KEY=<edge-token-from-openclaw-openai.env> python your_client.py
+OPENAI_BASE_URL=http://127.0.0.1:8080/v1 OPENAI_API_KEY=<edge-token-from-nemoclaw-openai.env> python your_client.py
 ```
 
-The generated `~/openclaw-openai.env` file reads the API key from the owner-only
+The generated `~/nemoclaw-openai.env` file reads the API key from the owner-only
 token file instead of storing the raw key inline. nginx validates that edge token
 and rewrites requests to the private OpenClaw gateway token upstream, so API
 token rotation does not require rebuilding or restarting the sandbox:
 
 ```bash
 ./scripts/rotate-openai-http-token.sh
-source ~/openclaw-openai.env
+source ~/nemoclaw-openai.env
 ```
 
 Do not expose `/v1/*` publicly with the API bearer as the only auth layer. Keep
@@ -266,7 +300,7 @@ If validation fails:
 Back up first:
 
 ```bash
-~/nemoclaw-cookbook/scripts/backup-full.sh backup my-assistant
+~/nemoclaw-cookbook/scripts/backup-full.sh backup <sandbox> before-upgrade
 ```
 
 Then update and run setup again:
@@ -300,10 +334,10 @@ source ~/.bashrc
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-### Web UI URL missing
+### Dashboard or browser-terminal URL missing
 
 ```bash
-~/nemoclaw-cookbook/scripts/save-ui-url.sh
+~/nemoclaw-cookbook/scripts/save-ui-url.sh <sandbox>
 ```
 
 ### Upstream pull blocked by local changes
@@ -324,13 +358,16 @@ Key variables are documented in [.env.example](.env.example). The most common ar
 
 | Variable | Purpose |
 |----------|---------|
-| `NVIDIA_API_KEY` | Required NVIDIA inference key |
+| `NVIDIA_INFERENCE_API_KEY` | Required NVIDIA inference key (`NVIDIA_API_KEY` remains a cookbook compatibility alias) |
+| `NEMOCLAW_AGENT` | `openclaw`, `hermes`, or `langchain-deepagents-code` |
+| `NEMOCLAW_SANDBOX_NAME` | Explicit sandbox selected consistently by setup and host helpers |
 | `NEMOCLAW_MODEL` | Optional model override |
 | `NEMOCLAW_PROVIDER` | Optional provider override |
 | `NEMOCLAW_RESOURCE_PROFILE`, `NEMOCLAW_CPU`, `NEMOCLAW_RAM` | Optional upstream sandbox resource selection |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_IDS`, `TELEGRAM_REQUIRE_MENTION`, `TELEGRAM_GROUP_POLICY`, `DISCORD_BOT_TOKEN`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN` | Optional upstream messaging channels and Telegram access controls |
 | `NEMOCLAW_WEB_SEARCH_PROVIDER`, `BRAVE_API_KEY`, `TAVILY_API_KEY` | Optional upstream web-search selection |
-| `NEMOCLAW_OPENAI_HTTP_ENABLED=1` | Cookbook `/v1/*` API enablement |
+| `NEMOCLAW_OPENAI_HTTP_ENABLED=1` | OpenClaw-only cookbook `/v1/*` API enablement; leave unset for Hermes and Deep Agents Code |
+| `NEMOCLAW_HERMES_API_PORT` | Optional pinned Hermes API port; upstream auto-allocates by default |
 | `NEMOCLAW_OPENAI_HTTP_TUNNEL=1` | Allows non-loopback `/v1/*` only when the second header credential below is also configured |
 | `NEMOCLAW_OPENAI_HTTP_ACCESS_CLIENT_ID` | Required `CF-Access-Client-Id` value for non-loopback `/v1/*` callers |
 | `NEMOCLAW_OPENAI_HTTP_ACCESS_CLIENT_SECRET` | Required `CF-Access-Client-Secret` value for non-loopback `/v1/*` callers |
@@ -347,7 +384,8 @@ The sandbox security model is upstream NemoClaw/OpenShell:
 - seccomp restricts syscalls.
 - network egress flows through OpenShell policy.
 - inference credentials stay host-side.
-- `openclaw.json` is integrity checked at sandbox startup.
+- Each upstream agent manifest declares the state and integrity boundary used
+  for startup, rebuild, snapshot, and restore.
 
 The cookbook does not weaken those controls. Its overlays either add explicit policy for a configured service or add host-side proxying around upstream endpoints.
 

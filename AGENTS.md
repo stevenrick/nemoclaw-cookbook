@@ -13,7 +13,7 @@ scripts/
   validate-patches.sh # Check fragments still work against upstream
   install-services.sh # Installs nginx, systemd units, terminal server (called by setup.sh)
   save-ui-url.sh      # Uses upstream URL/token commands → UI URL and /v1 env files
-  backup-full.sh      # Workspace, chat history, and skills backup/restore
+  backup-full.sh      # Agent-manifest snapshot/restore wrapper
 config/
   nginx.conf.template # Reverse proxy template — __COOKBOOK_DIR__ substituted at deploy
   systemd/            # nemoclaw-terminal.service — browser-terminal WebSocket bridge (the gateway is managed by upstream `nemoclaw`, not as a cookbook systemd unit)

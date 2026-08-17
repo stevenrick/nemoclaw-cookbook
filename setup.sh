@@ -10,10 +10,14 @@ umask 022
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${HOME}/.env"
+NEMOCLAW_SOURCE_DIR="${NEMOCLAW_SOURCE_DIR:-$HOME/NemoClaw}"
+export NEMOCLAW_SOURCE_DIR
+# shellcheck source=scripts/lib/agent-runtime.sh
+source "$SCRIPT_DIR/scripts/lib/agent-runtime.sh"
 
 normalize_nemoclaw_source_modes() {
-  if [ -d "$HOME/NemoClaw" ]; then
-    find "$HOME/NemoClaw" -path "$HOME/NemoClaw/.git" -prune -o -perm /022 -exec chmod go-w {} +
+  if [ -d "$NEMOCLAW_SOURCE_DIR" ]; then
+    find "$NEMOCLAW_SOURCE_DIR" -path "$NEMOCLAW_SOURCE_DIR/.git" -prune -o -perm /022 -exec chmod go-w {} +
   fi
 }
 
@@ -27,14 +31,42 @@ fi
 # shellcheck source=/dev/null
 source "$ENV_FILE"
 
-if [ -z "${NVIDIA_API_KEY:-}" ]; then
-  echo "ERROR: NVIDIA_API_KEY not set in ~/.env"
+if [ -z "${NVIDIA_INFERENCE_API_KEY:-}" ] && [ -z "${NVIDIA_API_KEY:-}" ]; then
+  echo "ERROR: NVIDIA_INFERENCE_API_KEY (or legacy NVIDIA_API_KEY) not set in ~/.env"
   exit 1
 fi
 
-export NVIDIA_API_KEY
+NVIDIA_INFERENCE_API_KEY="${NVIDIA_INFERENCE_API_KEY:-$NVIDIA_API_KEY}"
+NVIDIA_API_KEY="${NVIDIA_API_KEY:-$NVIDIA_INFERENCE_API_KEY}"
+export NVIDIA_INFERENCE_API_KEY NVIDIA_API_KEY
 export NEMOCLAW_NON_INTERACTIVE=1
 export NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
+
+if ! ACTIVE_AGENT="$(cookbook_normalize_agent "${NEMOCLAW_AGENT:-openclaw}")"; then
+  echo "ERROR: NEMOCLAW_AGENT must be openclaw, hermes, or langchain-deepagents-code"
+  exit 1
+fi
+export NEMOCLAW_AGENT="$ACTIVE_AGENT"
+NEMOCLAW_SANDBOX_NAME="${NEMOCLAW_SANDBOX_NAME:-my-assistant}"
+if ! cookbook_valid_sandbox_name "$NEMOCLAW_SANDBOX_NAME"; then
+  echo "ERROR: NEMOCLAW_SANDBOX_NAME must start with a letter or digit and contain only letters, digits, dots, underscores, or hyphens"
+  exit 1
+fi
+if [ "$ACTIVE_AGENT" = "hermes" ] && [ "${#NEMOCLAW_SANDBOX_NAME}" -gt 19 ]; then
+  echo "ERROR: Hermes sandbox names must be 19 characters or fewer"
+  exit 1
+fi
+export NEMOCLAW_SANDBOX_NAME
+
+if [ "$ACTIVE_AGENT" != "openclaw" ]; then
+  case "${NEMOCLAW_OPENAI_HTTP_ENABLED:-}" in
+    1|true|yes)
+      echo "ERROR: NEMOCLAW_OPENAI_HTTP_ENABLED is a cookbook OpenClaw overlay."
+      echo "Leave it unset for $ACTIVE_AGENT; Hermes exposes a native API and Deep Agents Code is terminal-only."
+      exit 1
+      ;;
+  esac
+fi
 
 # Inference configuration
 [ -n "${NEMOCLAW_MODEL:-}" ] && export NEMOCLAW_MODEL
@@ -45,6 +77,12 @@ export NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 [ -n "${NEMOCLAW_CPU:-}" ] && export NEMOCLAW_CPU
 [ -n "${NEMOCLAW_RAM:-}" ] && export NEMOCLAW_RAM
 [ -n "${NEMOCLAW_EXPERIMENTAL:-}" ] && export NEMOCLAW_EXPERIMENTAL
+[ -n "${NEMOCLAW_DASHBOARD_PORT:-}" ] && export NEMOCLAW_DASHBOARD_PORT
+[ -n "${NEMOCLAW_HERMES_API_PORT:-}" ] && export NEMOCLAW_HERMES_API_PORT
+[ -n "${NEMOCLAW_HERMES_DASHBOARD_TUI:-}" ] && export NEMOCLAW_HERMES_DASHBOARD_TUI
+[ -n "${NEMOCLAW_TOOL_DISCLOSURE:-}" ] && export NEMOCLAW_TOOL_DISCLOSURE
+[ -n "${NEMOCLAW_DCODE_AUTO_APPROVAL:-}" ] && export NEMOCLAW_DCODE_AUTO_APPROVAL
+[ -n "${NEMOCLAW_REASONING_EFFORT:-}" ] && export NEMOCLAW_REASONING_EFFORT
 
 # Alternative inference provider keys
 [ -n "${OPENAI_API_KEY:-}" ] && export OPENAI_API_KEY
@@ -97,18 +135,17 @@ fi
 # NEMOCLAW_OPENAI_HTTP_ENABLED via scripts/build-integrations-config.py.
 
 echo "=== Step 1: Clone / update repositories ==="
-cd "$HOME"
-if [ -d NemoClaw ]; then
+if [ -d "$NEMOCLAW_SOURCE_DIR/.git" ]; then
   echo "  NemoClaw exists, pulling latest..."
-  git -C NemoClaw checkout -- Dockerfile Dockerfile.base package-lock.json nemoclaw-blueprint/policies/openclaw-sandbox.yaml scripts/nemoclaw-start.sh 2>/dev/null || true
-  git -C NemoClaw pull --ff-only || echo "  Warning: pull failed, continuing with existing checkout"
+  git -C "$NEMOCLAW_SOURCE_DIR" checkout -- Dockerfile Dockerfile.base package-lock.json nemoclaw-blueprint/policies/openclaw-sandbox.yaml scripts/nemoclaw-start.sh 2>/dev/null || true
+  git -C "$NEMOCLAW_SOURCE_DIR" pull --ff-only || echo "  Warning: pull failed, continuing with existing checkout"
 else
-  git clone https://github.com/NVIDIA/NemoClaw
+  git clone https://github.com/NVIDIA/NemoClaw "$NEMOCLAW_SOURCE_DIR"
 fi
 normalize_nemoclaw_source_modes
 
 echo "=== Step 2: Install OpenShell via upstream NemoClaw ==="
-cd "$HOME/NemoClaw"
+cd "$NEMOCLAW_SOURCE_DIR"
 bash scripts/install-openshell.sh
 export PATH="$HOME/.local/bin:$PATH"
 if ! grep -q 'local/bin' "$HOME/.bashrc" 2>/dev/null; then
@@ -120,17 +157,17 @@ openshell --version
 echo "=== Step 3: Apply patches ==="
 # See UPSTREAM.md for the versions patches were last validated against.
 # Uses modular fragments (not git apply) for resilience to upstream changes.
-cd "$HOME/NemoClaw"
+cd "$NEMOCLAW_SOURCE_DIR"
 git checkout -- Dockerfile Dockerfile.base package-lock.json nemoclaw-blueprint/policies/openclaw-sandbox.yaml scripts/nemoclaw-start.sh 2>/dev/null || true
 normalize_nemoclaw_source_modes
 
-"${SCRIPT_DIR}/scripts/apply-patches.sh" "$HOME/NemoClaw"
+"${SCRIPT_DIR}/scripts/apply-patches.sh" "$NEMOCLAW_SOURCE_DIR"
 
 # If a sandbox already exists, check if it's current. The manifest records the
 # NemoClaw commit the image was built from. If upstream moved, force a rebuild
 # so the new patches take effect.
 if [ -f "$HOME/.nemoclaw/cookbook-deployment.json" ]; then
-  CURRENT_NC=$(git -C "$HOME/NemoClaw" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+  CURRENT_NC=$(git -C "$NEMOCLAW_SOURCE_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
   MANIFEST_NC=$(python3 -c "import json; print(json.load(open('$HOME/.nemoclaw/cookbook-deployment.json')).get('nemoclaw_commit',''))" 2>/dev/null || echo "")
   if [ "$CURRENT_NC" != "$MANIFEST_NC" ] && [ -n "$MANIFEST_NC" ]; then
     echo "  Upstream NemoClaw changed ($MANIFEST_NC → $CURRENT_NC) — forcing sandbox rebuild."
@@ -149,7 +186,7 @@ if [ -z "${NEMOCLAW_FRESH:-}" ] && [ -f "$ONBOARD_SESSION" ]; then
     export NEMOCLAW_FRESH=1
   fi
 fi
-cd "$HOME/NemoClaw"
+cd "$NEMOCLAW_SOURCE_DIR"
 bash install.sh --non-interactive
 # shellcheck source=/dev/null
 source "$HOME/.bashrc" 2>/dev/null || true
@@ -161,13 +198,20 @@ source "$HOME/.bashrc" 2>/dev/null || true
 set +e
 POST_FAILURES=0
 
-SANDBOX=$(nemoclaw list 2>/dev/null | awk '/\*/{print $1}' | head -1)
-SANDBOX="${SANDBOX:-my-assistant}"
+SANDBOX="$(cookbook_discover_sandbox "$NEMOCLAW_SANDBOX_NAME")"
+if ! cookbook_load_runtime "$SANDBOX"; then
+  echo "  ERROR: could not read runtime status for '$SANDBOX'."
+  exit 1
+fi
+if [ "$COOKBOOK_AGENT" != "$ACTIVE_AGENT" ]; then
+  echo "  ERROR: requested agent '$ACTIVE_AGENT' but '$SANDBOX' runs '$COOKBOOK_AGENT'."
+  exit 1
+fi
 
 # Upstream recreate currently drops the stored Telegram group policy and the
 # rebuilt OpenClaw config falls back to `open`. Reapply only the explicit,
 # upstream-supported policy value from ~/.env until NemoClaw preserves it.
-if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_GROUP_POLICY:-}" ]; then
+if [ "$COOKBOOK_AGENT" = "openclaw" ] && [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_GROUP_POLICY:-}" ]; then
   case "$TELEGRAM_GROUP_POLICY" in
     open|allowlist|disabled)
       if ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
@@ -190,7 +234,7 @@ if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_GROUP_POLICY:-}" ]; then
 fi
 
 echo "=== Step 5: Install services (nginx, systemd, terminal server) ==="
-if "${SCRIPT_DIR}/scripts/install-services.sh"; then
+if "${SCRIPT_DIR}/scripts/install-services.sh" --sandbox "$SANDBOX"; then
   # CHAT_UI_URL may now be set by install-services.sh (cloudflared FQDN detection)
   [ -n "${CHAT_UI_URL:-}" ] && export CHAT_UI_URL
 else
@@ -201,7 +245,7 @@ fi
 echo "=== Step 6: Save tokenized UI URL ==="
 # Token is available as soon as the sandbox is running.
 # Extract it now, before optional steps, so the URL file exists ASAP.
-"${SCRIPT_DIR}/scripts/save-ui-url.sh" || {
+"${SCRIPT_DIR}/scripts/save-ui-url.sh" "$SANDBOX" || {
   echo "  Warning: URL extraction failed — retrieve manually (see BUILD.md)."
   POST_FAILURES=$((POST_FAILURES + 1))
 }
@@ -216,36 +260,29 @@ export NVM_DIR="$HOME/.nvm"
 # rebuilds the forward in a single step that knows how to wait for the
 # gateway — more reliable than raw `forward stop/start`, which races gateway
 # readiness.
-if [ -n "$SANDBOX" ]; then
-  openshell forward stop 18789 "$SANDBOX" 2>/dev/null || true
-  if nemoclaw "$SANDBOX" recover 2>/dev/null; then
-    # Probe the forward — recover returns before the gateway is fully
-    # accepting connections in some races. Up to 20s of polling.
-    for _ in $(seq 1 10); do
-      curl -sf --max-time 2 -o /dev/null http://127.0.0.1:18789/ 2>/dev/null && break
-      sleep 2
-    done
-  else
-    # Fallback to the older path if recover isn't available.
-    sleep 1
-    openshell forward start 18789 "$SANDBOX" --background 2>/dev/null || true
+if [ "$COOKBOOK_RUNTIME" = "gateway" ] && [ -n "$COOKBOOK_DASHBOARD_PORT" ]; then
+  if ! curl -sf --max-time 3 -o /dev/null "http://127.0.0.1:${COOKBOOK_DASHBOARD_PORT}/" 2>/dev/null; then
+    echo "  Dashboard forward is not healthy; asking upstream NemoClaw to recover it."
+    nemoclaw "$SANDBOX" recover 2>/dev/null || true
   fi
+else
+  echo "  $COOKBOOK_AGENT_DISPLAY is terminal-only — no dashboard forward to refresh."
 fi
 
 # Messaging channels are configured by upstream onboard/rebuild. `nemoclaw
 # tunnel start` is only needed for an optional Cloudflare tunnel, not for the
 # host-side channel registry itself.
-if [ -n "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]; then
+if [ -n "${CLOUDFLARE_TUNNEL_TOKEN:-}" ] && [ "$COOKBOOK_RUNTIME" = "gateway" ]; then
   nemoclaw tunnel start || {
     echo "  Warning: failed to start Cloudflare tunnel"
     POST_FAILURES=$((POST_FAILURES + 1))
   }
 else
-  echo "  No CLOUDFLARE_TUNNEL_TOKEN set — skipping optional cloudflared tunnel."
+  echo "  No applicable dashboard tunnel requested — skipping optional cloudflared tunnel."
 fi
 
 echo "=== Step 8: Write deployment manifest ==="
-"${SCRIPT_DIR}/scripts/write-manifest.sh" || {
+"${SCRIPT_DIR}/scripts/write-manifest.sh" "$SANDBOX" || {
   echo "  Warning: manifest write failed"
   POST_FAILURES=$((POST_FAILURES + 1))
 }
@@ -266,18 +303,16 @@ else
   echo "=========================================="
 fi
 echo ""
-if [ -f "$HOME/openclaw-tunnel-url.txt" ]; then
-  echo "Web UI: ~/openclaw-tunnel-url.txt"
-  echo "  Open the URL from that file — no port forwarding needed."
+if [ "$COOKBOOK_RUNTIME" = "gateway" ] && [ -f "$HOME/nemoclaw-tunnel-url.txt" ]; then
+  echo "Web UI: ~/nemoclaw-tunnel-url.txt"
+  echo "  Pass the saved URL directly to a browser — do not print it."
+elif [ "$COOKBOOK_RUNTIME" = "gateway" ]; then
+  echo "Web UI: forward host port ${COOKBOOK_DASHBOARD_PORT}, then use ~/nemoclaw-ui-url.txt."
 else
-  echo "Web UI: brev port-forward <instance> -p 18789:18789"
-  echo "  Then open the URL saved in ~/openclaw-ui-url.txt."
-  echo ""
-  echo "  To use a Secure Link instead (no port-forward):"
-  echo "    1. Create a Brev Secure Link / service endpoint to host port 80"
-  echo "    2. Set TUNNEL_FQDN=<your-link> in ~/.env"
-  echo "    3. For Brev apps.run endpoints, also set NEMOCLAW_NGINX_LISTEN_ADDR=0.0.0.0"
-  echo "    4. Re-run setup.sh"
+  echo "Web UI: not applicable ($COOKBOOK_AGENT_DISPLAY is a terminal runtime)."
+fi
+if [ -f "$HOME/nemoclaw-terminal-url.txt" ]; then
+  echo "Browser terminal: ~/nemoclaw-terminal-url.txt"
 fi
 echo ""
 echo "Next steps:"

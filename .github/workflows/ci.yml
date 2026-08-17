@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: shellcheck setup.sh scripts/*.sh
+      - run: shellcheck setup.sh scripts/*.sh scripts/lib/*.sh
 
   lint-js:
     name: Validate JavaScript
@@ -62,6 +62,8 @@ jobs:
           access_client_secret=dddddddddddddddddddddddddddddddd
           render_nginx() {
             sed -e "s|__COOKBOOK_DIR__|$PWD|g" \
+                -e "s|__DASHBOARD_PORT__|18789|g" \
+                -e "s|__DASHBOARD_ROOT_ACTION__|${8:-}|g" \
                 -e "s|__OPENAI_HTTP_DENY__|$1|g" \
                 -e "s|__OPENAI_HTTP_CORS_ORIGIN__|$2|g" \
                 -e "s|__OPENAI_HTTP_EDGE_AUTH__|$3|g" \
@@ -77,6 +79,7 @@ jobs:
           }
 
           render_nginx "deny all;" "" "" "" "return 404;" "" ""
+          render_nginx "deny all;" "" "" "" "return 404;" "" "" "return 302 /terminal;"
           render_nginx "deny all;" "" "" "" "return 503;" "" ""
           render_nginx \
             "deny all;" \
@@ -113,6 +116,6 @@ jobs:
         run: git clone --depth 1 https://github.com/NVIDIA/NemoClaw /tmp/NemoClaw
       - name: Apply cookbook patches
         run: |
-          NEMOCLAW_OPENAI_HTTP_ENABLED=1 ./scripts/apply-patches.sh /tmp/NemoClaw
+          NEMOCLAW_AGENT=openclaw NEMOCLAW_OPENAI_HTTP_ENABLED=1 ./scripts/apply-patches.sh /tmp/NemoClaw
       - name: Build Docker image
         run: docker build --tag nemoclaw-cookbook-test:ci /tmp/NemoClaw

@@ -49,7 +49,9 @@ When adding a new integration, check upstream first. NemoClaw onboard already ha
 
 ### Integration architecture
 
-The cookbook extends the sandbox image at build time:
+The remaining image-extension architecture is OpenClaw-only. Hermes and
+LangChain Deep Agents Code must continue to use their upstream agent images
+unchanged unless a separately documented upstream gap requires otherwise:
 
 1. **Dockerfile integration fragment** (`patches/fragments/dockerfile-integrations`) — deep-merges config into `openclaw.json` via a base64-encoded JSON payload
 2. **Config builder** (`scripts/build-integrations-config.py`) — reads `.env` flags from the environment and emits a base64-encoded JSON payload to stdout. `apply-patches.sh` invokes it automatically when `NEMOCLAW_INTEGRATIONS_B64` is unset, then bakes the result into the Dockerfile ARG default. Every caller gets the right payload by just sourcing `~/.env`.
@@ -61,6 +63,10 @@ The cookbook extends the sandbox image at build time:
 - **The post-config Dockerfile anchor** (`# Pin config hash at build time so the entrypoint can verify integrity.`) is for fragments that read/modify `openclaw.json` — they need to run after all upstream config writes but before the integrity hash is computed. The pre-config anchor (`# Set up blueprint for local resolution`) runs before the config file exists.
 - **Avoid raw API key plumbing when upstream has a provider path.** The `openshell:resolve:env:` prefix is preferred for native channels/providers. Do not add cookbook overlays for integrations upstream already supports.
 - **Custom build args** are not passed by `nemoclaw onboard`. Bake computed values into Dockerfile ARG defaults via sed in `apply-patches.sh`.
+- **Discover agent/runtime state from upstream JSON.** Host helpers should use
+  `nemoclaw list --json` and `nemoclaw <sandbox> status --json`, never fixed
+  ports or `.openclaw` paths. Agent-specific behavior must be an explicit,
+  tested branch.
 
 ## CI Pipeline
 
@@ -69,7 +75,7 @@ Every PR and push to `main` runs these checks:
 | Job | What it validates |
 |-----|-------------------|
 | **Secret scanning** | No credentials or tokens committed (gitleaks) |
-| **Validate patches** | Fragment anchors exist in upstream, `apply-patches.sh` succeeds, overlap audit |
+| **Validate patches** | Fragment anchors exist, OpenClaw overlays compose, Hermes/Deep Agents paths remain no-op, overlap audit |
 | **Shellcheck** | All `.sh` scripts pass lint |
 | **Validate JavaScript** | Terminal server syntax check (`node -c`) |
 | **Validate nginx config** | nginx config syntax check (`nginx -t`) |

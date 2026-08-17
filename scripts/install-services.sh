@@ -10,21 +10,33 @@
 # Requires: sudo (for nginx and systemd unit installation).
 # Idempotent: safe to re-run.
 #
-# Usage: ./scripts/install-services.sh [--nginx-only]
+# Usage: ./scripts/install-services.sh [--nginx-only] [--sandbox <name>]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COOKBOOK_DIR="$(dirname "$SCRIPT_DIR")"
+# shellcheck source=scripts/lib/agent-runtime.sh
+source "$SCRIPT_DIR/lib/agent-runtime.sh"
 
 NGINX_ONLY=0
-if [ "${1:-}" = "--nginx-only" ]; then
-  NGINX_ONLY=1
-  shift
-fi
-if [ "$#" -gt 0 ]; then
-  echo "Usage: $0 [--nginx-only]" >&2
-  exit 1
-fi
+REQUESTED_SANDBOX=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --nginx-only)
+      NGINX_ONLY=1
+      shift
+      ;;
+    --sandbox)
+      [ "$#" -ge 2 ] || { echo "ERROR: --sandbox requires a name" >&2; exit 1; }
+      REQUESTED_SANDBOX="$2"
+      shift 2
+      ;;
+    *)
+      echo "Usage: $0 [--nginx-only] [--sandbox <name>]" >&2
+      exit 1
+      ;;
+  esac
+done
 
 # Source .env for optional flags
 # shellcheck source=/dev/null
@@ -36,6 +48,26 @@ export NVM_DIR="$HOME/.nvm"
 # shellcheck source=/dev/null
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 export PATH="$HOME/.local/bin:$PATH"
+
+SANDBOX="$(cookbook_discover_sandbox "$REQUESTED_SANDBOX")"
+[ -n "$SANDBOX" ] || { echo "ERROR: no NemoClaw sandbox found" >&2; exit 1; }
+if ! cookbook_valid_sandbox_name "$SANDBOX"; then
+  echo "ERROR: invalid sandbox name '$SANDBOX'" >&2
+  exit 1
+fi
+if ! cookbook_load_runtime "$SANDBOX"; then
+  echo "ERROR: could not read NemoClaw runtime status for '$SANDBOX'" >&2
+  exit 1
+fi
+
+case "${NEMOCLAW_OPENAI_HTTP_ENABLED:-}" in
+  1|true|yes)
+    if [ "$COOKBOOK_AGENT" != "openclaw" ]; then
+      echo "  ⚠ Ignoring ambient OpenClaw HTTP overlay while configuring $COOKBOOK_AGENT_DISPLAY"
+      NEMOCLAW_OPENAI_HTTP_ENABLED=""
+    fi
+    ;;
+esac
 
 echo "=== Installing services ==="
 
@@ -65,6 +97,16 @@ fi
 
 # ── 2. Deploy nginx config (from template) ─────────────────────────
 echo "  Deploying nginx config..."
+
+if [ "$COOKBOOK_RUNTIME" = "gateway" ] && [ -n "$COOKBOOK_DASHBOARD_PORT" ]; then
+  DASHBOARD_PORT="$COOKBOOK_DASHBOARD_PORT"
+  DASHBOARD_ROOT_ACTION=""
+else
+  # Kept syntactically valid for nginx even though the leading return below
+  # makes this upstream unreachable for terminal-only agents.
+  DASHBOARD_PORT=9
+  DASHBOARD_ROOT_ACTION="return 302 /terminal;"
+fi
 
 TUNNEL_FQDN="${TUNNEL_FQDN:-}"
 TUNNEL_FQDN="${TUNNEL_FQDN#https://}"
@@ -160,6 +202,8 @@ case "$NGINX_LISTEN_ADDR" in
     ;;
 esac
 sed -e "s|__COOKBOOK_DIR__|$COOKBOOK_DIR|g" \
+    -e "s|__DASHBOARD_PORT__|$DASHBOARD_PORT|g" \
+    -e "s|__DASHBOARD_ROOT_ACTION__|$DASHBOARD_ROOT_ACTION|g" \
     -e "s|__OPENAI_HTTP_DENY__|$OPENAI_HTTP_DENY|g" \
     -e "s|__OPENAI_HTTP_CORS_ORIGIN__|$OPENAI_HTTP_CORS_ORIGIN|g" \
     -e "s|__OPENAI_HTTP_EDGE_AUTH__|$OPENAI_HTTP_EDGE_AUTH|g" \
@@ -185,6 +229,26 @@ fi
 if [ "$ENABLE_TERMINAL_SERVER" = "true" ]; then
   echo "  Installing terminal WebSocket server..."
 
+  TERMINAL_TOKEN_DIR="$HOME/.nemoclaw"
+  TERMINAL_TOKEN_FILE="$TERMINAL_TOKEN_DIR/terminal-access-token"
+  mkdir -p "$TERMINAL_TOKEN_DIR"
+  chmod 700 "$TERMINAL_TOKEN_DIR"
+  TERMINAL_TOKEN=""
+  [ -f "$TERMINAL_TOKEN_FILE" ] && TERMINAL_TOKEN="$(sed -n '1p' "$TERMINAL_TOKEN_FILE")"
+  case "$TERMINAL_TOKEN" in
+    ""|*[!A-Za-z0-9._~+=/-]*)
+      if command -v openssl >/dev/null 2>&1; then
+        TERMINAL_TOKEN="$(openssl rand -hex 32)"
+      else
+        TERMINAL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+      fi
+      TOKEN_TMP="$(mktemp "$TERMINAL_TOKEN_DIR/.terminal-access-token.XXXXXX")"
+      printf '%s\n' "$TERMINAL_TOKEN" > "$TOKEN_TMP"
+      chmod 600 "$TOKEN_TMP"
+      mv -f "$TOKEN_TMP" "$TERMINAL_TOKEN_FILE"
+      ;;
+  esac
+
   # Ensure build tools for node-pty
   if ! dpkg -s build-essential python3 >/dev/null 2>&1; then
     sudo apt-get install -y -qq build-essential python3 >/dev/null 2>&1
@@ -199,6 +263,7 @@ if [ "$ENABLE_TERMINAL_SERVER" = "true" ]; then
   cd "$COOKBOOK_DIR"
 
   sed -e "s|__COOKBOOK_DIR__|$COOKBOOK_DIR|g" \
+      -e "s|__SANDBOX_NAME__|$SANDBOX|g" \
     "$COOKBOOK_DIR/config/systemd/nemoclaw-terminal.service" \
     | sudo tee /etc/systemd/system/nemoclaw-terminal.service > /dev/null
   sudo systemctl daemon-reload
@@ -237,8 +302,8 @@ sudo systemctl start nginx
 echo "  ✓ nginx started"
 
 if [ "$ENABLE_TERMINAL_SERVER" = "true" ]; then
-  sudo systemctl start nemoclaw-terminal
-  echo "  ✓ terminal server started"
+  sudo systemctl restart nemoclaw-terminal
+  echo "  ✓ terminal server restarted for '$SANDBOX'"
 fi
 
 echo "=== Services installed ==="

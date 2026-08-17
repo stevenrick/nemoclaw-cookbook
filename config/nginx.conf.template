@@ -7,10 +7,10 @@
 # Routing:
 #   /terminal     → Static xterm.js terminal page
 #   /ws/terminal  → Terminal WebSocket server (port 3001) if enabled
-#   /*            → OpenClaw dashboard (port 18789)
+#   /*            → Selected agent dashboard, or /terminal for terminal agents
 #
 # The Origin rewrite is the key: the browser sends the cloudflared FQDN origin,
-# but the sandbox CORS config only allows 127.0.0.1:18789. Rewriting Origin at
+# but gateway CORS config allows its allocated loopback port. Rewriting Origin at
 # the proxy layer solves this without patching the sandbox config (which is
 # Landlock read-only and integrity-hashed).
 
@@ -111,7 +111,7 @@ server {
         limit_req zone=openai_http_api burst=30 nodelay;
         limit_req_status 429;
 
-        proxy_pass http://127.0.0.1:18789;
+        proxy_pass http://127.0.0.1:__DASHBOARD_PORT__;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         __OPENAI_HTTP_UPSTREAM_AUTH__
@@ -125,12 +125,14 @@ server {
         proxy_read_timeout 600s;
     }
 
-    # OpenClaw dashboard — all other requests
+    # Selected agent dashboard — all other requests. Terminal-only agents
+    # substitute a redirect to the browser terminal before this proxy path.
     location / {
-        proxy_pass http://127.0.0.1:18789;
+        __DASHBOARD_ROOT_ACTION__
+        proxy_pass http://127.0.0.1:__DASHBOARD_PORT__;
         proxy_http_version 1.1;
 
-        # WebSocket support for OpenClaw dashboard
+        # WebSocket support for gateway dashboards
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
 
@@ -143,7 +145,7 @@ server {
         # The browser sends the cloudflared FQDN origin (e.g. https://xxx.brevlab.com)
         # which isn't in allowedOrigins. Since nginx is on localhost and all
         # external access is authenticated via cloudflared tunnel, this is safe.
-        proxy_set_header Origin http://127.0.0.1:18789;
+        proxy_set_header Origin http://127.0.0.1:__DASHBOARD_PORT__;
 
         # Long timeouts for WebSocket connections
         proxy_read_timeout 86400s;
