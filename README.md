@@ -84,8 +84,9 @@ See [BUILD.md](BUILD.md) for the full setup walkthrough and [USE.md](USE.md) for
 | Overlay | Trigger | Purpose |
 |---------|---------|---------|
 | `patches/fragments/dockerfile-integrations` | `NEMOCLAW_OPENAI_HTTP_ENABLED=1` | Deep-merge cookbook-only OpenAI-compatible HTTP config into `openclaw.json` before the upstream integrity hash is pinned |
+| Reviewed Tavily plugin install in `scripts/apply-patches.sh` | Upstream selects Tavily explicitly, or `TAVILY_API_KEY` is set without a competing Brave selection | Add the exact checksum-addressed Tavily archive to upstream's offline plugin install path until upstream ships it natively |
 
-There are no longer cookbook patches for sandbox-installed coding-agent tools, OpenShell version pinning, OpenClaw version overrides, web search, or generic git/plugin setup. Those experiments were removed or delegated to upstream.
+There are no cookbook patches for upstream web-search configuration or policy; the temporary reviewed Tavily package install above is the only web-search-related exception. Sandbox-installed coding-agent tools, OpenShell version pinning, OpenClaw version overrides, and generic git/plugin setup are also absent or delegated to upstream.
 
 ## When Upstream Changes
 

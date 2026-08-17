@@ -54,6 +54,7 @@ export NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && export TELEGRAM_BOT_TOKEN
 [ -n "${TELEGRAM_ALLOWED_IDS:-}" ] && export TELEGRAM_ALLOWED_IDS
 [ -n "${TELEGRAM_REQUIRE_MENTION:-}" ] && export TELEGRAM_REQUIRE_MENTION
+[ -n "${TELEGRAM_GROUP_POLICY:-}" ] && export TELEGRAM_GROUP_POLICY
 [ -n "${DISCORD_BOT_TOKEN:-}" ] && export DISCORD_BOT_TOKEN
 [ -n "${DISCORD_SERVER_ID:-}" ] && export DISCORD_SERVER_ID
 [ -n "${DISCORD_SERVER_IDS:-}" ] && export DISCORD_SERVER_IDS
@@ -162,6 +163,31 @@ POST_FAILURES=0
 
 SANDBOX=$(nemoclaw list 2>/dev/null | awk '/\*/{print $1}' | head -1)
 SANDBOX="${SANDBOX:-my-assistant}"
+
+# Upstream recreate currently drops the stored Telegram group policy and the
+# rebuilt OpenClaw config falls back to `open`. Reapply only the explicit,
+# upstream-supported policy value from ~/.env until NemoClaw preserves it.
+if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_GROUP_POLICY:-}" ]; then
+  case "$TELEGRAM_GROUP_POLICY" in
+    open|allowlist|disabled)
+      if ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+          -o LogLevel=ERROR -o ConnectTimeout=10 \
+          -o "ProxyCommand=${HOME}/.local/bin/openshell ssh-proxy --gateway-name nemoclaw --name ${SANDBOX}" \
+          "sandbox@openshell-${SANDBOX}" \
+          "openclaw config set channels.telegram.groupPolicy ${TELEGRAM_GROUP_POLICY} >/dev/null && openclaw gateway restart >/dev/null 2>&1" \
+          2>/dev/null; then
+        echo "  Applied upstream OpenClaw Telegram group policy."
+      else
+        echo "  Warning: failed to apply Telegram group policy after rebuild."
+        POST_FAILURES=$((POST_FAILURES + 1))
+      fi
+      ;;
+    *)
+      echo "  Warning: TELEGRAM_GROUP_POLICY must be open, allowlist, or disabled."
+      POST_FAILURES=$((POST_FAILURES + 1))
+      ;;
+  esac
+fi
 
 echo "=== Step 5: Install services (nginx, systemd, terminal server) ==="
 if "${SCRIPT_DIR}/scripts/install-services.sh"; then
