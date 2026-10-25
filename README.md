@@ -98,10 +98,9 @@ Hermes and Deep Agents Code use their upstream images unchanged:
 
 | Overlay | Trigger | Purpose |
 |---------|---------|---------|
-| `patches/fragments/dockerfile-integrations` | `NEMOCLAW_OPENAI_HTTP_ENABLED=1` | Deep-merge cookbook-only OpenAI-compatible HTTP config into `openclaw.json` before the upstream integrity hash is pinned |
-| Reviewed Tavily plugin install in `scripts/apply-patches.sh` | Upstream selects Tavily explicitly, or `TAVILY_API_KEY` is set without a competing Brave selection | Add the exact checksum-addressed Tavily archive to upstream's offline plugin install path until upstream ships it natively |
+| `patches/fragments/dockerfile-integrations` | `NEMOCLAW_OPENAI_HTTP_ENABLED=1` | Deep-merge cookbook-only OpenAI-compatible HTTP config into `openclaw.json` before upstream finalizes config ownership and permissions |
 
-There are no cookbook patches for upstream web-search configuration or policy; the temporary reviewed Tavily package install above is the only web-search-related exception. Sandbox-installed coding-agent tools, OpenShell version pinning, OpenClaw version overrides, and generic git/plugin setup are also absent or delegated to upstream.
+Upstream owns web-search configuration, policy, and the reviewed Tavily plugin install; the former cookbook Tavily installer has been removed. Sandbox-installed coding-agent tools, OpenShell version pinning, OpenClaw version overrides, and generic git/plugin setup are also absent or delegated to upstream.
 
 ## When Upstream Changes
 

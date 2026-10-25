@@ -284,7 +284,7 @@ Run:
 ./scripts/validate-patches.sh
 ```
 
-The validator clones current upstream NemoClaw; checks anchors; exercises no-overlay, OpenAI HTTP-only, Tavily-only, and combined patch paths; and audits whether upstream now appears to cover either remaining gap.
+The validator clones current upstream NemoClaw; checks anchors; exercises no-overlay, OpenAI HTTP-only, Tavily-only, and combined patch paths; verifies Tavily uses the upstream plugin unchanged; and audits whether upstream now covers the remaining HTTP config gap.
 
 If validation fails:
 

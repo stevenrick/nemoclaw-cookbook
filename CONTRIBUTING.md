@@ -60,7 +60,7 @@ unchanged unless a separately documented upstream gap requires otherwise:
 ### Patterns to follow
 
 - **Dockerfile fragments with compound Python** must use `printf '%s\n' 'line1' 'line2' | python3`. The `python3 -c "..."` pattern with `\` continuations collapses to a single line, breaking `def`/`for`/`if`/`else`.
-- **The post-config Dockerfile anchor** (`# Pin config hash at build time so the entrypoint can verify integrity.`) is for fragments that read/modify `openclaw.json` — they need to run after all upstream config writes but before the integrity hash is computed. The pre-config anchor (`# Set up blueprint for local resolution`) runs before the config file exists.
+- **The post-config Dockerfile anchor** (`# Keep the image readable to the root entrypoint. Current bases have a unified .openclaw tree.`) is for fragments that read/modify `openclaw.json`. They run as root after upstream config generation, plugin installation, token clearing, and proxy configuration, before final ownership and permissions. Upstream no longer maintains an OpenClaw config hash.
 - **Avoid raw API key plumbing when upstream has a provider path.** The `openshell:resolve:env:` prefix is preferred for native channels/providers. Do not add cookbook overlays for integrations upstream already supports.
 - **Custom build args** are not passed by `nemoclaw onboard`. Bake computed values into Dockerfile ARG defaults via sed in `apply-patches.sh`.
 - **Discover agent/runtime state from upstream JSON.** Host helpers should use
@@ -74,14 +74,14 @@ Every PR and push to `main` runs these checks:
 
 | Job | What it validates |
 |-----|-------------------|
-| **Secret scanning** | No credentials or tokens committed (gitleaks) |
+| **Secret scanning** | No credentials or tokens committed (gitleaks on GitHub; detect-secrets on GitLab) |
 | **Validate patches** | Fragment anchors exist, OpenClaw overlays compose, Hermes/Deep Agents paths remain no-op, overlap audit |
 | **Shellcheck** | All `.sh` scripts pass lint |
 | **Validate JavaScript** | Terminal server syntax check (`node -c`) |
 | **Validate nginx config** | nginx config syntax check (`nginx -t`) |
-| **Docker build** | Full sandbox image builds from patched upstream Dockerfile |
+| **Docker build** | GitHub: full sandbox image builds from patched upstream Dockerfile |
 
-A **daily scheduled workflow** (`upstream-drift`) runs `validate-patches.sh` against latest upstream and opens a GitHub issue (labeled `upstream-drift`) if patches no longer apply. It auto-closes when they apply again.
+The **daily drift check** runs `validate-patches.sh` against latest upstream on both hosts. GitLab schedules run only `upstream-drift`; merge requests and pushes to `main` run the regular checks. GitHub also opens an issue labeled `upstream-drift` with the validation output on failure and closes it after validation passes. A failed validation makes either nightly pipeline fail.
 
 ## Security
 
