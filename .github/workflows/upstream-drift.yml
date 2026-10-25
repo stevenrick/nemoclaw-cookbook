@@ -13,6 +13,9 @@ jobs:
   check-drift:
     name: Validate patches against latest upstream
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash # Includes pipefail so tee cannot hide validation failures.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -40,15 +43,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh issue create \
-            --title "Upstream drift: patches no longer apply cleanly" \
-            --label "upstream-drift" \
-            --body "$(cat <<'EOF'
+          cat > /tmp/drift-issue.md <<'EOF'
           The daily upstream drift check failed. Cookbook patches no longer apply cleanly against the latest NemoClaw upstream.
 
           **Validation output:**
           ```
-          $(cat /tmp/validation.log)
+          EOF
+          cat /tmp/validation.log >> /tmp/drift-issue.md
+          cat >> /tmp/drift-issue.md <<'EOF'
           ```
 
           **Next steps:**
@@ -57,7 +59,10 @@ jobs:
 
           *This issue was created automatically by the upstream-drift workflow.*
           EOF
-          )"
+          gh issue create \
+            --title "Upstream drift: patches no longer apply cleanly" \
+            --label "upstream-drift" \
+            --body-file /tmp/drift-issue.md
 
       - name: Close stale drift issues
         if: steps.validate.outputs.status == 'pass'
@@ -67,3 +72,9 @@ jobs:
           gh issue list --label "upstream-drift" --state open --json number --jq '.[].number' | while read -r num; do
             gh issue close "$num" --comment "Patches apply cleanly again — closing automatically."
           done
+
+      - name: Fail on upstream drift
+        if: always() && steps.validate.outputs.status == 'fail'
+        run: |
+          echo "::error::Patch validation failed against latest upstream. See the validation log and upstream-drift issue."
+          exit 1

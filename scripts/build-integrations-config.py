@@ -4,7 +4,7 @@
 Used by apply-patches.sh to bake cookbook-only config into the upstream Dockerfile's
 ARG NEMOCLAW_INTEGRATIONS_B64 default. The dockerfile-integrations fragment then
 deep-merges this base64-encoded JSON into /sandbox/.openclaw/openclaw.json at build
-time, before the integrity hash is pinned.
+time, before upstream finalizes config ownership and permissions.
 
 Reads (from process environment):
   NEMOCLAW_OPENAI_HTTP_ENABLED  enables /v1/chat/completions, /v1/responses, etc.
