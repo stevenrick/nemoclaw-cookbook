@@ -59,8 +59,8 @@ brev exec <instance> "cd ~/nemoclaw-cookbook && ./setup.sh"
 1. Clone or update upstream `~/NemoClaw`.
 2. Run upstream `~/NemoClaw/scripts/install-openshell.sh`.
 3. Reset upstream files that cookbook overlays may touch.
-4. Apply only the OpenClaw cookbook overlays required by your `.env`; Hermes
-   and Deep Agents Code images remain unchanged.
+4. Apply only the cookbook overlays required by your `.env`; Hermes and
+   Deep Agents Code use their upstream images by default.
 5. Run upstream `bash install.sh --non-interactive`.
 6. Install host-side nginx and the optional browser terminal service.
 7. Save agent-appropriate dashboard, browser-terminal, and API client files.
@@ -284,7 +284,11 @@ Run:
 ./scripts/validate-patches.sh
 ```
 
-The validator clones current upstream NemoClaw; checks anchors; exercises no-overlay, OpenAI HTTP-only, Tavily-only, and combined patch paths; verifies Tavily uses the upstream plugin unchanged; and audits whether upstream now covers the remaining HTTP config gap.
+The validator clones current upstream NemoClaw; checks anchors; exercises the
+Hermes v0.21.5 release pin, no-overlay, OpenAI HTTP-only, Tavily-only, and
+combined patch paths; verifies Tavily uses the upstream reviewed archive and
+the installer helper invoked by its Dockerfile without cookbook changes; and
+audits whether upstream now covers the remaining HTTP config gap.
 
 If validation fails:
 
@@ -313,6 +317,40 @@ git pull --ff-only
 ```
 
 `setup.sh` records the upstream NemoClaw commit in `~/.nemoclaw/cookbook-deployment.json`. If that commit changes, it sets `NEMOCLAW_RECREATE_SANDBOX=1` so the sandbox image is rebuilt.
+
+### Hermes v0.21.5 upgrade validation status
+
+The opt-in `NEMOCLAW_HERMES_V0215_PREVIEW=1` patch path prepares the reviewed
+Hermes v0.21.5 base image. Normal setup keeps the upstream Hermes release. However,
+the current NemoClaw CLI does not accept that locally built image for an
+existing sandbox. Its rebuild path requires a trusted upstream GHCR digest;
+tagging a local build under the GHCR name does not make it a trusted published
+image. The supported CLI therefore stops at preflight and leaves the sandbox
+untouched. The alternative local-build onboarding path currently reaches the
+final Hermes Dockerfile but fails on additional v0.21.5 cron source-hash checks.
+There is not yet a verified in-place upgrade procedure for this pin.
+
+The reproducible Hermes-only base-image preparation is:
+
+```bash
+nemohermes <sandbox> snapshot create --name before-hermes-0.21.5
+
+cd ~/NemoClaw
+NEMOCLAW_AGENT=hermes NEMOCLAW_HERMES_V0215_PREVIEW=1 \
+  ~/nemoclaw-cookbook/scripts/apply-patches.sh "$PWD"
+docker build \
+  -f agents/hermes/Dockerfile.base \
+  -t nemoclaw-hermes-sandbox-base-local:v2026.9.24 .
+```
+
+This verifies the v0.21.5 source archive SHA-256 and npm integrity, applies the
+adapted Hermes security and WhatsApp patches, and builds the base image. Do not
+pass that local image to `nemohermes <sandbox> rebuild`; the current resolver
+rejects it. A supported in-place path needs either a published and upstream-
+pinned Hermes v0.21.5 GHCR base image, or an upstream-supported rebuild flow
+that can validate and consume this local image. The full local onboarding path
+also needs its remaining cron source checks adapted before it can serve as a
+replacement-sandbox procedure.
 
 ## Troubleshooting
 

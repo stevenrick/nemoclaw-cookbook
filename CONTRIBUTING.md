@@ -49,9 +49,12 @@ When adding a new integration, check upstream first. NemoClaw onboard already ha
 
 ### Integration architecture
 
-The remaining image-extension architecture is OpenClaw-only. Hermes and
-LangChain Deep Agents Code must continue to use their upstream agent images
-unchanged unless a separately documented upstream gap requires otherwise:
+The remaining integration image-extension architecture is OpenClaw-only.
+Hermes carries an opt-in reviewed v0.21.5 release pin and compatibility
+patches; remove them when upstream adopts that release or supersedes it.
+See [BUILD.md](BUILD.md#hermes-v0215-upgrade-validation-status) for the current
+deployment limitations. LangChain Deep Agents Code uses its upstream image
+unchanged:
 
 1. **Dockerfile integration fragment** (`patches/fragments/dockerfile-integrations`) — deep-merges config into `openclaw.json` via a base64-encoded JSON payload
 2. **Config builder** (`scripts/build-integrations-config.py`) — reads `.env` flags from the environment and emits a base64-encoded JSON payload to stdout. `apply-patches.sh` invokes it automatically when `NEMOCLAW_INTEGRATIONS_B64` is unset, then bakes the result into the Dockerfile ARG default. Every caller gets the right payload by just sourcing `~/.env`.
@@ -75,7 +78,7 @@ Every PR and push to `main` runs these checks:
 | Job | What it validates |
 |-----|-------------------|
 | **Secret scanning** | No credentials or tokens committed (gitleaks on GitHub; detect-secrets on GitLab) |
-| **Validate patches** | Fragment anchors exist, OpenClaw overlays compose, Hermes/Deep Agents paths remain no-op, overlap audit |
+| **Validate patches** | Fragment anchors exist, OpenClaw overlays compose, Hermes release pin applies idempotently with dependency fixes preserved, Deep Agents stays unchanged, overlap audit |
 | **Shellcheck** | All `.sh` scripts pass lint |
 | **Validate JavaScript** | Terminal server syntax check (`node -c`) |
 | **Validate nginx config** | nginx config syntax check (`nginx -t`) |

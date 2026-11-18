@@ -4,9 +4,9 @@
 # Usage: apply-patches.sh <nemoclaw-dir>
 #
 # Reads cookbook-only integration flags from the environment. Upstream NemoClaw
-# owns core agent tooling, OpenShell installation, agent versioning, and web
-# search. The cookbook only patches the OpenClaw-specific gaps listed in
-# UPSTREAM.md; Hermes and Deep Agents Code use their upstream images unchanged.
+# owns core agent tooling, OpenShell installation, and web search. The cookbook
+# carries a reviewed Hermes release identity so its upstream updater can pin the
+# requested Hermes release; other Hermes runtime behavior remains upstream.
 #
 # Unlike git patches, this approach:
 #   - Only needs one anchor line per file (not 3 lines of context)
@@ -30,13 +30,187 @@ if ! ACTIVE_AGENT="$(cookbook_normalize_agent "$REQUESTED_AGENT")"; then
 fi
 NEMOCLAW_OPENAI_HTTP_ENABLED="${NEMOCLAW_OPENAI_HTTP_ENABLED:-}"
 
+if [ "$ACTIVE_AGENT" = "hermes" ] && [ "${NEMOCLAW_HERMES_V0215_PREVIEW:-0}" = "1" ]; then
+  case "$NEMOCLAW_OPENAI_HTTP_ENABLED" in
+    1|true|yes)
+      echo "ERROR: NEMOCLAW_OPENAI_HTTP_ENABLED is an OpenClaw-only cookbook overlay." >&2
+      echo "Hermes already exposes its upstream OpenAI-compatible API; leave this flag unset." >&2
+      exit 1
+      ;;
+  esac
+
+  DOCKERFILE_BASE="$NEMOCLAW_DIR/agents/hermes/Dockerfile.base"
+  DOCKERFILE_HERMES="$NEMOCLAW_DIR/agents/hermes/Dockerfile"
+  MANIFEST="$NEMOCLAW_DIR/agents/hermes/manifest.yaml"
+  SECURITY_PATCH="$NEMOCLAW_DIR/agents/hermes/security-dependencies.patch"
+  WHATSAPP_PATCH="$NEMOCLAW_DIR/agents/hermes/whatsapp-proxy.patch"
+  PIN_FRAGMENT="$FRAGMENTS_DIR/hermes-v0.21.5-release-identity.txt"
+  SECURITY_PATCH_FRAGMENT="$FRAGMENTS_DIR/hermes-v0.21.5-security-dependencies.patch"
+  WHATSAPP_PATCH_FRAGMENT="$FRAGMENTS_DIR/hermes-v0.21.5-whatsapp-proxy.patch"
+  DOWNLOAD_PATCH_FRAGMENT="$FRAGMENTS_DIR/hermes-codeload-source-download.patch"
+  DOCKERFILE_PATCH_FRAGMENT="$FRAGMENTS_DIR/hermes-v0.21.5-dockerfile-compat.patch"
+
+  if [ ! -f "$DOCKERFILE_BASE" ] || [ ! -f "$DOCKERFILE_HERMES" ] || [ ! -f "$MANIFEST" ] \
+    || [ ! -f "$SECURITY_PATCH" ] || [ ! -f "$WHATSAPP_PATCH" ] \
+    || [ ! -f "$PIN_FRAGMENT" ] || [ ! -f "$SECURITY_PATCH_FRAGMENT" ] \
+    || [ ! -f "$WHATSAPP_PATCH_FRAGMENT" ] || [ ! -f "$DOWNLOAD_PATCH_FRAGMENT" ] \
+    || [ ! -f "$DOCKERFILE_PATCH_FRAGMENT" ]; then
+    echo "ERROR: Hermes pin target or cookbook identity fragment is missing." >&2
+    exit 1
+  fi
+
+  if git -C "$NEMOCLAW_DIR" apply --check "$DOCKERFILE_PATCH_FRAGMENT" 2>/dev/null; then
+    git -C "$NEMOCLAW_DIR" apply "$DOCKERFILE_PATCH_FRAGMENT"
+    echo "  Hermes final Dockerfile now checks the v0.21.5 Hindsight catalog layout."
+  elif grep -Fq 'grep -Fqx '\''    "hindsight-client": "hindsight_client",'\'' /opt/hermes/hermes_cli/memory_setup.py' "$DOCKERFILE_HERMES"; then
+    : # Already patched.
+  else
+    echo "ERROR: Hermes final Dockerfile differs from the reviewed v0.21.3 baseline." >&2
+    exit 1
+  fi
+
+  DOWNLOAD_HELPER="$NEMOCLAW_DIR/scripts/checks/download-hermes-source-archive.sh"
+  if [ ! -f "$DOWNLOAD_HELPER" ]; then
+    echo "ERROR: Hermes source archive downloader is missing." >&2
+    exit 1
+  fi
+  if git -C "$NEMOCLAW_DIR" apply --check "$DOWNLOAD_PATCH_FRAGMENT" 2>/dev/null; then
+    git -C "$NEMOCLAW_DIR" apply "$DOWNLOAD_PATCH_FRAGMENT"
+    echo "  Hermes source archive downloader uses the directly hash-verified codeload endpoint."
+  elif grep -qF "url=\"https://codeload.github.com/NousResearch/hermes-agent/tar.gz/refs/tags/\${version}\"" "$DOWNLOAD_HELPER"; then
+    : # Already patched.
+  else
+    echo "ERROR: Hermes source archive downloader differs from the reviewed upstream version." >&2
+    exit 1
+  fi
+
+  python3 - "$DOCKERFILE_BASE" "$MANIFEST" "$PIN_FRAGMENT" "$SECURITY_PATCH" "$SECURITY_PATCH_FRAGMENT" "$WHATSAPP_PATCH" "$WHATSAPP_PATCH_FRAGMENT" <<'PY'
+import hashlib
+import pathlib
+import sys
+
+dockerfile = pathlib.Path(sys.argv[1])
+manifest = pathlib.Path(sys.argv[2])
+fragment = pathlib.Path(sys.argv[3]).read_text(encoding="utf-8").strip()
+security_patch = pathlib.Path(sys.argv[4])
+security_patch_fragment = pathlib.Path(sys.argv[5]).read_bytes()
+whatsapp_patch = pathlib.Path(sys.argv[6])
+whatsapp_patch_fragment = pathlib.Path(sys.argv[7]).read_bytes()
+content = dockerfile.read_text(encoding="utf-8")
+manifest_content = manifest.read_text(encoding="utf-8")
+security_patch_bytes = security_patch.read_bytes()
+whatsapp_patch_bytes = whatsapp_patch.read_bytes()
+old_security_patch_sha = "16233ad16dceb7795a62203541d51f83f8ce3738a160c6e2239dc610b6c6903e"
+# Upstream added HTTP/Sharp dependency fixes after the original baseline.
+updated_security_patch_sha = "d983166eeb10b3a0ed57cae376f3a80d145dd0b5ce5166f388c5ddb805280e2e"
+target_security_patch_sha = "a0625fde027e2c8fe0e2853ac0473b3724265b36b6f6a1ed0d165cbdd3fba0d2"
+old_whatsapp_patch_sha = "db4020bf12cfe170388bbae4aa5a20c5fb6e18f41d85716d6efb2e23b05c5f7a"
+target_whatsapp_patch_sha = "fe3045c1f2dc3714a90cfbbaa85e704c691ee127dc570effea583993ed1fc545"
+
+security_patch_sha = hashlib.sha256(security_patch_bytes).hexdigest()
+if security_patch_sha in {old_security_patch_sha, updated_security_patch_sha}:
+    security_patch_needs_update = True
+elif security_patch_sha != target_security_patch_sha:
+    raise SystemExit("ERROR: Hermes security patch differs from the reviewed v0.21.3 source; refusing to replace it.")
+else:
+    security_patch_needs_update = False
+
+whatsapp_patch_sha = hashlib.sha256(whatsapp_patch_bytes).hexdigest()
+if whatsapp_patch_sha == old_whatsapp_patch_sha:
+    whatsapp_patch_needs_update = True
+elif whatsapp_patch_sha != target_whatsapp_patch_sha:
+    raise SystemExit("ERROR: Hermes WhatsApp patch differs from the reviewed v0.21.3 source; refusing to replace it.")
+else:
+    whatsapp_patch_needs_update = False
+
+def write_hermes_source_patches():
+    if security_patch_needs_update:
+        security_patch.write_bytes(security_patch_fragment)
+        print("  Hermes source patch adapted for v0.21.5.")
+    if whatsapp_patch_needs_update:
+        whatsapp_patch.write_bytes(whatsapp_patch_fragment)
+        print("  Hermes WhatsApp patch adapted for v0.21.5.")
+
+old = {
+    "# Calver tag v2026.9.14 = Hermes Agent v0.21.3.",
+    "ARG HERMES_VERSION=v2026.9.14",
+    "ARG HERMES_SEMVER=0.21.3",
+    "ARG HERMES_TARBALL_SHA256=47df72ebd3f9c96d806a94541163f7fe7d7ce5b84f85c1d3787e6dfeea1d7834",
+    "ARG HERMES_NPM_INTEGRITY=sha512-LvPt2/1z6hm4pTRJu34F6uAkBVSlSt94QeZp8fMBLFqASU9/wv7iMODSGMzF1WmrpNENXYGMnWN8s9hi/EUM5Q==",
+    "'v2026.9.14|0.21.3|47df72ebd3f9c96d806a94541163f7fe7d7ce5b84f85c1d3787e6dfeea1d7834|sha512-LvPt2/1z6hm4pTRJu34F6uAkBVSlSt94QeZp8fMBLFqASU9/wv7iMODSGMzF1WmrpNENXYGMnWN8s9hi/EUM5Q==') ;; \\",
+}
+target = {
+    "# Calver tag v2026.9.24 = Hermes Agent v0.21.5.",
+    "ARG HERMES_VERSION=v2026.9.24",
+    "ARG HERMES_SEMVER=0.21.5",
+    "ARG HERMES_TARBALL_SHA256=15b15ce4e6ec8ea424a081823709d1e17f0943e7b42b59597d24ebb94cbd1742",
+    "ARG HERMES_NPM_INTEGRITY=sha512-cjmXp1bhw7QEZ5Z+eRBNK74R3HRkY944tSFafFhu/SHQ/deRNbRc04gdc2KZ7cUm22/2rnl7jtcFeuhROMrdmQ==",
+    "        libssl-dev=3.5.7-1~deb13u3 \\",
+}
+
+release_target = {line for line in target if not line.startswith("        libssl-dev=")}
+old_libssl = "        libssl-dev=3.5.7-1~deb13u2 " + chr(92)
+new_libssl = "        libssl-dev=3.5.7-1~deb13u3 " + chr(92)
+
+if all(line in content for line in release_target) and 'expected_version: "0.21.5"' in manifest_content:
+    if old_libssl in content:
+        content = content.replace(old_libssl, new_libssl, 1)
+    if new_libssl not in content:
+        raise SystemExit("ERROR: expected the reviewed Hermes base libssl-dev pin or its v0.21.5 update.")
+    dockerfile.write_text(content, encoding="utf-8")
+    if any(line.rstrip("\r\n") == "        " + fragment for line in content.splitlines(keepends=True)):
+        write_hermes_source_patches()
+        print("  Hermes already pins the reviewed v0.21.5 release.")
+        raise SystemExit(0)
+    lines = content.splitlines(keepends=True)
+    matches = [i for i, line in enumerate(lines) if line.strip().startswith("'v2026.9.24|0.21.5|")]
+    if len(matches) != 1:
+        raise SystemExit("ERROR: expected exactly one v0.21.5 release identity line to repair.")
+    index = matches[0]
+    newline = "\n" if lines[index].endswith("\n") else ""
+    lines[index] = "        " + fragment + newline
+    dockerfile.write_text("".join(lines), encoding="utf-8")
+    write_hermes_source_patches()
+    print("  Repaired Hermes v0.21.5 release identity line.")
+    raise SystemExit(0)
+
+if old_libssl not in content and new_libssl not in content:
+    raise SystemExit("ERROR: expected the reviewed Hermes base libssl-dev pin or its upstream update.")
+if not all(line in content for line in old) or 'expected_version: "0.21.3"' not in manifest_content:
+    raise SystemExit("ERROR: Hermes source is not at the reviewed v0.21.3 baseline; refusing to change its pin.")
+if fragment in content:
+    raise SystemExit("ERROR: the v0.21.5 release identity is already present but the source pins are stale.")
+if "        *) echo \"ERROR: unreviewed Hermes release identity tuple\"" not in content:
+    raise SystemExit("ERROR: Hermes release identity guard anchor not found.")
+
+replacements = {
+    "# Calver tag v2026.9.14 = Hermes Agent v0.21.3.": "# Calver tag v2026.9.24 = Hermes Agent v0.21.5.",
+    "ARG HERMES_VERSION=v2026.9.14": "ARG HERMES_VERSION=v2026.9.24",
+    "ARG HERMES_SEMVER=0.21.3": "ARG HERMES_SEMVER=0.21.5",
+    "ARG HERMES_TARBALL_SHA256=47df72ebd3f9c96d806a94541163f7fe7d7ce5b84f85c1d3787e6dfeea1d7834": "ARG HERMES_TARBALL_SHA256=15b15ce4e6ec8ea424a081823709d1e17f0943e7b42b59597d24ebb94cbd1742",
+    "ARG HERMES_NPM_INTEGRITY=sha512-LvPt2/1z6hm4pTRJu34F6uAkBVSlSt94QeZp8fMBLFqASU9/wv7iMODSGMzF1WmrpNENXYGMnWN8s9hi/EUM5Q==": "ARG HERMES_NPM_INTEGRITY=sha512-cjmXp1bhw7QEZ5Z+eRBNK74R3HRkY944tSFafFhu/SHQ/deRNbRc04gdc2KZ7cUm22/2rnl7jtcFeuhROMrdmQ==",
+}
+content = content.replace(old_libssl, new_libssl, 1)
+for before, after in replacements.items():
+    if content.count(before) != 1:
+        raise SystemExit(f"ERROR: expected exactly one occurrence of Hermes pin line: {before}")
+    content = content.replace(before, after, 1)
+
+guard_anchor = '        *) echo "ERROR: unreviewed Hermes release identity tuple"'
+content = content.replace(guard_anchor, f"        {fragment}\n{guard_anchor}", 1)
+dockerfile.write_text(content, encoding="utf-8")
+manifest_content = manifest_content.replace('expected_version: "0.21.3"', 'expected_version: "0.21.5"', 1)
+manifest.write_text(manifest_content, encoding="utf-8")
+write_hermes_source_patches()
+print("  Hermes base image and manifest pin updated to v0.21.5.")
+PY
+  exit 0
+fi
+
 if [ "$ACTIVE_AGENT" != "openclaw" ]; then
   case "$NEMOCLAW_OPENAI_HTTP_ENABLED" in
     1|true|yes)
       echo "ERROR: NEMOCLAW_OPENAI_HTTP_ENABLED is an OpenClaw-only cookbook overlay." >&2
-      if [ "$ACTIVE_AGENT" = "hermes" ]; then
-        echo "Hermes already exposes its upstream OpenAI-compatible API; leave this flag unset." >&2
-      fi
       exit 1
       ;;
   esac

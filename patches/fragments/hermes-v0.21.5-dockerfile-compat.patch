@@ -1,0 +1,10 @@
+--- a/agents/hermes/Dockerfile
++++ b/agents/hermes/Dockerfile
+@@ -222,6 +222,6 @@
+ RUN rm /scripts/npm-12.0.2.tgz \
+     && grep -Fq 'from tools.lazy_deps import install_specs' /opt/hermes/hermes_cli/memory_setup.py \
+     && grep -Fq 'outcome = install_specs(missing, timeout=120)' /opt/hermes/hermes_cli/memory_setup.py \
+-    && grep -Fqx '  - "hindsight-client==0.6.1"' /opt/hermes/plugins/memory/hindsight/plugin.yaml \
++    && grep -Fqx '    "hindsight-client": "hindsight_client",' /opt/hermes/hermes_cli/memory_setup.py \
+     && grep -Fqx 'AGENT_BROWSER_NPX_SPEC = "agent-browser@0.26.0"' /opt/hermes/tools/browser_tool.py \
+     && test "$(readlink /usr/local/bin/agent-browser)" = \
