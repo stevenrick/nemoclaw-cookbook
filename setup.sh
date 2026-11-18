@@ -134,10 +134,23 @@ fi
 # apply-patches.sh from cookbook-only .env-driven flags such as
 # NEMOCLAW_OPENAI_HTTP_ENABLED via scripts/build-integrations-config.py.
 
+# Reset each tracked target independently so an absent path in an older
+# upstream checkout cannot prevent the other cookbook edits from resetting.
+reset_nemoclaw_patch_targets() {
+  local target
+  for target in Dockerfile Dockerfile.base package-lock.json \
+    nemoclaw-blueprint/policies/openclaw-sandbox.yaml scripts/nemoclaw-start.sh \
+    agents/hermes/Dockerfile agents/hermes/Dockerfile.base \
+    agents/hermes/manifest.yaml agents/hermes/security-dependencies.patch \
+    agents/hermes/whatsapp-proxy.patch scripts/checks/download-hermes-source-archive.sh; do
+    git -C "$NEMOCLAW_SOURCE_DIR" checkout -- "$target" 2>/dev/null || true
+  done
+}
+
 echo "=== Step 1: Clone / update repositories ==="
 if [ -d "$NEMOCLAW_SOURCE_DIR/.git" ]; then
   echo "  NemoClaw exists, pulling latest..."
-  git -C "$NEMOCLAW_SOURCE_DIR" checkout -- Dockerfile Dockerfile.base package-lock.json nemoclaw-blueprint/policies/openclaw-sandbox.yaml scripts/nemoclaw-start.sh 2>/dev/null || true
+  reset_nemoclaw_patch_targets
   git -C "$NEMOCLAW_SOURCE_DIR" pull --ff-only || echo "  Warning: pull failed, continuing with existing checkout"
 else
   git clone https://github.com/NVIDIA/NemoClaw "$NEMOCLAW_SOURCE_DIR"
@@ -158,7 +171,7 @@ echo "=== Step 3: Apply patches ==="
 # See UPSTREAM.md for the versions patches were last validated against.
 # Uses modular fragments (not git apply) for resilience to upstream changes.
 cd "$NEMOCLAW_SOURCE_DIR"
-git checkout -- Dockerfile Dockerfile.base package-lock.json nemoclaw-blueprint/policies/openclaw-sandbox.yaml scripts/nemoclaw-start.sh 2>/dev/null || true
+reset_nemoclaw_patch_targets
 normalize_nemoclaw_source_modes
 
 "${SCRIPT_DIR}/scripts/apply-patches.sh" "$NEMOCLAW_SOURCE_DIR"

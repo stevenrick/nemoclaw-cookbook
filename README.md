@@ -93,12 +93,14 @@ agent from `nemoclaw status --json`; they do not infer it from OpenClaw paths.
 
 ## What the Patches Do
 
-`scripts/apply-patches.sh` applies only environment-driven OpenClaw overlays.
-Hermes and Deep Agents Code use their upstream images unchanged:
+`scripts/apply-patches.sh` applies environment-driven OpenClaw overlays and
+an opt-in Hermes v0.21.5 base-image preview. Hermes and Deep Agents Code use
+their upstream images by default:
 
 | Overlay | Trigger | Purpose |
 |---------|---------|---------|
 | `patches/fragments/dockerfile-integrations` | `NEMOCLAW_OPENAI_HTTP_ENABLED=1` | Deep-merge cookbook-only OpenAI-compatible HTTP config into `openclaw.json` before upstream finalizes config ownership and permissions |
+| Hermes v0.21.5 release identity | `NEMOCLAW_AGENT=hermes NEMOCLAW_HERMES_V0215_PREVIEW=1` | Prepare the reviewed v0.21.5 base version and manifest; see [deployment limitations](BUILD.md#hermes-v0215-upgrade-validation-status) |
 
 Upstream owns web-search configuration, policy, and the reviewed Tavily plugin install; the former cookbook Tavily installer has been removed. Sandbox-installed coding-agent tools, OpenShell version pinning, OpenClaw version overrides, and generic git/plugin setup are also absent or delegated to upstream.
 

@@ -1,0 +1,7 @@
+--- a/scripts/checks/download-hermes-source-archive.sh
++++ b/scripts/checks/download-hermes-source-archive.sh
+@@ -11,3 +11,3 @@
+-url="https://github.com/NousResearch/hermes-agent/archive/refs/tags/${version}.tar.gz"
++url="https://codeload.github.com/NousResearch/hermes-agent/tar.gz/refs/tags/${version}"
+ partial="${output}.partial"
+ curl_error="${output}.curl-error"
